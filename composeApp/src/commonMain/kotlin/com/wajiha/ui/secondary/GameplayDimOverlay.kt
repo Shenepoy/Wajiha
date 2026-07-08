@@ -49,15 +49,14 @@ internal fun shouldDimGameplay(
  * underlying mode visible (or recoverable) under the overlay.
  *
  * Lifts while the user interacts with the bottom screen; fades back after
- * [DualScreenStore.gameplayDimIdleSeconds] of idle time.
+ * [DualScreenStore.gameplayDimTimeoutSeconds] of idle time.
  */
 @Composable
-fun GameplayDimScrim(
+internal fun rememberGameplayDimAlpha(
     store: DualScreenStore,
-    liftedByInteraction: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val nowPlaying by store.nowPlaying.collectAsState()
+    liftedByInteraction: Boolean
+): Float {
+    val nowPlaying by store.nowPlayingUiState.collectAsState()
     val mode by store.secondaryMode.collectAsState()
     val dualState by store.state.collectAsState()
 
@@ -72,20 +71,20 @@ fun GameplayDimScrim(
 
     LaunchedEffect(
         shouldDimEventually,
-        store.gameplayDimDelaySeconds,
+        store.gameplayDimTimeoutSeconds,
         nowPlaying?.packageName
     ) {
         if (!shouldDimEventually) {
             delayElapsed = false
             return@LaunchedEffect
         }
-        val delaySeconds = store.gameplayDimDelaySeconds
-        if (delaySeconds <= 0) {
+        val timeoutSeconds = store.gameplayDimTimeoutSeconds
+        if (timeoutSeconds <= 0) {
             delayElapsed = true
             return@LaunchedEffect
         }
         delayElapsed = false
-        delay(delaySeconds * 1000L)
+        delay(timeoutSeconds * 1000L)
         delayElapsed = true
     }
 
@@ -102,18 +101,27 @@ fun GameplayDimScrim(
         label = "gameplayDimAlpha"
     )
 
-    if (animatedAlpha <= 0.001f) return
+    return animatedAlpha
+}
+
+@Composable
+fun GameplayDimScrim(
+    alpha: Float,
+    modifier: Modifier = Modifier
+) {
+    if (alpha <= 0.001f) return
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = animatedAlpha))
+            .background(Color.Black.copy(alpha = alpha))
     )
 }
 
 /**
- * Host for any secondary route: paints [content], gameplay dim scrim, then [foreground]
- * (e.g. Now Playing chip) so overlays stay readable above the dim layer.
+ * Host for any secondary route: paints [content], gameplay dim scrim, then [foreground].
+ * [foreground] receives whether the dim scrim is visible so overlays (e.g. Now Playing
+ * chip) can hide while gameplay dim is active.
  *
  * Touch and gamepad activity on the bottom screen temporarily lifts the dim scrim.
  */
@@ -122,10 +130,10 @@ fun GameplayDimScrim(
 fun SecondarySurface(
     store: DualScreenStore,
     modifier: Modifier = Modifier,
-    foreground: (@Composable BoxScope.() -> Unit)? = null,
+    foreground: (@Composable BoxScope.(gameplayDimScrimVisible: Boolean) -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val nowPlaying by store.nowPlaying.collectAsState()
+    val nowPlaying by store.nowPlayingUiState.collectAsState()
     val mode by store.secondaryMode.collectAsState()
     val dualState by store.state.collectAsState()
 
@@ -145,11 +153,11 @@ fun SecondarySurface(
         }
     }
 
-    LaunchedEffect(interactionGeneration, shouldDimEventually, store.gameplayDimIdleSeconds) {
+    LaunchedEffect(interactionGeneration, shouldDimEventually, store.gameplayDimTimeoutSeconds) {
         if (!dimLiftedByInteraction || !shouldDimEventually) return@LaunchedEffect
-        val idleSeconds = store.gameplayDimIdleSeconds
-        if (idleSeconds <= 0) return@LaunchedEffect
-        delay(idleSeconds * 1000L)
+        val timeoutSeconds = store.gameplayDimTimeoutSeconds
+        if (timeoutSeconds <= 0) return@LaunchedEffect
+        delay(timeoutSeconds * 1000L)
         dimLiftedByInteraction = false
     }
 
@@ -181,11 +189,14 @@ fun SecondarySurface(
                 false
             }
     ) {
-        content()
-        GameplayDimScrim(
+        val gameplayDimAlpha = rememberGameplayDimAlpha(
             store = store,
             liftedByInteraction = dimLiftedByInteraction
         )
-        foreground?.invoke(this)
+        val gameplayDimScrimVisible = gameplayDimAlpha > 0.001f
+
+        content()
+        GameplayDimScrim(alpha = gameplayDimAlpha)
+        foreground?.invoke(this, gameplayDimScrimVisible)
     }
 }

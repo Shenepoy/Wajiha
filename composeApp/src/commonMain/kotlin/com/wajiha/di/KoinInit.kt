@@ -1,6 +1,7 @@
 package com.wajiha.di
 
 import com.wajiha.state.DualScreenStore
+import com.wajiha.ui.components.UiFeedback
 import com.wajiha.ui.gamedetail.GameDetailViewModel
 import com.wajiha.ui.home.HomeViewModel
 import com.wajiha.ui.ra.RaViewModel
@@ -28,6 +29,7 @@ val stateModule: Module = module {
 }
 
 val uiModule: Module = module {
+    single { UiFeedback(get()) }
     single { HomeViewModel(get(), get(), get(), get()) }
     single { SettingsViewModel(get(), get(), get(), get(), get()) }
     single { PlatformSettingsViewModel(get(), get(), get()) }

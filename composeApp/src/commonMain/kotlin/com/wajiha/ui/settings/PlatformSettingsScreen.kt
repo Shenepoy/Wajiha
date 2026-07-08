@@ -48,6 +48,7 @@ import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.SystemControls
 import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.WajihaScreen
+import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.WajihaSection
 import com.wajiha.ui.components.WajihaSectionDivider
 import com.wajiha.ui.components.gamepad.GamepadButton
@@ -88,6 +89,7 @@ fun PlatformSettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val platform = state.platform
     val systemControls = koinInject<SystemControls>()
+    val feedback = LocalUiFeedback.current
 
     val tabs = PlatformSettingsTab.entries
     var selectedTabIndex by remember { mutableIntStateOf(0) }
@@ -95,7 +97,9 @@ fun PlatformSettingsScreen(
     val screenLayer = "platform_settings"
 
     fun selectTab(index: Int) {
-        selectedTabIndex = index.coerceIn(0, tabs.lastIndex)
+        val newIndex = index.coerceIn(0, tabs.lastIndex)
+        feedback.tabSelect(selectedTabIndex, newIndex)
+        selectedTabIndex = newIndex
     }
 
     LaunchedEffect(selectedTabIndex) {

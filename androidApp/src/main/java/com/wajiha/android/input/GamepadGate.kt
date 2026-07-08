@@ -30,6 +30,12 @@ class GamepadGate(
     fun shouldBlockGamepad(): Boolean {
         val state = store.state.value
         if (state == DualScreenState.SingleDisplay) return false
+        // Thor dual-display: game on top, launcher grid on bottom — keep gamepad live.
+        if (state == DualScreenState.GameRunning ||
+            state == DualScreenState.BlackoutSecondary
+        ) {
+            return false
+        }
         val nowPlaying = store.nowPlaying.value
         if (nowPlaying == null) return false
         val elapsed = System.currentTimeMillis() - launcherForegroundedAtMs

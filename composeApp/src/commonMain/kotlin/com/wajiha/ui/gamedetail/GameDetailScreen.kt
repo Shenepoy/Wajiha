@@ -52,6 +52,7 @@ import com.wajiha.input.GamepadLayers
 import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
+import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
 import com.wajiha.ui.components.gamepad.MultiChoiceOption
@@ -87,9 +88,12 @@ fun GameDetailScreen(
     val sections = ActionPaneSection.entries
     var selectedSectionIndex by remember { mutableIntStateOf(0) }
     val sectionFocus = remember { FocusRequester() }
+    val feedback = LocalUiFeedback.current
 
     fun selectSection(index: Int) {
-        selectedSectionIndex = index.coerceIn(0, sections.lastIndex)
+        val newIndex = index.coerceIn(0, sections.lastIndex)
+        feedback.tabSelect(selectedSectionIndex, newIndex)
+        selectedSectionIndex = newIndex
     }
 
     LaunchedEffect(selectedSectionIndex) {

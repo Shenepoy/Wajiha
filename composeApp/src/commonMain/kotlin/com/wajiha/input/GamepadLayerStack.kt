@@ -44,8 +44,16 @@ class GamepadLayerStack {
     }
 
     fun deactivateAll() {
-        _layers.value = emptyList()
-        previewHandlers.clear()
+        // Dismiss modal/menu overlays only — keep screen layers so confirm handlers
+        // on home_grid and settings survive a game start.
+        val modalLayers = _layers.value.filter { layerId ->
+            layerId.startsWith("game_context_") ||
+                layerId.startsWith("dialog_") ||
+                layerId.startsWith("modal_")
+        }
+        if (modalLayers.isEmpty()) return
+        _layers.value = _layers.value.filterNot { it in modalLayers }
+        modalLayers.forEach { previewHandlers.remove(it) }
     }
 
     fun isActive(layerId: String): Boolean = layerId == topLayer

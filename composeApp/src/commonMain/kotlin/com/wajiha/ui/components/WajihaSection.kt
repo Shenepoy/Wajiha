@@ -61,7 +61,8 @@ fun WajihaToolbar(
             text = "Back",
             onClick = onBack,
             outlined = true,
-            gamepadFocusable = backFocusable
+            gamepadFocusable = backFocusable,
+            sound = null
         )
         Text(
             text = title,

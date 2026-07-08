@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
+import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.delay
@@ -144,21 +145,32 @@ fun GamepadSettingRow(
     var focused by remember { mutableStateOf(false) }
     val useCustomNav = LocalGamepadNavController.current != null
     val highlight = !useCustomNav && focused
+    val feedback = LocalUiFeedback.current
     val canReset = onReset != null && !isAtDefault
     val stackedChoices = type == SettingType.BinaryChoice && options.size > 3
 
     fun adjustNumber(delta: Int) {
         val changer = onNumberChange ?: return
         val next = (numberValue + delta).coerceIn(numberRange)
-        if (next != numberValue) changer(next)
+        if (next != numberValue) {
+            feedback.navigate()
+            changer(next)
+        }
     }
 
     fun activate() {
         when {
-            onActivate != null -> onActivate()
+            onActivate != null -> {
+                feedback.confirm()
+                onActivate()
+            }
             type == SettingType.Number && onNumberChange != null -> adjustNumber(+numberStep)
-            onCheckedChange != null -> onCheckedChange(!checked)
+            onCheckedChange != null -> {
+                feedback.confirm()
+                onCheckedChange(!checked)
+            }
             options.isNotEmpty() && onSelect != null -> {
+                feedback.navigate()
                 val idx = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
                 val next = options[(idx + 1) % options.size].first
                 onSelect(next)
@@ -170,6 +182,7 @@ fun GamepadSettingRow(
         if (key != Key.DirectionLeft && key != Key.DirectionRight) return false
         return when (type) {
             SettingType.Toggle -> {
+                feedback.navigate()
                 onCheckedChange?.invoke(!checked)
                 true
             }
@@ -199,6 +212,7 @@ fun GamepadSettingRow(
                             }
                             handleHorizontalKey(event.key) -> true
                             GamepadKeys.isY(event.type, event.key) && canReset -> {
+                                feedback.confirm()
                                 onReset?.invoke()
                                 true
                             }
@@ -343,6 +357,7 @@ private fun MultiChoiceSettingRow(
     val useCustomNav = LocalGamepadNavController.current != null
     val headerHighlight = !useCustomNav && headerFocused && !expanded
     val canReset = onReset != null && !isAtDefault
+    val feedback = LocalUiFeedback.current
     val selectedLabel = options.firstOrNull { it.value == selected }?.label.orEmpty()
 
     val headerFocusRequester = focusRequester ?: remember { FocusRequester() }
@@ -365,6 +380,7 @@ private fun MultiChoiceSettingRow(
     }
 
     fun selectOption(value: String) {
+        feedback.confirm()
         onSelect?.invoke(value)
         collapse()
     }
@@ -409,10 +425,12 @@ private fun MultiChoiceSettingRow(
                             .onPreviewKeyEvent { event ->
                                 when {
                                     GamepadKeys.isConfirm(event.type, event.key) -> {
+                                        feedback.confirm()
                                         if (expanded) collapse() else expand()
                                         true
                                     }
                                     GamepadKeys.isY(event.type, event.key) && canReset -> {
+                                        feedback.confirm()
                                         onReset?.invoke()
                                         true
                                     }
@@ -425,6 +443,7 @@ private fun MultiChoiceSettingRow(
                 )
                 .pointerInput(expanded) {
                     detectTapGestures {
+                        feedback.confirm()
                         if (expanded) collapse() else expand()
                     }
                 }
@@ -496,6 +515,7 @@ private fun MultiChoicePickerPanel(
     listFocusRequesters: List<FocusRequester>,
     onSelect: (String) -> Unit
 ) {
+    val feedback = LocalUiFeedback.current
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -509,6 +529,7 @@ private fun MultiChoicePickerPanel(
                 .padding(vertical = 2.dp)
                 .onPreviewKeyEvent { event ->
                     if (GamepadKeys.isY(event.type, event.key) && canReset) {
+                        feedback.confirm()
                         onReset?.invoke()
                         true
                     } else {
@@ -647,6 +668,7 @@ private fun SegmentedChoice(
     wrap: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val feedback = LocalUiFeedback.current
     val containerModifier = modifier
         .clip(WajihaShapes.chip)
         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
@@ -664,7 +686,12 @@ private fun SegmentedChoice(
                     }
                 )
                 .pointerInput(value, onSelect) {
-                    detectTapGestures { onSelect?.invoke(value) }
+                    detectTapGestures {
+                        if (value != selected) {
+                            feedback.navigate()
+                            onSelect?.invoke(value)
+                        }
+                    }
                 }
                 .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs / 2),
             contentAlignment = Alignment.Center

@@ -84,8 +84,6 @@ fun BottomScreen(
     onOpenSettings: () -> Unit,
     onOpenSystem: (() -> Unit)? = null,
     onAddGames: (() -> Unit)? = null,
-    nowPlayingActive: Boolean = false,
-    onOpenNowPlaying: (() -> Unit)? = null,
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -125,7 +123,7 @@ fun BottomScreen(
         restoringGridFocus = true
     }
 
-    val gamepadHints = remember(state.platforms, menuOpen, nowPlayingActive) {
+    val gamepadHints = remember(state.platforms, menuOpen) {
         buildList {
             if (menuOpen) {
                 add("B" to "Back")
@@ -133,7 +131,6 @@ fun BottomScreen(
                 add("A" to "Launch")
                 add("X" to "Menu")
                 add("B" to "Back")
-                if (nowPlayingActive) add("Y" to "Now Playing")
                 if (state.platforms.isNotEmpty()) add("L1/R1" to "Filter")
                 add("SELECT" to "Swap")
             }
@@ -150,10 +147,6 @@ fun BottomScreen(
         onPreviewKey = { event ->
             if (menuOpen) return@WajihaScreen false
             when {
-                GamepadKeys.isY(event.type, event.key) && nowPlayingActive -> {
-                    onOpenNowPlaying?.invoke()
-                    true
-                }
                 GamepadKeys.isX(event.type, event.key) && selectedGameId != null -> {
                     openContextMenu(selectedGameId!!)
                     true

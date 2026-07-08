@@ -210,6 +210,14 @@ class DisplayCoordinator(
      */
     fun beginFastSecondaryReclaim(displayId: Int) {
         if (store.state.value == DualScreenState.AppOnSecondary) return
+        if (shouldDeferReclaimForGameLaunch()) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "beginFastSecondaryReclaim: defer displayId=$displayId — game launch grace"
+            )
+            scheduleSecondaryHomeReclaim(displayId, delayMs = GAME_LAUNCH_RECLAIM_DEFER_MS)
+            return
+        }
         fastReclaimDisplayId = displayId
         reclaimSecondaryHomeOnDisplay(displayId)
         fastReclaimRunnable?.let { mainHandler.removeCallbacks(it) }
@@ -238,6 +246,48 @@ class DisplayCoordinator(
         fastReclaimDisplayId = null
         fastReclaimRunnable?.let { mainHandler.removeCallbacks(it) }
         fastReclaimRunnable = null
+    }
+
+    /**
+     * After a game launches on the top display, pull its task above [MainActivity].
+     * Without this, Thor keeps the HOME task resumed while the emulator sits invisible.
+     */
+    fun focusGameOnPrimary(packageName: String) {
+        mainHandler.postDelayed({
+            try {
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                @Suppress("DEPRECATION")
+                val task = am.getRunningTasks(25).firstOrNull { info ->
+                    val pkg = info.topActivity?.packageName ?: info.baseActivity?.packageName
+                    pkg == packageName
+                }
+                if (task != null) {
+                    WajihaLog.i(
+                        WajihaTags.DISPLAY,
+                        "focusGameOnPrimary: moveTaskToFront taskId=${task.id} pkg=$packageName"
+                    )
+                    am.moveTaskToFront(task.id, 0)
+                } else {
+                    WajihaLog.w(
+                        WajihaTags.DISPLAY,
+                        "focusGameOnPrimary: no task for pkg=$packageName"
+                    )
+                }
+            } catch (e: Exception) {
+                WajihaLog.w(
+                    WajihaTags.DISPLAY,
+                    "focusGameOnPrimary: moveTaskToFront failed — ${e.message}"
+                )
+            }
+        }, 200)
+    }
+
+    /** Bottom leave-hint during startActivity must not beat the top-display game task. */
+    private fun shouldDeferReclaimForGameLaunch(): Boolean {
+        if (!store.hasActiveSessions()) return false
+        val session = store.nowPlaying.value ?: return true
+        val elapsed = System.currentTimeMillis() - session.sessionStartedAt
+        return elapsed < GAME_LAUNCH_RECLAIM_DEFER_MS
     }
 
     fun reclaimSecondaryHomeOnDisplay(displayId: Int, launchIfNeeded: Boolean = true) {
@@ -393,6 +443,8 @@ class DisplayCoordinator(
         const val SECONDARY_HOME_CATEGORY = "android.intent.category.SECONDARY_HOME"
         private const val WATCHDOG_INTERVAL_MS = 200L
         private const val FAST_RECLAIM_INTERVAL_MS = 16L
+        /** Let top-display emulator win before bottom HOME reclaim runs. */
+        private const val GAME_LAUNCH_RECLAIM_DEFER_MS = 800L
     }
 
     /** Launch an app on a specific display (running-apps "move to display"). */

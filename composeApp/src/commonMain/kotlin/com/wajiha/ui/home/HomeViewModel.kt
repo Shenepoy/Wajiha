@@ -150,6 +150,11 @@ class HomeViewModel(
         appActions.launchApp(packageName)
     }
 
+    fun launchAppOnDisplay(packageName: String, displayId: Int) {
+        appActions.playSound(UiSound.Launch)
+        appActions.launchAppOnDisplay(packageName, displayId)
+    }
+
     fun toggleFavorite(gameId: Long, favorite: Boolean) {
         viewModelScope.launch { gameRepository.setFavorite(gameId, favorite) }
     }

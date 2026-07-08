@@ -15,6 +15,9 @@ interface AppActions {
     suspend fun installedApps(): List<LaunchableApp>
     fun launchApp(packageName: String)
 
+    /** Launch on a specific display (0 = primary/top, secondary id = bottom). */
+    fun launchAppOnDisplay(packageName: String, displayId: Int)
+
     /** Returns null on success, otherwise a user-displayable error. */
     suspend fun launchGame(gameId: Long): String?
 

@@ -1,6 +1,7 @@
 package com.wajiha.ui.components.gamepad
 
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
@@ -22,6 +23,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
+import com.wajiha.platform.UiSound
+import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 
@@ -33,12 +36,29 @@ fun GamepadButton(
     enabled: Boolean = true,
     outlined: Boolean = false,
     gamepadFocusable: Boolean = true,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
+    sound: UiSound? = UiSound.Open
 ) {
     var focused by remember { mutableStateOf(false) }
     val useCustomNav = LocalGamepadNavController.current != null
+    val feedback = LocalUiFeedback.current
+    val interactionSource = rememberPressInteractionSource()
+
+    fun performClick() {
+        if (!enabled) return
+        when (sound) {
+            UiSound.Navigate -> feedback.navigate()
+            UiSound.Open -> feedback.confirm()
+            UiSound.Back -> feedback.back()
+            UiSound.Launch -> feedback.launch()
+            null -> Unit
+        }
+        onClick()
+    }
+
     val chrome = Modifier
         .clip(WajihaShapes.button)
+        .wajihaPressedFeedback(interactionSource, WajihaShapes.button)
         .wajihaFocusIndicator(
             highlighted = !useCustomNav && focused,
             shape = WajihaShapes.button
@@ -58,7 +78,7 @@ fun GamepadButton(
             if (!useCustomNav) {
                 Modifier.onPreviewKeyEvent { event ->
                     if (GamepadKeys.isConfirm(event.type, event.key)) {
-                        if (enabled) onClick()
+                        performClick()
                         true
                     } else {
                         false
@@ -68,21 +88,23 @@ fun GamepadButton(
                 Modifier
             }
         )
-        .pointerInput(enabled, onClick) {
-            if (enabled) detectTapGestures { onClick() }
+        .pointerInput(enabled) {
+            if (enabled) detectTapGestures { performClick() }
         }
 
     if (outlined) {
         OutlinedButton(
-            onClick = onClick,
+            onClick = ::performClick,
             enabled = enabled,
+            interactionSource = interactionSource,
             modifier = modifier.then(chrome),
             shape = WajihaShapes.button
         ) { Text(text) }
     } else {
         Button(
-            onClick = onClick,
+            onClick = ::performClick,
             enabled = enabled,
+            interactionSource = interactionSource,
             modifier = modifier.then(chrome),
             shape = WajihaShapes.button
         ) { Text(text) }

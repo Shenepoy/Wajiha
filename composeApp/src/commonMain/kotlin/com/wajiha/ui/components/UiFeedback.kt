@@ -1,5 +1,7 @@
 package com.wajiha.ui.components
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import com.wajiha.platform.AppActions
 import com.wajiha.platform.UiSound
 
@@ -10,4 +12,18 @@ class UiFeedback(private val appActions: AppActions) {
     fun back() = appActions.playSound(UiSound.Back)
     fun launch() = appActions.playSound(UiSound.Launch)
     fun error() = appActions.playSound(UiSound.Back)
+
+    fun play(sound: UiSound) = appActions.playSound(sound)
+
+    /** Plays navigate when the tab/section index actually changes. */
+    fun tabSelect(currentIndex: Int, newIndex: Int) {
+        if (newIndex != currentIndex) navigate()
+    }
 }
+
+val LocalUiFeedback = staticCompositionLocalOf<UiFeedback> {
+    error("LocalUiFeedback not provided")
+}
+
+@Composable
+fun rememberUiFeedback(): UiFeedback = org.koin.compose.koinInject()

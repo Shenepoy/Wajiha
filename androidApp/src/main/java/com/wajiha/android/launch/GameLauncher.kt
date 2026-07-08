@@ -1,14 +1,19 @@
 package com.wajiha.android.launch
 
 import android.content.Context
+import android.view.Display
+import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.monitor.ForegroundAppMonitor
 import com.wajiha.android.service.KeepAliveService
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaTags
 import com.wajiha.data.config.AmStartArgumentsParser
 import com.wajiha.data.config.IntentExtra
 import com.wajiha.data.db.EmulatorEntity
 import com.wajiha.data.db.GameEntity
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.PlatformRepository
+import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingState
 import kotlinx.serialization.json.Json
@@ -27,7 +32,8 @@ class GameLauncher(
     private val gameRepository: GameRepository,
     private val sessionTracker: PlaySessionTracker,
     private val dualScreenStore: DualScreenStore,
-    private val foregroundAppMonitor: ForegroundAppMonitor
+    private val foregroundAppMonitor: ForegroundAppMonitor,
+    private val displayCoordinator: DisplayCoordinator
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -62,24 +68,46 @@ class GameLauncher(
             ?: return LaunchResult.EmulatorNotInstalled(
                 emulator.packageNames.substringBefore(',')
             )
-        val spec = buildSpec(game, emulator, packageName, displayId)
+        val resolvedDisplay = resolveLaunchDisplay(displayId)
+        val spec = buildSpec(game, emulator, packageName, resolvedDisplay)
+        // Session must exist before startActivity — SecondaryHomeActivity's
+        // onUserLeaveHint/onPause fire synchronously and used to reclaim the
+        // bottom task before hasActiveSessions(), starving the top-display launch.
+        val session = NowPlayingState(
+            packageName = packageName,
+            gameId = game.id,
+            gameName = game.displayName,
+            platformId = game.platformId,
+            sessionStartedAt = System.currentTimeMillis(),
+            launchedByWajiha = true
+        )
+        dualScreenStore.beginGameSession(session)
+        WajihaLog.i(
+            WajihaTags.LAUNCH,
+            "launchGame: pkg=$packageName displayId=$resolvedDisplay gameId=${game.id}"
+        )
         val result = EmulatorLauncher.launch(context, spec)
         if (result is LaunchResult.Success) {
             sessionTracker.onGameLaunched(game, packageName)
-            val session = NowPlayingState(
-                packageName = packageName,
-                gameId = game.id,
-                gameName = game.displayName,
-                platformId = game.platformId,
-                sessionStartedAt = System.currentTimeMillis(),
-                launchedByWajiha = true
-            )
-            dualScreenStore.beginGameSession(session)
+            if (resolvedDisplay == Display.DEFAULT_DISPLAY) {
+                dualScreenStore.setTopDisplayForeground(packageName)
+            }
             foregroundAppMonitor.onSessionStarted(packageName)
+            displayCoordinator.focusGameOnPrimary(packageName)
             KeepAliveService.start(context)
+        } else {
+            dualScreenStore.endGameSession(packageName)
         }
         return result
     }
+
+    /** Thor dual-display: games belong on the top panel unless overridden per game. */
+    private fun resolveLaunchDisplay(displayId: Int?): Int? =
+        displayId ?: if (dualScreenStore.state.value != DualScreenState.SingleDisplay) {
+            Display.DEFAULT_DISPLAY
+        } else {
+            null
+        }
 
     private fun pickInstalledPackage(emulator: EmulatorEntity): String? =
         emulator.packageNames.split(',')

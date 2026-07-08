@@ -13,6 +13,11 @@ import coil3.request.crossfade
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
+import com.wajiha.android.detect.EmulatorDataReader
+import com.wajiha.android.detect.ExternalGameResolver
+import com.wajiha.android.detect.RomPathMatcher
+import com.wajiha.android.detect.probes.AetherSx2RomPathProbe
+import com.wajiha.android.detect.probes.RetroArchRomPathProbe
 import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.launch.GameLauncher
 import com.wajiha.android.launch.PlaySessionTracker
@@ -88,7 +93,7 @@ class WajihaApplication : Application(), SingletonImageLoader.Factory {
             single<RomHasher> { ContentRomHasher(this@WajihaApplication) }
             single { RomFolderManager(this@WajihaApplication, get()) }
             single { PlaySessionTracker(get(), get()) }
-            single { GameLauncher(this@WajihaApplication, get(), get(), get(), get(), get()) }
+            single { GameLauncher(this@WajihaApplication, get(), get(), get(), get(), get(), get()) }
             single { DisplayCoordinator(this@WajihaApplication, get()) }
             single(named("applicationScope")) { appScope }
             single {
@@ -100,7 +105,27 @@ class WajihaApplication : Application(), SingletonImageLoader.Factory {
                 )
             }
             single { com.wajiha.android.input.GamepadGate(get()) }
-            single { ForegroundAppMonitor(this@WajihaApplication, get(), get(), get()) }
+            single { EmulatorDataReader(this@WajihaApplication) }
+            single { RomPathMatcher(get()) }
+            single { AetherSx2RomPathProbe(get()) }
+            single { RetroArchRomPathProbe(get()) }
+            single {
+                ExternalGameResolver(
+                    probes = listOf(get<AetherSx2RomPathProbe>(), get<RetroArchRomPathProbe>()),
+                    matcher = get(),
+                    settingsRepository = get(),
+                    reader = get()
+                )
+            }
+            single {
+                ForegroundAppMonitor(
+                    this@WajihaApplication,
+                    get(),
+                    get(),
+                    get(),
+                    get()
+                )
+            }
             single { RomFileDeleter(this@WajihaApplication) }
             single { AndroidAppActions(this@WajihaApplication, get(), get(), get(), get(), get()) } binds
                 arrayOf(AppActions::class)

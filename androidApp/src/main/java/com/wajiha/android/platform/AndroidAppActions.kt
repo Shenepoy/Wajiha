@@ -96,12 +96,11 @@ class AndroidAppActions(
         }
 
     override fun launchApp(packageName: String) {
-        val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            context.startActivity(intent)
-        } catch (_: Exception) {
-        }
+        launchAppOnDisplay(packageName, android.view.Display.DEFAULT_DISPLAY)
+    }
+
+    override fun launchAppOnDisplay(packageName: String, displayId: Int) {
+        displayCoordinator.launchOnDisplay(packageName, displayId)
     }
 
     override suspend fun launchGame(gameId: Long): String? =

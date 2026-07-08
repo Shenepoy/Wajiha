@@ -68,6 +68,7 @@ import com.wajiha.input.GamepadNavMode
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.rememberGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
+import com.wajiha.platform.UiSound
 import com.wajiha.ui.components.WajihaLoadingState
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
@@ -660,7 +661,8 @@ private fun ScraperMediaDefaultsSection(viewModel: ScraperViewModel) {
                         GamepadChip(
                             label = sourceId,
                             selected = false,
-                            onClick = { viewModel.promoteMediaSource(mediaType, sourceId) }
+                            onClick = { viewModel.promoteMediaSource(mediaType, sourceId) },
+                            sound = UiSound.Open
                         )
                     }
                 }

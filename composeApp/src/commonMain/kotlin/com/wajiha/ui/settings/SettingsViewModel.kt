@@ -61,8 +61,7 @@ class SettingsViewModel(
                         .getOrDefault(SecondaryMode.NowPlaying)
                 dualScreenStore.gameDimEnabled = s.gameDimEnabled
                 dualScreenStore.gameDimPercent = s.gameDimPercent
-                dualScreenStore.gameplayDimDelaySeconds = s.gameplayDimDelaySeconds
-                dualScreenStore.gameplayDimIdleSeconds = s.gameplayDimIdleSeconds
+                dualScreenStore.gameplayDimTimeoutSeconds = s.gameplayDimTimeoutSeconds
             }
             .launchIn(viewModelScope)
     }
@@ -73,6 +72,14 @@ class SettingsViewModel(
 
     fun setDetectManualLaunches(value: Boolean) {
         viewModelScope.launch { settingsRepository.setDetectManualLaunches(value) }
+    }
+
+    fun setRomReconciliationEnabled(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setRomReconciliationEnabled(value) }
+    }
+
+    fun setRomReconciliationShowFilenameFallback(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setRomReconciliationShowFilenameFallback(value) }
     }
 
     fun setGameSecondaryMode(mode: String) {
@@ -87,12 +94,8 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.setGameDimPercent(percent) }
     }
 
-    fun setGameplayDimDelaySeconds(seconds: Int) {
-        viewModelScope.launch { settingsRepository.setGameplayDimDelaySeconds(seconds) }
-    }
-
-    fun setGameplayDimIdleSeconds(seconds: Int) {
-        viewModelScope.launch { settingsRepository.setGameplayDimIdleSeconds(seconds) }
+    fun setGameplayDimTimeoutSeconds(seconds: Int) {
+        viewModelScope.launch { settingsRepository.setGameplayDimTimeoutSeconds(seconds) }
     }
 
     fun setSoundsEnabled(value: Boolean) {

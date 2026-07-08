@@ -14,6 +14,9 @@ object WajihaShapes {
     /** Chips, segmented pills, badges — boxy interactive controls. */
     val chip = RoundedCornerShape(4.dp)
 
+    /** 3DS suspended-software strip / compact overlay pills. */
+    val pill = RoundedCornerShape(percent = 50)
+
     val dialog = RoundedCornerShape(8.dp)
 
     /** Buttons and focusable row chrome — matches focus ring corners. */

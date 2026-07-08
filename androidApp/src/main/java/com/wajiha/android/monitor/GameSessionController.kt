@@ -10,7 +10,7 @@ package com.wajiha.android.monitor
  * SESSION_ACTIVE ─────────────────────────────────────────────┐
  *   │                                                          │
  *   │ Dual-display: launcher foreground on bottom is NORMAL     │
- *   │ → UI may show grid + chip; session stays ACTIVE           │
+ *   │ → UI may show grid; session stays ACTIVE                   │
  *   │                                                          │
  *   │ poll: explicit ACTIVITY_STOPPED since session start       │
  *   │ → deadStreak++ (process list alone is not enough)         │
@@ -26,14 +26,14 @@ package com.wajiha.android.monitor
  */
 internal class GameSessionController {
 
-    private var deadStreak = 0
+    private val deadStreaks = mutableMapOf<String, Int>()
 
-    fun onSessionStarted() {
-        deadStreak = 0
+    fun onSessionStarted(packageName: String) {
+        deadStreaks.remove(packageName)
     }
 
-    fun onSessionEnded() {
-        deadStreak = 0
+    fun onSessionEnded(packageName: String) {
+        deadStreaks.remove(packageName)
     }
 
     fun isWithinLaunchGrace(sessionStartedAt: Long, now: Long = System.currentTimeMillis()): Boolean =
@@ -42,19 +42,20 @@ internal class GameSessionController {
     /**
      * @return true when [END_CONFIRM_POLLS] consecutive dead checks have elapsed.
      */
-    fun recordAliveCheck(processAlive: Boolean): Boolean {
+    fun recordAliveCheck(packageName: String, processAlive: Boolean): Boolean {
         if (processAlive) {
-            deadStreak = 0
+            deadStreaks.remove(packageName)
             return false
         }
-        deadStreak++
-        return deadStreak >= END_CONFIRM_POLLS
+        val streak = (deadStreaks[packageName] ?: 0) + 1
+        deadStreaks[packageName] = streak
+        return streak >= END_CONFIRM_POLLS
     }
 
     companion object {
         /** Emulator process may lag behind launch intent / usage events. */
-        const val LAUNCH_GRACE_MS = 45_000L
-        /** Require repeated dead polls before clearing (false negative > brief false positive). */
-        const val END_CONFIRM_POLLS = 3
+        const val LAUNCH_GRACE_MS = 8_000L
+        /** Resist one flaky process poll during alt-tab; ~1.5s at 750ms active poll. */
+        const val END_CONFIRM_POLLS = 2
     }
 }

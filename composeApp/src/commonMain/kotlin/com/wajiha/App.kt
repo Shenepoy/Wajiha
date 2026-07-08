@@ -38,6 +38,7 @@ import com.wajiha.ui.settings.PlatformSettingsScreen
 import com.wajiha.ui.settings.SettingsScreen
 import com.wajiha.ui.settings.SettingsViewModel
 import com.wajiha.ui.components.gamepad.quickSettingsGamepadHints
+import com.wajiha.ui.secondary.NowPlayingPanel
 import com.wajiha.ui.system.QuickSettingsPanel
 import com.wajiha.ui.theme.WajihaTheme
 import com.wajiha.ui.theme.themeIsDark
@@ -54,7 +55,8 @@ private enum class Route {
     PlatformDetail,
     Scraper,
     System,
-    GameDetail
+    GameDetail,
+    NowRunning
 }
 
 /**
@@ -82,7 +84,7 @@ fun App() {
         val focusedGameId by viewModel.dualScreenStore.focusedGameId.collectAsState()
         val heroContext by viewModel.dualScreenStore.heroContext.collectAsState()
         val secondaryDisplayId by viewModel.dualScreenStore.secondaryDisplayId.collectAsState()
-        val nowPlaying by viewModel.dualScreenStore.nowPlaying.collectAsState()
+        val nowPlayingUi by viewModel.dualScreenStore.nowPlayingUiState.collectAsState()
         val apps by viewModel.apps.collectAsState()
 
         var route by remember { mutableStateOf(Route.Home) }
@@ -134,6 +136,7 @@ fun App() {
                 Route.GameDetail -> LauncherPanel.GameDetail
                 Route.Apps -> LauncherPanel.Apps
                 Route.System -> LauncherPanel.System
+                Route.NowRunning -> LauncherPanel.GameLibrary
                 Route.Home -> LauncherPanel.GameLibrary
             }
             dualStore.setPrimaryLauncherPanel(panel)
@@ -155,6 +158,12 @@ fun App() {
             state.platforms.firstOrNull { it.id == tile.game.platformId }?.name
         }
 
+        LaunchedEffect(nowPlayingUi, route) {
+            if (nowPlayingUi == null && route == Route.NowRunning) {
+                route = Route.Home
+            }
+        }
+
         BackHandler(enabled = route != Route.Home) {
             viewModel.playBack()
             if (route == Route.GameDetail) {
@@ -162,6 +171,7 @@ fun App() {
             }
             route = when (route) {
                 Route.GameDetail -> Route.Home
+                Route.NowRunning -> Route.Home
                 Route.Scraper ->
                     if (platformDetailId != null) Route.PlatformDetail else Route.Settings
                 Route.PlatformDetail -> Route.Settings
@@ -176,6 +186,8 @@ fun App() {
                     apps = apps,
                     onLoad = viewModel::loadApps,
                     onLaunch = viewModel::launchApp,
+                    onLaunchOnDisplay = viewModel::launchAppOnDisplay,
+                    onOpenAppInfo = systemControls::openAppInfo,
                     onBack = {
                         viewModel.playBack()
                         route = Route.Home
@@ -183,6 +195,7 @@ fun App() {
                     onFocusChange = { app ->
                         dualStore.setAppsHeroDetail(apps.size, app?.label)
                     },
+                    secondaryDisplayId = secondaryDisplayId,
                     gamepadOwner = GamepadOwner.Primary,
                     onClaimGamepad = dualStore::claimGamepad
                 )
@@ -303,6 +316,25 @@ fun App() {
                         }
                     }
                 }
+                Route.NowRunning -> WajihaScreen(
+                    layerId = "now_running",
+                    showActionBar = true,
+                    gamepadHints = listOf("B" to "Back")
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        WajihaToolbar(
+                            title = "Now Running",
+                            onBack = {
+                                viewModel.playBack()
+                                route = Route.Home
+                            }
+                        )
+                        NowPlayingPanel(
+                            state = nowPlayingUi,
+                            modifier = Modifier.fillMaxWidth().weight(1f)
+                        )
+                    }
+                }
                 Route.Home -> {
                     if (isDual) {
                         if (settings.swapScreenRoles) {
@@ -328,10 +360,6 @@ fun App() {
                                 onAddGames = {
                                     viewModel.playOpen()
                                     route = Route.PlatformPicker
-                                },
-                                nowPlayingActive = nowPlaying != null,
-                                onOpenNowPlaying = {
-                                    dualStore.setSecondaryMode(SecondaryMode.NowPlaying)
                                 },
                                 gamepadOwner = GamepadOwner.Primary,
                                 onClaimGamepad = dualStore::claimGamepad
@@ -377,10 +405,6 @@ fun App() {
                                 onAddGames = {
                                     viewModel.playOpen()
                                     route = Route.PlatformPicker
-                                },
-                                nowPlayingActive = nowPlaying != null,
-                                onOpenNowPlaying = {
-                                    dualStore.setSecondaryMode(SecondaryMode.NowPlaying)
                                 },
                                 gamepadOwner = GamepadOwner.Primary,
                                 onClaimGamepad = dualStore::claimGamepad,

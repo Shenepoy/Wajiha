@@ -83,6 +83,37 @@ class DualScreenStore {
     private val _nowPlaying = MutableStateFlow<NowPlayingState?>(null)
     val nowPlaying: StateFlow<NowPlayingState?> = _nowPlaying.asStateFlow()
 
+    /** Foreground package on display 0 (top / game panel). Updated by [ForegroundAppMonitor]. */
+    private val _topDisplayForegroundPackage = MutableStateFlow<String?>(null)
+    val topDisplayForegroundPackage: StateFlow<String?> = _topDisplayForegroundPackage.asStateFlow()
+
+    /** Active sessions keyed by package — survives when a game moves off the top display. */
+    private val sessionCache = mutableMapOf<String, NowPlayingState>()
+
+    /**
+     * Now Playing UI state: only non-null when the featured session is foreground on
+     * the top display (dual) or any session exists (single display).
+     */
+    val nowPlayingUiState: StateFlow<NowPlayingState?> = combine(
+        _nowPlaying,
+        _topDisplayForegroundPackage,
+        _state
+    ) { session, topPackage, dualState ->
+        when {
+            session == null -> null
+            dualState == DualScreenState.SingleDisplay -> session
+            topPackage != null && topPackage == session.packageName -> session
+            else -> null
+        }
+    }.stateIn(scope, SharingStarted.Eagerly, null)
+
+    val nowPlayingOnTopScreen: StateFlow<Boolean> = combine(
+        nowPlayingUiState,
+        _nowPlaying
+    ) { uiSession, session ->
+        uiSession != null && session != null
+    }.stateIn(scope, SharingStarted.Eagerly, false)
+
     private val _runningApps = MutableStateFlow<List<RunningApp>>(emptyList())
     val runningApps: StateFlow<List<RunningApp>> = _runningApps.asStateFlow()
 
@@ -164,19 +195,21 @@ class DualScreenStore {
     var blackoutOnLaunch: Boolean = false
     var preferredGameMode: SecondaryMode = SecondaryMode.NowPlaying
     var gameDimEnabled: Boolean = false
-    var gameDimPercent: Int = 50
-    var gameplayDimDelaySeconds: Int = 5
-    /** Seconds of bottom-screen idle before re-applying gameplay dim (0 = stay lifted). */
-    var gameplayDimIdleSeconds: Int = 10
+    var gameDimPercent: Int = 90
+    /** Seconds before dim applies and before re-dimming after idle (0 = immediate / stay lifted). */
+    var gameplayDimTimeoutSeconds: Int = 10
 
-    // ---- Game session (single source of truth: [nowPlaying] != null) ----
+    // ---- Game session ([sessionCache] + featured [nowPlaying]) ----
     //
     // State machine:
     //   IDLE ──beginGameSession()──► ACTIVE ──endGameSession()──► IDLE
     //
+    // [nowPlayingUiState] drives chip / Now Running tab — only set when the
+    // featured session is foreground on the top display (display 0 on Thor).
+    //
     // [secondaryMode] is independent UI during ACTIVE:
-    //   GameGrid + NowPlayingOverlay chip (default after launcher focus)
-    //   NowPlaying full screen (user taps Y / chip)
+    //   GameGrid + NowPlayingOverlay chip (when [nowPlayingUiState] != null)
+    //   NowPlaying full screen (user taps chip)
     //   Off (blackout)
     //
     // Dual-display Thor: game on top + launcher on bottom is NORMAL — never
@@ -194,23 +227,33 @@ class DualScreenStore {
         recomputeGamepadOwner()
     }
 
+    fun getSession(packageName: String): NowPlayingState? = sessionCache[packageName]
+
+    fun activeSessions(): Collection<NowPlayingState> = sessionCache.values
+
+    fun hasActiveSessions(): Boolean = sessionCache.isNotEmpty()
+
     /** Launch intent or first external detection — sets session immediately. */
     fun beginGameSession(nowPlaying: NowPlayingState) {
         GamepadLayers.stack.deactivateAll()
+        val wasEmpty = sessionCache.isEmpty()
+        sessionCache[nowPlaying.packageName] = nowPlaying
         _nowPlaying.value = nowPlaying
-        if (_state.value == DualScreenState.SingleDisplay) return
-        val mode = if (blackoutOnLaunch) SecondaryMode.Off else preferredGameMode
-        _secondaryMode.value = mode
-        _state.value = if (mode == SecondaryMode.Off) {
-            DualScreenState.BlackoutSecondary
-        } else {
-            DualScreenState.GameRunning
+        if (wasEmpty) {
+            enterGameRunningStateIfNeeded()
+        } else if (_state.value == DualScreenState.DualBrowsing) {
+            _state.value = DualScreenState.GameRunning
+        }
+        when {
+            nowPlaying.launchedByWajiha && !blackoutOnLaunch -> showNowPlayingDuringSession()
+            else -> showGridDuringSession()
         }
     }
 
     /** Update metadata without changing [secondaryMode]. */
     fun updateGameSession(state: NowPlayingState) {
         val previous = _nowPlaying.value
+        sessionCache[state.packageName] = state
         _nowPlaying.value = state
         if (previous?.packageName != state.packageName) {
             WajihaLog.i(
@@ -225,16 +268,49 @@ class DualScreenStore {
         }
     }
 
-    /** Confirmed process exit or explicit kill — clears session and returns to browsing. */
-    fun endGameSession() {
-        val cleared = _nowPlaying.value?.packageName
-        _nowPlaying.value = null
-        if (cleared != null) {
-            WajihaLog.i(WajihaTags.NOW_PLAYING, "endGameSession: clear $cleared")
+    /**
+     * Top display foreground changed (from [ForegroundAppMonitor]).
+     * When the top panel shows a cached gaming session, feature it for UI.
+     */
+    fun setTopDisplayForeground(packageName: String?) {
+        if (_topDisplayForegroundPackage.value == packageName) return
+        _topDisplayForegroundPackage.value = packageName
+        val cached = packageName?.let { sessionCache[it] } ?: return
+        if (_nowPlaying.value?.packageName != cached.packageName) {
+            WajihaLog.i(
+                WajihaTags.NOW_PLAYING,
+                "featureTopSession: ${_nowPlaying.value?.packageName ?: "none"} -> ${cached.packageName}"
+            )
+            _nowPlaying.value = cached
         }
-        if (_state.value != DualScreenState.SingleDisplay) {
-            _state.value = DualScreenState.DualBrowsing
-            _secondaryMode.value = SecondaryMode.GameGrid
+    }
+
+    /** Confirmed process exit or explicit kill — clears one session. */
+    fun endGameSession(packageName: String? = null) {
+        val cleared = packageName ?: _nowPlaying.value?.packageName ?: return
+        sessionCache.remove(cleared)
+        WajihaLog.i(WajihaTags.NOW_PLAYING, "endGameSession: clear $cleared")
+        if (sessionCache.isEmpty()) {
+            _nowPlaying.value = null
+            _topDisplayForegroundPackage.value = null
+            if (_state.value != DualScreenState.SingleDisplay) {
+                _state.value = DualScreenState.DualBrowsing
+                _secondaryMode.value = SecondaryMode.GameGrid
+            }
+            return
+        }
+        val topPkg = _topDisplayForegroundPackage.value
+        _nowPlaying.value = topPkg?.let { sessionCache[it] } ?: sessionCache.values.firstOrNull()
+    }
+
+    private fun enterGameRunningStateIfNeeded() {
+        if (_state.value == DualScreenState.SingleDisplay) return
+        val mode = if (blackoutOnLaunch) SecondaryMode.Off else preferredGameMode
+        _secondaryMode.value = mode
+        _state.value = if (mode == SecondaryMode.Off) {
+            DualScreenState.BlackoutSecondary
+        } else {
+            DualScreenState.GameRunning
         }
     }
 
@@ -244,15 +320,23 @@ class DualScreenStore {
      * the full Now Playing screen or blackout.
      */
     fun showGridDuringSession() {
-        if (_nowPlaying.value == null || _state.value == DualScreenState.SingleDisplay) return
+        if (!hasActiveSessions() || _state.value == DualScreenState.SingleDisplay) return
         _state.value = DualScreenState.GameRunning
-        when {
-            _secondaryMode.value == SecondaryMode.Off ->
-                _secondaryMode.value = SecondaryMode.GameGrid
-            _secondaryMode.value == SecondaryMode.NowPlaying &&
-                preferredGameMode == SecondaryMode.GameGrid ->
-                _secondaryMode.value = SecondaryMode.GameGrid
+        // Match legacy returnToGridWhileGaming: NowPlaying/Off are launch transitions;
+        // other preferred modes (Quick Settings, Running Apps, …) stay as configured.
+        if (_secondaryMode.value == SecondaryMode.NowPlaying ||
+            _secondaryMode.value == SecondaryMode.Off
+        ) {
+            _secondaryMode.value = SecondaryMode.GameGrid
         }
+    }
+
+    /** Wajiha-initiated launch: show the Now Running panel on the bottom screen. */
+    private fun showNowPlayingDuringSession() {
+        if (!hasActiveSessions() || _state.value == DualScreenState.SingleDisplay) return
+        _state.value = DualScreenState.GameRunning
+        _secondaryMode.value = SecondaryMode.NowPlaying
+        WajihaLog.i(WajihaTags.NOW_PLAYING, "showNowPlayingDuringSession")
     }
 
     fun onAppSentToSecondary() {

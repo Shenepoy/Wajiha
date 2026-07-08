@@ -27,6 +27,19 @@ class GameRepository(
     suspend fun byId(id: Long): GameEntity? = gameDao.byId(id)
     suspend fun byUri(uri: String): GameEntity? = gameDao.byUri(uri)
     suspend fun byCrc32(crc32: String): GameEntity? = gameDao.byCrc32(crc32)
+
+    suspend fun byFileName(fileName: String): GameEntity? =
+        gameDao.byFileName(fileName).singleOrNull()
+
+    suspend fun byFileNameAndPlatform(fileName: String, platformId: String): GameEntity? =
+        gameDao.byFileNameAndPlatform(fileName, platformId).singleOrNull()
+
+    suspend fun bySerialHint(serial: String, platformId: String): List<GameEntity> =
+        gameDao.bySerialHint(serial, platformId)
+
+    suspend fun bySerialHintAnyPlatform(serial: String): List<GameEntity> =
+        gameDao.bySerialHintAnyPlatform(serial)
+
     suspend fun missingHashes(maxBytes: Long, limit: Int): List<GameEntity> =
         gameDao.missingHashes(maxBytes, limit)
     suspend fun urisForPlatform(platformId: String): List<String> =

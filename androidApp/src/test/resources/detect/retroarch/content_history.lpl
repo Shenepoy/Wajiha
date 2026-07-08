@@ -1,0 +1,24 @@
+{
+  "version": "1.4",
+  "default_core_path": "",
+  "default_core_name": "",
+  "label_display_mode": 0,
+  "items": [
+    {
+      "path": "/storage/emulated/0/ROMs/SNES/Chrono Trigger (USA).sfc",
+      "label": "Chrono Trigger (USA)",
+      "core_path": "/data/user/0/com.retroarch.aarch64/cores/snes9x_libretro_android.so",
+      "core_name": "Nintendo - SNES / Famicom (Snes9x)",
+      "crc32": "2D858DFA",
+      "db_name": "Chrono Trigger (USA)",
+      "entry_timestamp": 1783530905
+    },
+    {
+      "path": "/sdcard/ROMs/NES/Super Mario Bros.nes",
+      "label": "Super Mario Bros",
+      "core_path": "/data/user/0/com.retroarch.aarch64/cores/fceumm_libretro_android.so",
+      "core_name": "Nintendo - NES / Famicom (FCEUmm)",
+      "entry_timestamp": 1780000000
+    }
+  ]
+}

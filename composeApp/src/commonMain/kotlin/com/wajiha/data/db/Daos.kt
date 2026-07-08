@@ -132,6 +132,24 @@ interface GameDao {
 
     @Query("SELECT * FROM games WHERE crc32 IS NULL AND fileSize <= :maxBytes LIMIT :limit")
     suspend fun missingHashes(maxBytes: Long, limit: Int): List<GameEntity>
+
+    @Query("SELECT * FROM games WHERE fileName = :fileName AND platformId = :platformId AND hidden = 0 LIMIT 2")
+    suspend fun byFileNameAndPlatform(fileName: String, platformId: String): List<GameEntity>
+
+    @Query("SELECT * FROM games WHERE fileName = :fileName AND hidden = 0")
+    suspend fun byFileName(fileName: String): List<GameEntity>
+
+    @Query(
+        "SELECT * FROM games WHERE platformId = :platformId AND hidden = 0 AND " +
+            "(fileName LIKE '%' || :serial || '%' OR displayName LIKE '%' || :serial || '%') LIMIT 2"
+    )
+    suspend fun bySerialHint(serial: String, platformId: String): List<GameEntity>
+
+    @Query(
+        "SELECT * FROM games WHERE hidden = 0 AND " +
+            "(fileName LIKE '%' || :serial || '%' OR displayName LIKE '%' || :serial || '%') LIMIT 2"
+    )
+    suspend fun bySerialHintAnyPlatform(serial: String): List<GameEntity>
 }
 
 @Dao
@@ -204,6 +222,9 @@ interface PlaySessionDao {
 
     @Query("SELECT * FROM play_sessions WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
     suspend fun latestOpen(): PlaySessionEntity?
+
+    @Query("UPDATE play_sessions SET gameId = :gameId WHERE id = :id")
+    suspend fun updateGameId(id: Long, gameId: Long?)
 }
 
 @Dao

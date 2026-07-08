@@ -46,8 +46,9 @@ val gameDetailGamepadHints: List<Pair<String, String>> = listOf(
 )
 
 val secondaryModeTabGamepadHints: List<Pair<String, String>> = listOf(
-    "A" to "Select mode",
-    "B" to "Games"
+    "A" to "Select tab",
+    "B" to "Games",
+    "L1/R1" to "Tab"
 )
 
 @Composable

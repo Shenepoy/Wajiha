@@ -13,16 +13,18 @@ import kotlinx.coroutines.flow.map
 data class AppSettings(
     val blackoutOnLaunch: Boolean = false,
     val detectManualLaunches: Boolean = true,
+    /** Tier 3: read emulator data files to identify externally launched games. */
+    val romReconciliationEnabled: Boolean = false,
+    /** Show cleaned filename when ROM is not in the library (Tier 3). */
+    val romReconciliationShowFilenameFallback: Boolean = true,
     /** SecondaryMode name shown while a game runs */
     val gameSecondaryMode: String = "NowPlaying",
     /** Overlay dim on the bottom screen while a game runs on the top display. */
     val gameDimEnabled: Boolean = false,
-    /** Dim strength in percent (25, 50, 75, or 100). */
-    val gameDimPercent: Int = 50,
-    /** Seconds to wait after gameplay starts before applying the dim overlay (0 = immediate). */
-    val gameplayDimDelaySeconds: Int = 5,
-    /** Seconds of bottom-screen idle before re-dimming during gameplay (0 = stay lifted). */
-    val gameplayDimIdleSeconds: Int = 10,
+    /** Dim strength in percent (0–100, stepped by 10). */
+    val gameDimPercent: Int = 90,
+    /** Seconds before dim applies after gameplay starts, and before re-dimming after idle (0 = immediate / stay lifted). */
+    val gameplayDimTimeoutSeconds: Int = 10,
     val gridRows: Int = 2,
     val soundsEnabled: Boolean = true,
     val onboardingDone: Boolean = false,
@@ -62,11 +64,13 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         AppSettings(
             blackoutOnLaunch = prefs[BLACKOUT_ON_LAUNCH] ?: false,
             detectManualLaunches = prefs[DETECT_MANUAL] ?: true,
+            romReconciliationEnabled = prefs[ROM_RECONCILIATION_ENABLED] ?: false,
+            romReconciliationShowFilenameFallback =
+                prefs[ROM_RECONCILIATION_FILENAME_FALLBACK] ?: true,
             gameSecondaryMode = prefs[GAME_SECONDARY_MODE] ?: "NowPlaying",
             gameDimEnabled = prefs[GAME_DIM_ENABLED] ?: false,
             gameDimPercent = normalizeGameDimPercent(prefs[GAME_DIM_PERCENT]),
-            gameplayDimDelaySeconds = normalizeGameplayDimDelaySeconds(prefs[GAMEPLAY_DIM_DELAY_SECONDS]),
-            gameplayDimIdleSeconds = normalizeGameplayDimIdleSeconds(prefs[GAMEPLAY_DIM_IDLE_SECONDS]),
+            gameplayDimTimeoutSeconds = readGameplayDimTimeoutSeconds(prefs),
             gridRows = prefs[GRID_ROWS] ?: 2,
             soundsEnabled = prefs[SOUNDS_ENABLED] ?: true,
             onboardingDone = prefs[ONBOARDING_DONE] ?: false,
@@ -99,6 +103,12 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setDetectManualLaunches(value: Boolean) =
         dataStore.edit { it[DETECT_MANUAL] = value }
 
+    suspend fun setRomReconciliationEnabled(value: Boolean) =
+        dataStore.edit { it[ROM_RECONCILIATION_ENABLED] = value }
+
+    suspend fun setRomReconciliationShowFilenameFallback(value: Boolean) =
+        dataStore.edit { it[ROM_RECONCILIATION_FILENAME_FALLBACK] = value }
+
     suspend fun setGameSecondaryMode(value: String) =
         dataStore.edit { it[GAME_SECONDARY_MODE] = value }
 
@@ -108,11 +118,8 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setGameDimPercent(value: Int) =
         dataStore.edit { it[GAME_DIM_PERCENT] = normalizeGameDimPercent(value) }
 
-    suspend fun setGameplayDimDelaySeconds(value: Int) =
-        dataStore.edit { it[GAMEPLAY_DIM_DELAY_SECONDS] = normalizeGameplayDimDelaySeconds(value) }
-
-    suspend fun setGameplayDimIdleSeconds(value: Int) =
-        dataStore.edit { it[GAMEPLAY_DIM_IDLE_SECONDS] = normalizeGameplayDimIdleSeconds(value) }
+    suspend fun setGameplayDimTimeoutSeconds(value: Int) =
+        dataStore.edit { it[GAMEPLAY_DIM_TIMEOUT_SECONDS] = normalizeGameplayDimTimeoutSeconds(value) }
 
     suspend fun setGridRows(value: Int) = dataStore.edit { it[GRID_ROWS] = value }
 
@@ -249,18 +256,28 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
             val defaults = DEFAULT_IGNORE_FILE_NAME_PATTERNS.map { it.lowercase() }.toSet()
             return normalized == defaults
         }
-        val GAME_DIM_PERCENTS = listOf(25, 50, 75, 100)
-
         fun normalizeGameDimPercent(value: Int?): Int {
-            val raw = value ?: 50
-            return GAME_DIM_PERCENTS.minByOrNull { kotlin.math.abs(it - raw) } ?: 50
+            val raw = (value ?: 90).coerceIn(0, 100)
+            return ((raw + 5) / 10) * 10
         }
 
-        fun normalizeGameplayDimDelaySeconds(value: Int?): Int =
-            (value ?: 5).coerceIn(0, 60)
-
-        fun normalizeGameplayDimIdleSeconds(value: Int?): Int =
+        fun normalizeGameplayDimTimeoutSeconds(value: Int?): Int =
             (value ?: 10).coerceIn(0, 120)
+
+        private fun readGameplayDimTimeoutSeconds(prefs: Preferences): Int {
+            prefs[GAMEPLAY_DIM_TIMEOUT_SECONDS]?.let {
+                return normalizeGameplayDimTimeoutSeconds(it)
+            }
+            val idle = prefs[GAMEPLAY_DIM_IDLE_SECONDS]
+            val delay = prefs[GAMEPLAY_DIM_DELAY_SECONDS]
+            return when {
+                idle != null && delay != null ->
+                    normalizeGameplayDimTimeoutSeconds(maxOf(idle, delay))
+                idle != null -> normalizeGameplayDimTimeoutSeconds(idle)
+                delay != null -> normalizeGameplayDimTimeoutSeconds(delay)
+                else -> 10
+            }
+        }
 
         fun normalizeFocusBorderStyle(value: String?): String =
             FocusIndicatorPreferenceValues.normalizeBorderStyle(value)
@@ -276,11 +293,15 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
         private val BLACKOUT_ON_LAUNCH = booleanPreferencesKey("blackout_on_launch")
         val DETECT_MANUAL = booleanPreferencesKey("detect_manual_launches")
+        val ROM_RECONCILIATION_ENABLED = booleanPreferencesKey("rom_reconciliation_enabled")
+        val ROM_RECONCILIATION_FILENAME_FALLBACK =
+            booleanPreferencesKey("rom_reconciliation_filename_fallback")
         val GAME_SECONDARY_MODE = stringPreferencesKey("game_secondary_mode")
         val GAME_DIM_ENABLED = booleanPreferencesKey("game_dim_enabled")
         val GAME_DIM_PERCENT = intPreferencesKey("game_dim_percent")
-        val GAMEPLAY_DIM_DELAY_SECONDS = intPreferencesKey("gameplay_dim_delay_seconds")
-        val GAMEPLAY_DIM_IDLE_SECONDS = intPreferencesKey("gameplay_dim_idle_seconds")
+        val GAMEPLAY_DIM_TIMEOUT_SECONDS = intPreferencesKey("gameplay_dim_timeout_seconds")
+        private val GAMEPLAY_DIM_DELAY_SECONDS = intPreferencesKey("gameplay_dim_delay_seconds")
+        private val GAMEPLAY_DIM_IDLE_SECONDS = intPreferencesKey("gameplay_dim_idle_seconds")
         val GRID_ROWS = intPreferencesKey("grid_rows")
         val SOUNDS_ENABLED = booleanPreferencesKey("sounds_enabled")
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")

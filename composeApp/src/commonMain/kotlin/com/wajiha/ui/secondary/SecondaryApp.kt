@@ -23,11 +23,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.quickSettingsGamepadHints
+import com.wajiha.ui.components.gamepad.runningAppsGamepadHints
 import com.wajiha.ui.components.gamepad.secondaryModeTabGamepadHints
 import com.wajiha.ui.theme.WajihaTheme
 import com.wajiha.ui.theme.WajihaSpacing
@@ -57,6 +60,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import com.wajiha.input.GamepadKeys
+import com.wajiha.platform.UiSound
+import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.platform.SystemControls
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
@@ -106,7 +112,7 @@ fun SecondaryApp() {
         val systemControls = koinInject<SystemControls>()
         val mode by store.secondaryMode.collectAsState()
         val heroContext by store.heroContext.collectAsState()
-        val nowPlaying by store.nowPlaying.collectAsState()
+        val nowPlayingUi by store.nowPlayingUiState.collectAsState()
         val state by viewModel.uiState.collectAsState()
         val apps by viewModel.apps.collectAsState()
         val backToGrid = { store.setSecondaryMode(SecondaryMode.GameGrid) }
@@ -177,17 +183,7 @@ fun SecondaryApp() {
 
         when (route) {
             SecondaryRoute.Settings -> {
-                SecondarySurface(
-                    store = store,
-                    foreground = {
-                        NowPlayingOverlay(
-                            store = store,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 56.dp)
-                        )
-                    }
-                ) {
+                SecondarySurface(store = store) {
                     SettingsScreen(
                         settingsViewModel = settingsViewModel,
                         onBack = {
@@ -209,17 +205,7 @@ fun SecondaryApp() {
                 return@WajihaTheme
             }
             SecondaryRoute.PlatformPicker -> {
-                SecondarySurface(
-                    store = store,
-                    foreground = {
-                        NowPlayingOverlay(
-                            store = store,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 56.dp)
-                        )
-                    }
-                ) {
+                SecondarySurface(store = store) {
                     PlatformPickerScreen(
                         settingsViewModel = settingsViewModel,
                         onBack = {
@@ -243,17 +229,7 @@ fun SecondaryApp() {
                 if (id == null) {
                     route = SecondaryRoute.Settings
                 } else {
-                    SecondarySurface(
-                        store = store,
-                        foreground = {
-                            NowPlayingOverlay(
-                                store = store,
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = 56.dp)
-                            )
-                        }
-                    ) {
+                    SecondarySurface(store = store) {
                         PlatformSettingsScreen(
                             platformId = id,
                             onBack = {
@@ -269,17 +245,7 @@ fun SecondaryApp() {
                 return@WajihaTheme
             }
             SecondaryRoute.Scraper -> {
-                SecondarySurface(
-                    store = store,
-                    foreground = {
-                        NowPlayingOverlay(
-                            store = store,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 56.dp)
-                        )
-                    }
-                ) {
+                SecondarySurface(store = store) {
                     ScraperScreen(
                         viewModel = koinInject<ScraperViewModel>(),
                         onBack = {
@@ -302,17 +268,7 @@ fun SecondaryApp() {
                 if (id == null) {
                     route = SecondaryRoute.Modes
                 } else {
-                    SecondarySurface(
-                        store = store,
-                        foreground = {
-                            NowPlayingOverlay(
-                                store = store,
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = 56.dp)
-                            )
-                        }
-                    ) {
+                    SecondarySurface(store = store) {
                         GameDetailScreen(
                             gameId = id,
                             secondaryDisplayId = secondaryDisplayId,
@@ -333,25 +289,31 @@ fun SecondaryApp() {
             SecondaryRoute.Modes -> Unit
         }
 
+        LaunchedEffect(nowPlayingUi, mode) {
+            if (nowPlayingUi == null && mode == SecondaryMode.NowPlaying) {
+                store.setSecondaryMode(SecondaryMode.GameGrid)
+            }
+        }
+
         SecondarySurface(
             store = store,
-            foreground = {
+            foreground = { gameplayDimScrimVisible ->
                 NowPlayingOverlay(
                     store = store,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 56.dp)
+                    modifier = nowPlayingOverlayPlacement(),
+                    hiddenByGameplayDim = gameplayDimScrimVisible
                 )
             }
         ) {
             when (mode) {
             // Tap the blacked-out screen to restore the grid
             SecondaryMode.Off -> BlackoutScreen(onTap = backToGrid)
-            SecondaryMode.NowPlaying -> SecondaryModeFrame(mode, store) {
-                NowPlayingScreen(
-                    packageName = nowPlaying?.packageName,
-                    gameName = nowPlaying?.gameName ?: nowPlaying?.appLabel
-                )
+            SecondaryMode.NowPlaying -> SecondaryModeFrame(
+                current = mode,
+                store = store,
+                sessionActive = nowPlayingUi != null
+            ) {
+                NowPlayingPanel(state = nowPlayingUi)
             }
             SecondaryMode.GameGrid -> if (settings.swapScreenRoles) {
                 // Swapped roles: this (bottom) display shows the hero instead
@@ -387,8 +349,6 @@ fun SecondaryApp() {
                         viewModel.playOpen()
                         route = SecondaryRoute.PlatformPicker
                     },
-                    nowPlayingActive = nowPlaying != null,
-                    onOpenNowPlaying = { store.setSecondaryMode(SecondaryMode.NowPlaying) },
                     gamepadOwner = GamepadOwner.Secondary,
                     onClaimGamepad = store::claimGamepad
                 )
@@ -397,24 +357,56 @@ fun SecondaryApp() {
                 apps = apps,
                 onLoad = viewModel::loadApps,
                 onLaunch = viewModel::launchApp,
+                onLaunchOnDisplay = viewModel::launchAppOnDisplay,
+                onOpenAppInfo = systemControls::openAppInfo,
                 onBack = backToGrid,
                 onFocusChange = { app ->
                     store.setAppsHeroDetail(apps.size, app?.label)
                 },
+                secondaryDisplayId = secondaryDisplayId,
                 gamepadOwner = GamepadOwner.Secondary,
                 onClaimGamepad = store::claimGamepad
             )
-            SecondaryMode.RunningApps -> SecondaryModeFrame(mode, store) {
+            SecondaryMode.RunningApps -> SecondaryModeFrame(
+                current = mode,
+                store = store,
+                sessionActive = nowPlayingUi != null
+            ) {
                 RunningAppsPanel(showGamepadHints = false)
             }
-            SecondaryMode.QuickSettings -> SecondaryModeFrame(mode, store) {
+            SecondaryMode.QuickSettings -> SecondaryModeFrame(
+                current = mode,
+                store = store,
+                sessionActive = nowPlayingUi != null
+            ) {
                 QuickSettingsPanel(showGamepadHints = false)
             }
-            SecondaryMode.Achievements -> SecondaryModeFrame(mode, store) {
+            SecondaryMode.Achievements -> SecondaryModeFrame(
+                current = mode,
+                store = store,
+                sessionActive = nowPlayingUi != null
+            ) {
                 AchievementsPanel(showGamepadHints = false)
             }
-            SecondaryMode.Clock -> SecondaryModeFrame(mode, store) {
-                ClockScreen()
+            SecondaryMode.Clock -> WajihaScreen(
+                layerId = "secondary_clock",
+                showActionBar = true,
+                gamepadHints = listOf("B" to "Games")
+            ) {
+                Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = WajihaSpacing.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        GamepadChip(
+                            label = "< Games",
+                            selected = false,
+                            onClick = { store.setSecondaryMode(SecondaryMode.GameGrid) },
+                            sound = UiSound.Back
+                        )
+                    }
+                    ClockScreen()
+                }
             }
             }
         }
@@ -422,27 +414,54 @@ fun SecondaryApp() {
 }
 
 /** Header with back-to-grid plus tabs so every mode stays reachable. */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun SecondaryModeFrame(
     current: SecondaryMode,
     store: DualScreenStore,
+    sessionActive: Boolean,
     content: @Composable () -> Unit
 ) {
-    val tabs = listOf(
-        SecondaryMode.RunningApps to "Running",
-        SecondaryMode.QuickSettings to "System",
-        SecondaryMode.Achievements to "Trophies"
-    )
+    val tabs = buildList {
+        if (sessionActive) {
+            add(SecondaryMode.NowPlaying to "Now Running")
+        }
+        add(SecondaryMode.RunningApps to "Running")
+        add(SecondaryMode.QuickSettings to "System")
+        add(SecondaryMode.Achievements to "Trophies")
+    }
+    val currentIndex = tabs.indexOfFirst { it.first == current }.coerceAtLeast(0)
+    val feedback = LocalUiFeedback.current
+
+    fun selectTab(index: Int) {
+        feedback.tabSelect(currentIndex, index)
+        tabs.getOrNull(index)?.first?.let { store.setSecondaryMode(it) }
+    }
+
     val modeHints = when (current) {
-        SecondaryMode.RunningApps -> listOf("A" to "Action", "B" to "Games")
-        SecondaryMode.QuickSettings -> quickSettingsGamepadHints + ("B" to "Games")
-        SecondaryMode.Achievements -> listOf("B" to "Games")
+        SecondaryMode.NowPlaying -> listOf("B" to "Games", "L1/R1" to "Tab")
+        SecondaryMode.RunningApps -> runningAppsGamepadHints + ("L1/R1" to "Tab")
+        SecondaryMode.QuickSettings -> quickSettingsGamepadHints + listOf("B" to "Games", "L1/R1" to "Tab")
+        SecondaryMode.Achievements -> listOf("B" to "Games", "L1/R1" to "Tab")
         else -> secondaryModeTabGamepadHints
     }
     WajihaScreen(
         layerId = "secondary_mode_${current.name}",
         showActionBar = true,
-        gamepadHints = modeHints
+        gamepadHints = modeHints,
+        onPreviewKey = { event ->
+            when {
+                GamepadKeys.isL1(event.type, event.key) && currentIndex > 0 -> {
+                    selectTab(currentIndex - 1)
+                    true
+                }
+                GamepadKeys.isR1(event.type, event.key) && currentIndex < tabs.lastIndex -> {
+                    selectTab(currentIndex + 1)
+                    true
+                }
+                else -> false
+            }
+        }
     ) {
         Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(
@@ -453,13 +472,16 @@ private fun SecondaryModeFrame(
             GamepadChip(
                 label = "< Games",
                 selected = false,
-                onClick = { store.setSecondaryMode(SecondaryMode.GameGrid) }
+                onClick = { store.setSecondaryMode(SecondaryMode.GameGrid) },
+                sound = UiSound.Back
             )
-            tabs.forEach { (mode, label) ->
+            tabs.forEachIndexed { index, (mode, label) ->
                 GamepadChip(
                     label = label,
                     selected = mode == current,
-                    onClick = { store.setSecondaryMode(mode) }
+                    onClick = { selectTab(index) },
+                    sound = UiSound.Navigate,
+                    soundWhenUnselected = true
                 )
             }
         }
@@ -479,28 +501,6 @@ private fun BlackoutScreen(onTap: () -> Unit) {
             .background(Color.Black)
             .clickable(interactionSource = null, indication = null, onClick = onTap)
     )
-}
-
-@Composable
-private fun NowPlayingScreen(packageName: String?, gameName: String?) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "Now Playing",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = gameName ?: packageName ?: "—",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-        }
-    }
 }
 
 @OptIn(kotlin.time.ExperimentalTime::class)

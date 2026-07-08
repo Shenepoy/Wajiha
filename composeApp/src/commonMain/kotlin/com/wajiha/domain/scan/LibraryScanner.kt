@@ -22,6 +22,8 @@ data class ScanProgress(
     val gamesAdded: Int = 0,
     val gamesRemoved: Int = 0,
     val gamesSkipped: Int = 0,
+    val foldersFailed: Int = 0,
+    val failureMessages: List<String> = emptyList(),
     val error: String? = null
 )
 
@@ -81,7 +83,12 @@ class LibraryScanner(
                 romScanner.scan(folder.treeUri, extensions, folder.scanDepth)
             } catch (e: Exception) {
                 seenByPlatform[folder.platformId] = null
-                _progress.value = _progress.value.copy(error = e.message)
+                val message = e.message ?: "scan failed"
+                _progress.value = _progress.value.copy(
+                    error = message,
+                    foldersFailed = _progress.value.foldersFailed + 1,
+                    failureMessages = _progress.value.failureMessages + message
+                )
                 return@forEachIndexed
             }
 
@@ -106,6 +113,13 @@ class LibraryScanner(
                 added += inserted.count { it != -1L }
             }
             gameRepository.markFolderScanned(folder.id, now())
+            _progress.value = _progress.value.copy(
+                foldersDone = index + 1,
+                gamesAdded = added,
+                gamesRemoved = removed,
+                gamesSkipped = skipped,
+                currentFolder = null
+            )
         }
 
         // Remove games whose files vanished — only when every folder of the

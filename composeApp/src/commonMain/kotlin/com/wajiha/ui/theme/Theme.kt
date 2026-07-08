@@ -6,6 +6,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import com.wajiha.ui.components.LocalUiFeedback
+import com.wajiha.ui.components.rememberUiFeedback
 
 private val LightColors = lightColorScheme(
     primary = WajihaColors.AccentDeep,
@@ -61,7 +63,11 @@ fun WajihaTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
         typography = wajihaTypography(),
     ) {
-        CompositionLocalProvider(LocalFocusIndicatorStyle provides focusIndicatorStyle) {
+        val uiFeedback = rememberUiFeedback()
+        CompositionLocalProvider(
+            LocalFocusIndicatorStyle provides focusIndicatorStyle,
+            LocalUiFeedback provides uiFeedback
+        ) {
             content()
         }
     }

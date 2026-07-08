@@ -126,7 +126,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // Returning from an external game: close the session, restore browsing
-        sessionTracker.onLauncherResumed(dualScreenStore.nowPlaying.value != null)
+        sessionTracker.onLauncherResumed(dualScreenStore.hasActiveSessions())
         foregroundAppMonitor.onLauncherForegrounded()
         gamepadGate.onLauncherForegrounded()
         KeepAliveService.stop(this)

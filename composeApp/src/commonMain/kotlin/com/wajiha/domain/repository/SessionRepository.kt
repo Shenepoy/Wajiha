@@ -27,6 +27,9 @@ class SessionRepository(private val sessionDao: PlaySessionDao) {
 
     suspend fun latestOpenSession(): PlaySessionEntity? = sessionDao.latestOpen()
 
+    suspend fun updateGameId(sessionId: Long, gameId: Long?) =
+        sessionDao.updateGameId(sessionId, gameId)
+
     fun observeForGame(gameId: Long): Flow<List<PlaySessionEntity>> =
         sessionDao.observeForGame(gameId)
 

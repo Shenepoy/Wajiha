@@ -41,6 +41,16 @@ class PlaySessionTracker(
         startSession(gameId, packageName, origin = "detected")
     }
 
+    /** Backfill gameId when ROM reconciliation resolves after session start. */
+    fun updateGameId(gameId: Long, packageName: String) {
+        val launch = _active.value ?: return
+        if (launch.packageName != packageName || launch.gameId != null) return
+        scope.launch {
+            sessionRepository.updateGameId(launch.sessionId, gameId)
+            _active.value = launch.copy(gameId = gameId)
+        }
+    }
+
     /** Called by ForegroundAppMonitor when the game process is confirmed gone. */
     fun onGameEnded(packageName: String) {
         if (_active.value?.packageName != packageName) return

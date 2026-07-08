@@ -36,6 +36,8 @@ object GamingAppCatalog {
         "org.citra.citra_emu",
         "org.yuzu.yuzu_emu",
         "org.duckstation.android",
+        "com.github.stenzek.duckstation",
+        "xyz.aethersx2.android",
         "org.easyrpg.player",
         "com.drastic",
         "com.explusalpha.NeoEmu",

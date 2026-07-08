@@ -47,6 +47,7 @@ import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.WajihaEmptyState
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
+import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadFocusable
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
@@ -115,6 +116,7 @@ fun SettingsScreen(
     val settings by settingsViewModel.settings.collectAsState()
     val systemControls = koinInject<SystemControls>()
     val scraperViewModel = koinInject<ScraperViewModel>()
+    val feedback = LocalUiFeedback.current
 
     val sections = SettingsSection.entries
     var selectedSectionIndex by remember { mutableIntStateOf(0) }
@@ -122,7 +124,9 @@ fun SettingsScreen(
     val sectionFocus = remember { FocusRequester() }
 
     fun selectSection(index: Int) {
-        selectedSectionIndex = index.coerceIn(0, sections.lastIndex)
+        val newIndex = index.coerceIn(0, sections.lastIndex)
+        feedback.tabSelect(selectedSectionIndex, newIndex)
+        selectedSectionIndex = newIndex
     }
 
     LaunchedEffect(selectedSectionIndex) {
@@ -218,6 +222,8 @@ fun SettingsScreen(
                             DualScreenSectionContent(
                                 settings = settings,
                                 settingsViewModel = settingsViewModel,
+                                perms = perms,
+                                systemControls = systemControls,
                                 firstFocusRequester = sectionFocus
                             )
                         }
@@ -316,6 +322,8 @@ private fun ScraperSectionContent(
 private fun DualScreenSectionContent(
     settings: AppSettings,
     settingsViewModel: SettingsViewModel,
+    perms: PermissionStates,
+    systemControls: SystemControls,
     firstFocusRequester: FocusRequester? = null
 ) {
     SettingsSectionBlurb(
@@ -340,6 +348,28 @@ private fun DualScreenSectionContent(
         defaultChecked = true,
         onReset = { settingsViewModel.setDetectManualLaunches(true) }
     )
+    if (settings.detectManualLaunches) {
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Identify game from emulator files",
+            description = if (perms.allFilesAccess) {
+                "Read emulator config to match externally launched games to your library. " +
+                    "Does not access your ROM folders."
+            } else {
+                "Requires All files access (System section). Reads emulator config only."
+            },
+            checked = settings.romReconciliationEnabled && perms.allFilesAccess,
+            onCheckedChange = { enabled ->
+                if (enabled && !perms.allFilesAccess) {
+                    systemControls.requestAllFilesAccess()
+                } else {
+                    settingsViewModel.setRomReconciliationEnabled(enabled)
+                }
+            },
+            defaultChecked = false,
+            onReset = { settingsViewModel.setRomReconciliationEnabled(false) }
+        )
+    }
     SettingsGroupDivider()
     SettingsToggleRow(
         label = "Swap screen roles (grid on top, hero on bottom)",
@@ -355,7 +385,7 @@ private fun DualScreenSectionContent(
         description = "Choose what the secondary display shows after you launch a game. " +
             "Blackout turns the bottom screen off until you tap it.",
         choiceOptions = listOf(
-            MultiChoiceOption("NowPlaying", "Now Playing", icon = "▶"),
+            MultiChoiceOption("NowPlaying", "Now Running", icon = "▶"),
             MultiChoiceOption("QuickSettings", "Quick Settings", icon = "⚙"),
             MultiChoiceOption("RunningApps", "Running Apps", icon = "▣"),
             MultiChoiceOption("Achievements", "Achievements", icon = "★"),
@@ -389,35 +419,24 @@ private fun DualScreenSectionContent(
             description = "How dark the overlay is. 100% is near-black but still restores on tap.",
             value = settings.gameDimPercent,
             onValueChange = settingsViewModel::setGameDimPercent,
-            range = 25..100,
-            step = 25,
+            range = 0..100,
+            step = 10,
             valueLabel = { "$it%" },
-            defaultValue = 50,
-            onReset = { settingsViewModel.setGameDimPercent(50) }
+            defaultValue = 90,
+            onReset = { settingsViewModel.setGameDimPercent(90) }
         )
         SettingsGroupDivider()
         SettingsNumberRow(
-            label = "Dim delay (seconds)",
-            description = "Wait before dimming after gameplay starts. 0 = immediate.",
-            value = settings.gameplayDimDelaySeconds,
-            onValueChange = settingsViewModel::setGameplayDimDelaySeconds,
-            range = 0..60,
+            label = "Dim after (seconds)",
+            description = "Wait before dimming after gameplay starts. Lifts while you use the bottom screen; " +
+                "fades back after the same idle time. 0 = immediate dim, stay lifted on interaction.",
+            value = settings.gameplayDimTimeoutSeconds,
+            onValueChange = settingsViewModel::setGameplayDimTimeoutSeconds,
+            range = 0..120,
             step = 1,
             valueLabel = { if (it == 0) "0 (immediate)" else "$it s" },
-            defaultValue = 5,
-            onReset = { settingsViewModel.setGameplayDimDelaySeconds(5) }
-        )
-        SettingsGroupDivider()
-        SettingsNumberRow(
-            label = "Re-dim after idle (seconds)",
-            description = "Lift dim while you use the bottom screen; fade back after this idle time. 0 = stay lifted.",
-            value = settings.gameplayDimIdleSeconds,
-            onValueChange = settingsViewModel::setGameplayDimIdleSeconds,
-            range = 0..120,
-            step = 5,
-            valueLabel = { if (it == 0) "0 (stay lifted)" else "$it s" },
             defaultValue = 10,
-            onReset = { settingsViewModel.setGameplayDimIdleSeconds(10) }
+            onReset = { settingsViewModel.setGameplayDimTimeoutSeconds(10) }
         )
     }
     SettingsGroupDivider()
@@ -649,6 +668,13 @@ private fun SystemSectionContent(
         description = "Follow games launched outside Wajiha on the bottom screen.",
         granted = perms.usageAccess,
         onRequest = systemControls::requestUsageAccess
+    )
+    SettingsGroupDivider()
+    SettingsPermissionRow(
+        label = "All files access",
+        description = "Read emulator data to identify games launched outside Wajiha.",
+        granted = perms.allFilesAccess,
+        onRequest = systemControls::requestAllFilesAccess
     )
     SettingsGroupDivider()
     SettingsPermissionRow(
