@@ -10,6 +10,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.http.encodeURLPathPart
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -67,22 +68,50 @@ class SteamGridDbSource(private val http: HttpClient) : ScraperSource {
                     "https://www.steamgriddb.com/api/v2/$endpoint/game/$gameId"
                 ) {
                     header("Authorization", "Bearer ${settings.steamGridDbApiKey}")
+                    applyGridFilters(endpoint, settings)
                 }.body<String>()
-                json.decodeFromString<SgdbEnvelope<SgdbAsset>>(body).data.orEmpty()
-                    .take(3)
-                    .forEach { asset ->
-                        result += MediaCandidate(
-                            type = type,
-                            url = asset.url,
-                            width = asset.width,
-                            height = asset.height
-                        )
-                    }
+                val assets = json.decodeFromString<SgdbEnvelope<SgdbAsset>>(body).data.orEmpty()
+                val sorted = if (endpoint == "grids") {
+                    assets.sortedByStylePreference(settings.steamGridDbGridStyles)
+                } else {
+                    assets
+                }
+                sorted.take(5).forEach { asset ->
+                    result += MediaCandidate(
+                        type = type,
+                        url = asset.url,
+                        width = asset.width,
+                        height = asset.height,
+                        sourceVariant = asset.style
+                    )
+                }
             } catch (_: Exception) {
             }
         }
         return result
     }
+
+    private fun io.ktor.client.request.HttpRequestBuilder.applyGridFilters(
+        endpoint: String,
+        settings: ScraperSettings
+    ) {
+        if (endpoint == "grids" && settings.steamGridDbGridStyles.isNotEmpty()) {
+            parameter("styles", settings.steamGridDbGridStyles.joinToString(","))
+        }
+        when (settings.steamGridDbAnimation) {
+            "static" -> parameter("types", "static")
+            "animated" -> parameter("types", "animated")
+            "both" -> parameter("types", "static,animated")
+        }
+        parameter("nsfw", settings.steamGridDbIncludeNsfw)
+        parameter("humor", settings.steamGridDbIncludeHumor)
+    }
+
+    private fun List<SgdbAsset>.sortedByStylePreference(styles: List<String>): List<SgdbAsset> =
+        sortedBy { asset ->
+            val idx = styles.indexOf(asset.style?.lowercase())
+            if (idx == -1) styles.size else idx
+        }
 
     @Serializable
     private data class SgdbEnvelope<T>(val success: Boolean = false, val data: List<T>? = null)
@@ -91,5 +120,10 @@ class SteamGridDbSource(private val http: HttpClient) : ScraperSource {
     private data class SgdbGame(val id: Int, val name: String)
 
     @Serializable
-    private data class SgdbAsset(val url: String, val width: Int? = null, val height: Int? = null)
+    private data class SgdbAsset(
+        val url: String,
+        val width: Int? = null,
+        val height: Int? = null,
+        val style: String? = null
+    )
 }

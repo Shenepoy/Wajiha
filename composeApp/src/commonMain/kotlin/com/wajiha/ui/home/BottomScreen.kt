@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,6 +45,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import com.wajiha.input.GamepadKeys
 import com.wajiha.log.WajihaLog
@@ -58,6 +60,7 @@ import com.wajiha.ui.theme.LocalGamepadFocusChromeScope
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
+import kotlinx.coroutines.delay
 
 /**
  * Bottom screen (3DS style): horizontally scrolling icon grid, platform
@@ -81,6 +84,8 @@ fun BottomScreen(
     onOpenSettings: () -> Unit,
     onOpenSystem: (() -> Unit)? = null,
     onAddGames: (() -> Unit)? = null,
+    nowPlayingActive: Boolean = false,
+    onOpenNowPlaying: (() -> Unit)? = null,
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -89,36 +94,54 @@ fun BottomScreen(
         mutableStateOf(state.tiles.firstOrNull()?.game?.id)
     }
     var contextMenuTarget by remember { mutableStateOf<GameContextTarget?>(null) }
-    var selectedTileBounds by remember { mutableStateOf<Rect?>(null) }
-    val firstTileFocus = remember { FocusRequester() }
-    val selectedTileFocus = remember { FocusRequester() }
+    var contextMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
+    val tileBoundsById = remember { mutableStateMapOf<Long, Rect>() }
+    var restoringGridFocus by remember { mutableStateOf(false) }
+    var restoreFocusGameId by remember { mutableStateOf<Long?>(null) }
+    val tileFocusRequesters = remember { mutableStateMapOf<Long, FocusRequester>() }
     val menuOpen = contextMenuTarget != null
 
     fun openContextMenu(gameId: Long) {
         val tile = state.tiles.find { it.game.id == gameId }
         val name = tile?.game?.displayName ?: ""
         WajihaLog.i(WajihaTags.LAUNCH, "contextMenu: open gameId=$gameId name=$name")
+        selectedGameId = gameId
+        onFocusGame(gameId)
+        contextMenuAnchorBounds = tileBoundsById[gameId]
+        restoringGridFocus = false
+        restoreFocusGameId = null
         contextMenuTarget = GameContextTarget(gameId, name)
     }
 
-    val gamepadHints = remember(state.platforms, menuOpen) {
+    fun dismissContextMenu() {
+        val menuGameId = contextMenuTarget?.gameId
+        contextMenuTarget = null
+        contextMenuAnchorBounds = null
+        if (menuGameId != null) {
+            selectedGameId = menuGameId
+            onFocusGame(menuGameId)
+            restoreFocusGameId = menuGameId
+        }
+        restoringGridFocus = true
+    }
+
+    val gamepadHints = remember(state.platforms, menuOpen, nowPlayingActive) {
         buildList {
             if (menuOpen) {
-                add("A" to "Select")
                 add("B" to "Back")
             } else {
                 add("A" to "Launch")
                 add("X" to "Menu")
                 add("B" to "Back")
+                if (nowPlayingActive) add("Y" to "Now Playing")
                 if (state.platforms.isNotEmpty()) add("L1/R1" to "Filter")
                 add("SELECT" to "Swap")
             }
         }
     }
 
-    Box(modifier = modifier) {
     WajihaScreen(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         layerId = "home_grid",
         showActionBar = true,
         gamepadHints = gamepadHints,
@@ -127,6 +150,10 @@ fun BottomScreen(
         onPreviewKey = { event ->
             if (menuOpen) return@WajihaScreen false
             when {
+                GamepadKeys.isY(event.type, event.key) && nowPlayingActive -> {
+                    onOpenNowPlaying?.invoke()
+                    true
+                }
                 GamepadKeys.isX(event.type, event.key) && selectedGameId != null -> {
                     openContextMenu(selectedGameId!!)
                     true
@@ -153,6 +180,8 @@ fun BottomScreen(
             }
         }
     ) {
+        // Menu lives inside content so GamepadActionBar hints stay undimmed / unblocked.
+        Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier
@@ -239,29 +268,27 @@ fun BottomScreen(
                         selectedGameId = ids.first()
                         onFocusGame(ids.first())
                     }
-                    try {
-                        firstTileFocus.requestFocus()
-                    } catch (_: Exception) {
-                    }
-                }
-
-                LaunchedEffect(state.tiles.isNotEmpty()) {
-                    if (state.tiles.isNotEmpty()) {
-                        selectedGameId = state.tiles.first().game.id
-                        onFocusGame(selectedGameId)
+                    if (!menuOpen && !restoringGridFocus && selectedGameId != null) {
                         try {
-                            firstTileFocus.requestFocus()
+                            tileFocusRequesters[selectedGameId]?.requestFocus()
                         } catch (_: Exception) {
                         }
                     }
                 }
 
-                LaunchedEffect(menuOpen, selectedGameId) {
-                    if (!menuOpen && selectedGameId != null) {
-                        try {
-                            selectedTileFocus.requestFocus()
-                        } catch (_: Exception) {
+                LaunchedEffect(menuOpen, restoringGridFocus, restoreFocusGameId) {
+                    if (!menuOpen && restoringGridFocus) {
+                        val gameId = restoreFocusGameId ?: selectedGameId
+                        if (gameId != null) {
+                            // Wait for menu layer pop + tiles to become focusable again.
+                            delay(50)
+                            try {
+                                tileFocusRequesters[gameId]?.requestFocus()
+                            } catch (_: Exception) {
+                            }
                         }
+                        restoringGridFocus = false
+                        restoreFocusGameId = null
                     }
                 }
 
@@ -273,8 +300,13 @@ fun BottomScreen(
                     verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm + WajihaSpacing.xs)
                 ) {
                     items(state.tiles, key = { it.game.id }) { tile ->
-                        val isFirst = tile.game.id == state.tiles.first().game.id
                         val isSelected = tile.game.id == selectedGameId
+                        val tileFocus = remember(tile.game.id) {
+                            tileFocusRequesters.getOrPut(tile.game.id) { FocusRequester() }
+                        }
+                        val isMenuTile = menuOpen && contextMenuTarget?.gameId == tile.game.id
+                        val isRestoreTile = restoringGridFocus &&
+                            (restoreFocusGameId ?: selectedGameId) == tile.game.id
                         GameTileCard(
                             tile = tile,
                             selected = isSelected,
@@ -294,42 +326,40 @@ fun BottomScreen(
                                 onFocusGame(tile.game.id)
                                 openContextMenu(tile.game.id)
                             },
-                            focusRequester = when {
-                                isSelected -> selectedTileFocus
-                                isFirst -> firstTileFocus
-                                else -> null
+                            focusRequester = tileFocus,
+                            gamepadFocusable = when {
+                                menuOpen -> false
+                                restoringGridFocus -> isRestoreTile
+                                else -> true
                             },
-                            gamepadFocusable = !menuOpen,
-                            navHighlighted = menuOpen && isSelected,
+                            navHighlighted = (isMenuTile || isRestoreTile) && isSelected,
                             modifier = Modifier
                                 .aspectRatio(3f / 4f)
                                 .then(
-                                    if (isSelected) {
-                                        Modifier.onGloballyPositioned { coords ->
-                                            selectedTileBounds = coords.boundsInRoot()
-                                        }
-                                    } else {
-                                        Modifier
-                                    }
+                                    if (isMenuTile) Modifier.zIndex(1f) else Modifier
                                 )
+                                .onGloballyPositioned { coords ->
+                                    tileBoundsById[tile.game.id] = coords.boundsInRoot()
+                                }
                         )
                     }
                 }
                 }
             }
         }
-    }
 
         GameContextMenu(
             target = contextMenuTarget,
-            anchorBounds = selectedTileBounds,
+            anchorBounds = contextMenuAnchorBounds,
             secondaryDisplayId = secondaryDisplayId,
-            onDismiss = { contextMenuTarget = null },
+            onDismiss = ::dismissContextMenu,
             onOpenOnDisplay = onLaunchGameOnDisplay,
             onOpenInfo = onOpenGameDetail,
             onRemoveFromLibrary = onRemoveFromLibrary,
             onDeleteFile = onDeleteGameFile,
+            modifier = Modifier.zIndex(2f),
         )
+        }
     }
 }
 

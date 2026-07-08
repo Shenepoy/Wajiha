@@ -12,6 +12,7 @@ import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.input.GamepadGate
 import com.wajiha.android.input.GamepadKeyRouter
 import com.wajiha.android.input.handleGamepadKey
+import com.wajiha.android.monitor.ForegroundAppMonitor
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 import com.wajiha.state.GamepadOwner
@@ -34,6 +35,7 @@ class SecondaryHomeActivity : ComponentActivity() {
     private val displayCoordinator: DisplayCoordinator by inject()
     private val gamepadKeyRouter: GamepadKeyRouter by inject()
     private val gamepadGate: GamepadGate by inject()
+    private val foregroundAppMonitor: ForegroundAppMonitor by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -136,6 +138,7 @@ class SecondaryHomeActivity : ComponentActivity() {
         super.onResume()
         isResumed = true
         gamepadGate.onLauncherForegrounded()
+        foregroundAppMonitor.onLauncherForegrounded()
         visibleDisplayId = display?.displayId
         display?.displayId?.let { registerTask(it, taskId) }
         displayCoordinator.stopFastSecondaryReclaim()

@@ -1,6 +1,5 @@
 package com.wajiha.ui.components.gamepad
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.material3.Button
@@ -16,7 +15,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -24,8 +22,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
-import com.wajiha.ui.theme.showGamepadChrome
-import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 
@@ -42,17 +38,10 @@ fun GamepadButton(
     var focused by remember { mutableStateOf(false) }
     val useCustomNav = LocalGamepadNavController.current != null
     val chrome = Modifier
-        .clip(WajihaShapes.focus)
-        .then(
-            if (showGamepadChrome(!useCustomNav && focused)) {
-                Modifier.border(
-                    width = WajihaFocus.borderWidth,
-                    color = WajihaFocus.borderColor(),
-                    shape = WajihaShapes.focus
-                )
-            } else {
-                Modifier
-            }
+        .clip(WajihaShapes.button)
+        .wajihaFocusIndicator(
+            highlighted = !useCustomNav && focused,
+            shape = WajihaShapes.button
         )
         .defaultMinSize(minHeight = WajihaSpacing.touchMin)
         .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
@@ -87,13 +76,15 @@ fun GamepadButton(
         OutlinedButton(
             onClick = onClick,
             enabled = enabled,
-            modifier = modifier.then(chrome)
+            modifier = modifier.then(chrome),
+            shape = WajihaShapes.button
         ) { Text(text) }
     } else {
         Button(
             onClick = onClick,
             enabled = enabled,
-            modifier = modifier.then(chrome)
+            modifier = modifier.then(chrome),
+            shape = WajihaShapes.button
         ) { Text(text) }
     }
 }

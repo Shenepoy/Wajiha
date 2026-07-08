@@ -5,12 +5,15 @@ import androidx.lifecycle.viewModelScope
 import com.wajiha.data.db.GameEntity
 import com.wajiha.data.db.GameMediaEntity
 import com.wajiha.data.db.PlatformEntity
+import com.wajiha.data.ra.RaRepository
 import com.wajiha.data.scraper.BatchScrapeProgress
 import com.wajiha.data.scraper.BatchScraper
+import com.wajiha.data.scraper.CredentialTestResult
 import com.wajiha.data.scraper.MediaCandidate
 import com.wajiha.data.scraper.PlatformScraperOverride
 import com.wajiha.data.scraper.ScrapeCandidate
 import com.wajiha.data.scraper.ScrapeEngine
+import com.wajiha.data.scraper.ScraperCredentialValidator
 import com.wajiha.data.scraper.ScraperSettings
 import com.wajiha.data.scraper.ScraperSettingsRepository
 import com.wajiha.domain.repository.GameRepository
@@ -36,13 +39,22 @@ data class ManualMatchState(
     val message: String? = null
 )
 
+/** Result of a credential test probe for one scraper source. */
+data class SourceTestState(
+    val loading: Boolean = false,
+    val message: String? = null,
+    val success: Boolean? = null
+)
+
 class ScraperViewModel(
     private val settingsRepository: ScraperSettingsRepository,
     private val engine: ScrapeEngine,
     private val batchScraper: BatchScraper,
     private val gameRepository: GameRepository,
     platformRepository: PlatformRepository,
-    private val libraryActions: LibraryActions
+    private val libraryActions: LibraryActions,
+    private val credentialValidator: ScraperCredentialValidator,
+    private val raRepository: RaRepository
 ) : ViewModel() {
 
     val settings: StateFlow<ScraperSettings> = settingsRepository.settings
@@ -71,6 +83,9 @@ class ScraperViewModel(
     private val _manual = MutableStateFlow(ManualMatchState())
     val manual: StateFlow<ManualMatchState> = _manual
 
+    private val _sourceTests = MutableStateFlow<Map<String, SourceTestState>>(emptyMap())
+    val sourceTests: StateFlow<Map<String, SourceTestState>> = _sourceTests
+
     // ---- settings updates ----
 
     fun update(transform: (ScraperSettings) -> ScraperSettings) {
@@ -98,6 +113,41 @@ class ScraperViewModel(
         s.copy(mediaPriority = s.mediaPriority + (mediaType to chain))
     }
 
+    // ---- credential tests ----
+
+    fun testSourceCredentials(sourceId: String) {
+        _sourceTests.value = _sourceTests.value + (sourceId to SourceTestState(loading = true))
+        viewModelScope.launch {
+            val settings = settingsRepository.current()
+            val result = when (sourceId) {
+                "screenscraper" -> credentialValidator.testScreenScraper(settings)
+                "steamgriddb" -> credentialValidator.testSteamGridDb(settings)
+                "romm" -> credentialValidator.testRomm(settings)
+                "ra" -> {
+                    val profile = raRepository.login()
+                    if (profile != null) {
+                        CredentialTestResult.Success(
+                            "Logged in as ${profile.user} (${profile.totalPoints} pts)"
+                        )
+                    } else {
+                        CredentialTestResult.Failure("Login failed — check username/API key")
+                    }
+                }
+                else -> CredentialTestResult.Failure("No test available for this source")
+            }
+            _sourceTests.value = _sourceTests.value + (
+                sourceId to SourceTestState(
+                    loading = false,
+                    message = when (result) {
+                        is CredentialTestResult.Success -> result.message
+                        is CredentialTestResult.Failure -> result.message
+                    },
+                    success = result is CredentialTestResult.Success
+                )
+                )
+        }
+    }
+
     // ---- per-platform overrides ----
 
     /** Toggles a source for one platform; starts from the effective set. */
@@ -123,6 +173,60 @@ class ScraperViewModel(
 
     fun clearPlatformOverride(platformId: String) = update { s ->
         s.copy(platformOverrides = s.platformOverrides - platformId)
+    }
+
+    private fun updatePlatformOverride(
+        platformId: String,
+        transform: (PlatformScraperOverride?) -> PlatformScraperOverride?
+    ) = update { s ->
+        val next = transform(s.platformOverrides[platformId])
+        val overrides = when {
+            next == null || next.isEmpty -> s.platformOverrides - platformId
+            else -> s.platformOverrides + (platformId to next)
+        }
+        s.copy(platformOverrides = overrides)
+    }
+
+    fun setPlatformStringOption(
+        platformId: String,
+        global: String,
+        apply: (PlatformScraperOverride, String?) -> PlatformScraperOverride,
+        value: String?
+    ) = updatePlatformOverride(platformId) { current ->
+        val normalized = value?.takeIf { it != global }
+        apply(current ?: PlatformScraperOverride(), normalized)
+    }
+
+    fun setPlatformBooleanOption(
+        platformId: String,
+        global: Boolean,
+        apply: (PlatformScraperOverride, Boolean?) -> PlatformScraperOverride,
+        value: Boolean?
+    ) = updatePlatformOverride(platformId) { current ->
+        val normalized = value?.takeIf { it != global }
+        apply(current ?: PlatformScraperOverride(), normalized)
+    }
+
+    fun setPlatformIntOption(
+        platformId: String,
+        global: Int,
+        apply: (PlatformScraperOverride, Int?) -> PlatformScraperOverride,
+        value: Int?
+    ) = updatePlatformOverride(platformId) { current ->
+        val normalized = value?.takeIf { it != global }
+        apply(current ?: PlatformScraperOverride(), normalized)
+    }
+
+    fun setPlatformGridStyles(platformId: String, styles: List<String>) = update { s ->
+        val normalized = styles.takeIf { it != s.steamGridDbGridStyles }
+        val current = s.platformOverrides[platformId] ?: PlatformScraperOverride()
+        val next = current.copy(steamGridDbGridStyles = normalized)
+        val overrides = if (next.isEmpty) {
+            s.platformOverrides - platformId
+        } else {
+            s.platformOverrides + (platformId to next)
+        }
+        s.copy(platformOverrides = overrides)
     }
 
     // ---- batch ----

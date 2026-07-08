@@ -47,4 +47,10 @@ interface SystemControls {
     fun requestAllFilesAccess()
     fun openHomeSettings()
     fun openAppInfo(packageName: String)
+
+    /** Whether [packageName] is installed on this device. */
+    fun isPackageInstalled(packageName: String): Boolean
+
+    /** Human-readable app version for the settings screen (e.g. "Wajiha 0.1.0"). */
+    fun appVersionLabel(): String
 }

@@ -1,6 +1,5 @@
 package com.wajiha.ui.components.gamepad
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
@@ -18,8 +17,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
-import com.wajiha.ui.theme.showGamepadChrome
-import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
 
 /**
@@ -36,20 +33,13 @@ fun GamepadFocusable(
 ) {
     var focused by remember { mutableStateOf(false) }
     val useCustomNav = LocalGamepadNavController.current != null
-    val highlight = showGamepadChrome(navHighlighted || (!useCustomNav && (focused || selected)))
+    val highlight = navHighlighted || (!useCustomNav && (focused || selected))
     Box(
         modifier = modifier
             .clip(WajihaShapes.focus)
-            .then(
-                if (highlight) {
-                    Modifier.border(
-                        width = WajihaFocus.borderWidth,
-                        color = WajihaFocus.borderColor(),
-                        shape = WajihaShapes.focus
-                    )
-                } else {
-                    Modifier
-                }
+            .wajihaFocusIndicator(
+                highlighted = highlight,
+                selected = selected || navHighlighted
             )
             .then(
                 if (!useCustomNav) {

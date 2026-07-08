@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 
 private val LightColors = lightColorScheme(
     primary = WajihaColors.AccentDeep,
@@ -53,13 +54,17 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun WajihaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    focusIndicatorStyle: FocusIndicatorStyle = FocusIndicatorStyle(),
     content: @Composable () -> Unit
 ) {
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
         typography = wajihaTypography(),
-        content = content
-    )
+    ) {
+        CompositionLocalProvider(LocalFocusIndicatorStyle provides focusIndicatorStyle) {
+            content()
+        }
+    }
 }
 
 /** Maps the persisted theme preference ("dark" | "light" | "system"). */

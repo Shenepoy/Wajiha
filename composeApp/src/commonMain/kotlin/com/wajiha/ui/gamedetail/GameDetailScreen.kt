@@ -15,12 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -51,16 +48,21 @@ import com.wajiha.data.db.EmulatorEntity
 import com.wajiha.data.db.GameEntity
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.GamepadLayers
 import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadButton
-import com.wajiha.ui.components.gamepad.GamepadChip
-import com.wajiha.ui.components.gamepad.GamepadSwitch
+import com.wajiha.ui.components.gamepad.GamepadSettingRow
+import com.wajiha.ui.components.gamepad.MultiChoiceOption
+import com.wajiha.ui.components.gamepad.SettingType
+import com.wajiha.ui.components.gamepad.SettingSectionScrollColumn
 import com.wajiha.ui.components.gamepad.gameDetailGamepadHints
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.datetime.toLocalDateTime
+import com.wajiha.platform.SystemControls
+import com.wajiha.ui.settings.toEmulatorChoiceOptions
 import org.koin.compose.koinInject
 
 private enum class ActionPaneSection(val label: String) {
@@ -104,6 +106,8 @@ fun GameDetailScreen(
         showActionBar = true,
         gamepadHints = gameDetailGamepadHints,
         onPreviewKey = { event ->
+            val screenLayer = "game_detail_$gameId"
+            if (GamepadLayers.stack.topLayer != screenLayer) return@WajihaScreen false
             when {
                 GamepadKeys.isL1(event.type, event.key) -> {
                     if (selectedSectionIndex > 0) {
@@ -144,6 +148,7 @@ fun GameDetailScreen(
                     secondaryDisplayId = secondaryDisplayId,
                     sectionFocus = sectionFocus,
                     viewModel = viewModel,
+                    showFavoriteRow = true,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = WajihaSpacing.md)
@@ -154,21 +159,21 @@ fun GameDetailScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = WajihaSpacing.md)
-                        .padding(bottom = WajihaSpacing.md)
                 ) {
-                    GameDetailHero(
+                    GameDetailCompactHero(
                         game = game,
                         platformName = state.platform?.name,
                         boxartPath = state.media.firstOrNull { it.type == "boxart" }?.localPath,
                         onSetFavorite = viewModel::setFavorite,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = WajihaSpacing.xs)
+                            .padding(top = WajihaSpacing.xs)
                     )
                     GameDetailSectionCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(0.34f)
+                            .padding(top = WajihaSpacing.sm)
+                            .weight(0.28f)
                     ) {
                         GameDetailMetadataPanel(
                             game = game,
@@ -186,9 +191,11 @@ fun GameDetailScreen(
                         secondaryDisplayId = secondaryDisplayId,
                         sectionFocus = sectionFocus,
                         viewModel = viewModel,
+                        showFavoriteRow = false,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(top = WajihaSpacing.sm)
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(top = WajihaSpacing.sm, bottom = WajihaSpacing.md)
                     )
                 }
             }
@@ -206,6 +213,7 @@ private fun GameDetailTabsPane(
     secondaryDisplayId: Int?,
     sectionFocus: FocusRequester,
     viewModel: GameDetailViewModel,
+    showFavoriteRow: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -216,7 +224,7 @@ private fun GameDetailTabsPane(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusProperties { canFocus = false }
-                .padding(top = WajihaSpacing.xs)
+                .padding(top = WajihaSpacing.sm)
         )
 
         GameDetailSectionCard(
@@ -230,10 +238,12 @@ private fun GameDetailTabsPane(
                     game = game,
                     secondaryDisplayId = secondaryDisplayId,
                     onSetLaunchDisplay = viewModel::setLaunchOnDisplay,
+                    onSetFavorite = viewModel::setFavorite,
                     onLaunchTop = { viewModel.launchOnDisplay(0) },
                     onLaunchBottom = {
                         viewModel.launchOnDisplay(secondaryDisplayId ?: 4)
                     },
+                    showFavoriteRow = showFavoriteRow,
                     firstFocusRequester = sectionFocus
                 )
                 ActionPaneSection.Emulator -> EmulatorSectionContent(
@@ -272,7 +282,7 @@ private fun GameDetailTabsPane(
 }
 
 @Composable
-private fun GameDetailHero(
+private fun GameDetailCompactHero(
     game: GameEntity,
     platformName: String?,
     boxartPath: String?,
@@ -284,16 +294,16 @@ private fun GameDetailHero(
         shape = WajihaShapes.card,
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(WajihaSpacing.sm),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.5f)
+                    .height(88.dp)
                     .aspectRatio(3f / 4f)
                     .clip(WajihaShapes.tile)
                     .background(MaterialTheme.colorScheme.surfaceVariant),
@@ -314,21 +324,27 @@ private fun GameDetailHero(
                     )
                 }
             }
-            Text(
-                text = game.displayName,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
-            PlatformBadge(label = platformName ?: game.platformId)
-            GamepadSwitch(
-                label = "Favorite",
-                checked = game.favorite,
-                onCheckedChange = onSetFavorite,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+            ) {
+                Text(
+                    text = game.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                PlatformBadge(label = platformName ?: game.platformId)
+                DetailToggleRow(
+                    label = "Favorite",
+                    checked = game.favorite,
+                    onCheckedChange = onSetFavorite,
+                    defaultChecked = false,
+                    onReset = { onSetFavorite(false) }
+                )
+            }
         }
     }
 }
@@ -370,10 +386,13 @@ private fun GameDetailSectionCard(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(WajihaSpacing.md)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
         ) {
-            sectionContent()
+            SettingSectionScrollColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+            ) {
+                sectionContent()
+            }
         }
     }
 }
@@ -396,6 +415,76 @@ private fun GroupDivider() {
     )
 }
 
+@Composable
+private fun DetailToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    defaultChecked: Boolean,
+    onReset: () -> Unit,
+    description: String? = null,
+    focusRequester: FocusRequester? = null
+) {
+    GamepadSettingRow(
+        label = label,
+        description = description,
+        type = SettingType.Toggle,
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        focusRequester = focusRequester,
+        onReset = onReset,
+        isAtDefault = checked == defaultChecked
+    )
+}
+
+@Composable
+private fun DetailChoiceRow(
+    label: String,
+    description: String,
+    options: List<Pair<String, String>>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    defaultValue: String,
+    onReset: () -> Unit,
+    focusRequester: FocusRequester? = null
+) {
+    GamepadSettingRow(
+        label = label,
+        description = description,
+        type = SettingType.BinaryChoice,
+        options = options,
+        selected = selected,
+        onSelect = onSelect,
+        focusRequester = focusRequester,
+        onReset = onReset,
+        isAtDefault = selected == defaultValue
+    )
+}
+
+@Composable
+private fun DetailMultiChoiceRow(
+    label: String,
+    description: String,
+    choiceOptions: List<MultiChoiceOption>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    defaultValue: String,
+    onReset: () -> Unit,
+    focusRequester: FocusRequester? = null
+) {
+    GamepadSettingRow(
+        label = label,
+        description = description,
+        type = SettingType.MultiChoice,
+        multiChoiceOptions = choiceOptions,
+        selected = selected,
+        onSelect = onSelect,
+        focusRequester = focusRequester,
+        onReset = onReset,
+        isAtDefault = selected == defaultValue
+    )
+}
+
 enum class MetadataPanelStyle {
     /** Top screen: full description, standard typography. */
     Full,
@@ -403,13 +492,21 @@ enum class MetadataPanelStyle {
     Compact
 }
 
+/** Per-section visibility for [GameDetailMetadataPanel] on the top-screen Info hero. */
+data class MetadataPanelVisibility(
+    val metadata: Boolean = true,
+    val description: Boolean = true,
+    val playStats: Boolean = true
+)
+
 @Composable
 fun GameDetailMetadataPanel(
     game: GameEntity,
     platformName: String?,
     totalPlaytimeSec: Long,
     modifier: Modifier = Modifier,
-    style: MetadataPanelStyle = MetadataPanelStyle.Full
+    style: MetadataPanelStyle = MetadataPanelStyle.Full,
+    visibility: MetadataPanelVisibility = MetadataPanelVisibility()
 ) {
     val bodyStyle = when (style) {
         MetadataPanelStyle.Full -> MaterialTheme.typography.bodyMedium
@@ -420,59 +517,64 @@ fun GameDetailMetadataPanel(
         MetadataPanelStyle.Compact -> MaterialTheme.typography.labelSmall
     }
 
+    val showMetadata = visibility.metadata
+    val showPlayStats = visibility.playStats
+    val showDescription = visibility.description && !game.description.isNullOrBlank()
+    if (!showMetadata && !showPlayStats && !showDescription) return
+
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(
             if (style == MetadataPanelStyle.Full) WajihaSpacing.xs else WajihaSpacing.xs / 2
         )
     ) {
-        MetaInfoRow("Platform", platformName ?: game.platformId, labelStyle, bodyStyle)
-        game.region?.let { MetaInfoRow("Region", it.uppercase(), labelStyle, bodyStyle) }
-        game.ageRating?.let { MetaInfoRow("Age rating", it, labelStyle, bodyStyle) }
-        game.releaseDate?.let { MetaInfoRow("Release", it, labelStyle, bodyStyle) }
-        game.developer?.let { MetaInfoRow("Developer", it, labelStyle, bodyStyle) }
-        game.publisher?.let { MetaInfoRow("Publisher", it, labelStyle, bodyStyle) }
-        game.genre?.let { MetaInfoRow("Genre", it, labelStyle, bodyStyle) }
-        game.players?.let { MetaInfoRow("Players", it, labelStyle, bodyStyle) }
-        game.rating?.let { MetaInfoRow("Rating", "%.1f".format(it), labelStyle, bodyStyle) }
-
-        GroupDivider()
-
-        MetaInfoRow("Plays", "${game.playCount}", labelStyle, bodyStyle)
-        val hours = totalPlaytimeSec / 3600
-        val mins = (totalPlaytimeSec % 3600) / 60
-        val playTime = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
-        MetaInfoRow("Play time", playTime, labelStyle, bodyStyle)
-
-        GroupDivider()
-
-        MetaInfoRow("File", game.fileName, labelStyle, bodyStyle)
-        if (game.fileSize > 0) {
-            MetaInfoRow("Size", formatFileSize(game.fileSize), labelStyle, bodyStyle)
+        if (showMetadata) {
+            MetaInfoRow("Platform", platformName ?: game.platformId, labelStyle, bodyStyle)
+            game.region?.let { MetaInfoRow("Region", it.uppercase(), labelStyle, bodyStyle) }
+            game.ageRating?.let { MetaInfoRow("Age rating", it, labelStyle, bodyStyle) }
+            game.releaseDate?.let { MetaInfoRow("Release", it, labelStyle, bodyStyle) }
+            game.developer?.let { MetaInfoRow("Developer", it, labelStyle, bodyStyle) }
+            game.publisher?.let { MetaInfoRow("Publisher", it, labelStyle, bodyStyle) }
+            game.genre?.let { MetaInfoRow("Genre", it, labelStyle, bodyStyle) }
+            game.players?.let { MetaInfoRow("Players", it, labelStyle, bodyStyle) }
+            game.rating?.let { MetaInfoRow("Rating", "%.1f".format(it), labelStyle, bodyStyle) }
+            MetaInfoRow("File", game.fileName, labelStyle, bodyStyle)
+            if (game.fileSize > 0) {
+                MetaInfoRow("Size", formatFileSize(game.fileSize), labelStyle, bodyStyle)
+            }
+            MetaInfoRow(
+                label = "ROM path",
+                value = game.uri,
+                labelStyle = labelStyle,
+                bodyStyle = bodyStyle,
+                maxValueLines = if (style == MetadataPanelStyle.Full) Int.MAX_VALUE else 2
+            )
+            MetaInfoRow(
+                label = "Scrape status",
+                value = formatScrapeStatus(game.scrapedAt),
+                labelStyle = labelStyle,
+                bodyStyle = bodyStyle
+            )
         }
-        MetaInfoRow(
-            label = "ROM path",
-            value = game.uri,
-            labelStyle = labelStyle,
-            bodyStyle = bodyStyle,
-            maxValueLines = if (style == MetadataPanelStyle.Full) Int.MAX_VALUE else 2
-        )
-        MetaInfoRow(
-            label = "Scrape status",
-            value = formatScrapeStatus(game.scrapedAt),
-            labelStyle = labelStyle,
-            bodyStyle = bodyStyle
-        )
 
-        game.description?.let { desc ->
-            GroupDivider()
+        if (showPlayStats) {
+            if (showMetadata) GroupDivider()
+            MetaInfoRow("Plays", "${game.playCount}", labelStyle, bodyStyle)
+            val hours = totalPlaytimeSec / 3600
+            val mins = (totalPlaytimeSec % 3600) / 60
+            val playTime = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
+            MetaInfoRow("Play time", playTime, labelStyle, bodyStyle)
+        }
+
+        if (showDescription) {
+            if (showMetadata || showPlayStats) GroupDivider()
             Text(
                 text = "Description",
                 style = labelStyle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = desc,
+                text = game.description.orEmpty(),
                 style = bodyStyle,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(top = WajihaSpacing.xs / 2)
@@ -542,36 +644,49 @@ private fun LaunchSectionContent(
     game: GameEntity,
     secondaryDisplayId: Int?,
     onSetLaunchDisplay: (Int?) -> Unit,
+    onSetFavorite: (Boolean) -> Unit,
     onLaunchTop: () -> Unit,
     onLaunchBottom: () -> Unit,
+    showFavoriteRow: Boolean,
     firstFocusRequester: FocusRequester? = null
 ) {
     SectionBlurb("Default display and quick launch options.")
 
-    Text(
-        text = "Default display",
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurface
-    )
-    Text(
-        text = "Which screen to use when launching from the grid.",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(bottom = WajihaSpacing.xs)
-    )
-    Row(horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
-        GamepadChip(
-            label = "Top (0)",
-            selected = game.launchOnDisplay == 0 || game.launchOnDisplay == null,
-            onClick = { onSetLaunchDisplay(0) },
+    if (showFavoriteRow) {
+        DetailToggleRow(
+            label = "Favorite",
+            description = "Pin this game in your library.",
+            checked = game.favorite,
+            onCheckedChange = onSetFavorite,
+            defaultChecked = false,
+            onReset = { onSetFavorite(false) },
             focusRequester = firstFocusRequester
         )
-        GamepadChip(
-            label = "Bottom (${secondaryDisplayId ?: 4})",
-            selected = game.launchOnDisplay == (secondaryDisplayId ?: 4),
-            onClick = { onSetLaunchDisplay(secondaryDisplayId ?: 4) }
-        )
+        GroupDivider()
     }
+
+    val topId = "0"
+    val bottomId = (secondaryDisplayId ?: 4).toString()
+    val selectedDisplay = when (game.launchOnDisplay) {
+        0, null -> topId
+        else -> bottomId
+    }
+    GamepadSettingRow(
+        label = "Default display",
+        description = "Which screen to use when launching from the grid.",
+        type = SettingType.BinaryChoice,
+        options = listOf(
+            topId to "Top ($topId)",
+            bottomId to "Bottom ($bottomId)"
+        ),
+        selected = selectedDisplay,
+        onSelect = { value ->
+            onSetLaunchDisplay(if (value == topId) 0 else (secondaryDisplayId ?: 4))
+        },
+        focusRequester = if (showFavoriteRow) null else firstFocusRequester,
+        onReset = { onSetLaunchDisplay(null) },
+        isAtDefault = game.launchOnDisplay == null
+    )
 
     GroupDivider()
 
@@ -580,9 +695,18 @@ private fun LaunchSectionContent(
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurface
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
-        GamepadButton(text = "Launch top", onClick = onLaunchTop)
-        GamepadButton(text = "Launch bottom", onClick = onLaunchBottom, outlined = true)
+    Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)) {
+        GamepadButton(
+            text = "Launch top",
+            onClick = onLaunchTop,
+            modifier = Modifier.fillMaxWidth()
+        )
+        GamepadButton(
+            text = "Launch bottom",
+            onClick = onLaunchBottom,
+            outlined = true,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -593,6 +717,7 @@ private fun EmulatorSectionContent(
     onSelect: (String?) -> Unit,
     firstFocusRequester: FocusRequester? = null
 ) {
+    val systemControls = koinInject<SystemControls>()
     SectionBlurb("Override which emulator launches this game. Platform default is used when none is selected.")
 
     if (emulators.isEmpty()) {
@@ -602,48 +727,19 @@ private fun EmulatorSectionContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     } else {
-        GamepadChip(
-            label = "Platform default",
-            selected = selectedId == null,
-            onClick = { onSelect(null) },
-            focusRequester = firstFocusRequester
+        val options = emulators.toEmulatorChoiceOptions(
+            isPackageInstalled = systemControls::isPackageInstalled,
+            includePlatformDefault = true
         )
-        emulators.forEach { emulator ->
-            EmulatorPickerRow(
-                emulator = emulator,
-                selected = selectedId == emulator.id,
-                onSelect = { onSelect(emulator.id) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun EmulatorPickerRow(
-    emulator: EmulatorEntity,
-    selected: Boolean,
-    onSelect: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = WajihaSpacing.touchMin)
-            .padding(vertical = WajihaSpacing.xs),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(emulator.name, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = emulator.packageNames.split(',').firstOrNull()?.trim().orEmpty(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        GamepadChip(
-            label = if (selected) "Selected" else "Use",
-            selected = selected,
-            onClick = onSelect
+        DetailMultiChoiceRow(
+            label = "Emulator",
+            description = "A opens the list. Installed emulators are selectable; missing apps stay visible but greyed out.",
+            choiceOptions = options,
+            selected = selectedId.orEmpty(),
+            onSelect = { value -> onSelect(value.ifEmpty { null }) },
+            defaultValue = "",
+            onReset = { onSelect(null) },
+            focusRequester = firstFocusRequester
         )
     }
 }
@@ -657,9 +753,9 @@ private fun ScraperSectionContent(
     firstFocusRequester: FocusRequester? = null
 ) {
     var selectedSource by remember(state.scraperSources) {
-        mutableStateOf(state.scraperSources.firstOrNull())
+        mutableStateOf(state.scraperSources.firstOrNull().orEmpty())
     }
-    var mediaTab by remember { mutableStateOf(MediaType.Boxart) }
+    var mediaTab by remember { mutableStateOf(MediaType.Boxart.dbName) }
 
     SectionBlurb("Fetch metadata and artwork from configured scraper sources.")
 
@@ -673,70 +769,66 @@ private fun ScraperSectionContent(
         }
     }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
+    Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)) {
         GamepadButton(
-            text = "Scrape",
+            text = "Scrape metadata",
             onClick = onRescrape,
-            focusRequester = firstFocusRequester
+            focusRequester = firstFocusRequester,
+            modifier = Modifier.fillMaxWidth()
         )
-        selectedSource?.let { source ->
+        if (selectedSource.isNotEmpty()) {
             GamepadButton(
-                text = "Redo ($source)",
-                onClick = { onRescrapeFrom(source) },
-                outlined = true
+                text = "Redo from $selectedSource",
+                onClick = { onRescrapeFrom(selectedSource) },
+                outlined = true,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
 
     if (state.scraperSources.isEmpty()) {
         Text(
-            text = "No scraper sources configured — open Scraper hub in Settings.",
+            text = "No scraper sources configured — enable sources in Settings → System.",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = WajihaSpacing.xs)
         )
     } else {
         GroupDivider()
-        Text(
-            text = "Source",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "Pick which scraper to use for redo or element-specific fetches.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = WajihaSpacing.xs)
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
-            items(state.scraperSources) { source ->
-                GamepadChip(
-                    label = source,
-                    selected = source == selectedSource,
-                    onClick = { selectedSource = source }
-                )
-            }
+        val sourceOptions = state.scraperSources.map { source ->
+            MultiChoiceOption(value = source, label = source)
         }
+        DetailMultiChoiceRow(
+            label = "Source",
+            description = "Pick which scraper to use for redo or element-specific fetches.",
+            choiceOptions = sourceOptions,
+            selected = selectedSource,
+            onSelect = { selectedSource = it },
+            defaultValue = state.scraperSources.first(),
+            onReset = { selectedSource = state.scraperSources.first() }
+        )
 
         GroupDivider()
-        Text(
-            text = "Scrape element only",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
+        DetailChoiceRow(
+            label = "Scrape element",
+            description = "Fetch a single artwork type from the selected source.",
+            options = listOf(
+                MediaType.Boxart.dbName to "Boxart",
+                MediaType.Hero.dbName to "Hero",
+                MediaType.Logo.dbName to "Logo"
+            ),
+            selected = mediaTab,
+            onSelect = { mediaTab = it },
+            defaultValue = MediaType.Boxart.dbName,
+            onReset = { mediaTab = MediaType.Boxart.dbName }
         )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
-            items(listOf(MediaType.Boxart, MediaType.Hero, MediaType.Logo)) { type ->
-                GamepadChip(
-                    label = type.dbName,
-                    selected = type == mediaTab,
-                    onClick = { mediaTab = type }
-                )
-            }
-        }
-        selectedSource?.let { source ->
+        if (selectedSource.isNotEmpty()) {
+            val mediaType = MediaType.entries.first { it.dbName == mediaTab }
             GamepadButton(
-                text = "Fetch ${mediaTab.dbName}",
-                onClick = { onScrapeMedia(mediaTab, source) },
-                outlined = true
+                text = "Fetch ${mediaType.dbName}",
+                onClick = { onScrapeMedia(mediaType, selectedSource) },
+                outlined = true,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

@@ -1,17 +1,24 @@
 package com.wajiha.input
 
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import com.wajiha.state.GamepadOwner
+import com.wajiha.ui.components.gamepad.FocusRingOverlayHost
+import com.wajiha.ui.components.gamepad.LocalFocusRingOverlay
+import com.wajiha.ui.components.gamepad.rememberFocusRingOverlayState
 import com.wajiha.ui.theme.LocalInputMode
 import com.wajiha.ui.theme.LocalInputModeController
 import com.wajiha.ui.theme.rememberInputModeController
@@ -20,7 +27,12 @@ import com.wajiha.ui.theme.rememberInputModeController
  * Registers a gamepad layer and optional screen-level key handler.
  * Touch down claims gamepad for [owner] when [onClaimGamepad] is provided.
  * Tracks touch vs gamepad input mode for chrome visibility app-wide.
+ *
+ * [onPreviewKey] is registered on [GamepadLayers] for focus-independent dispatch
+ * (Android activity bridge) and mirrored on [onPreviewKeyEvent] when the focus
+ * tree tunnels through this root — no root focus target (that would steal indicators).
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GamepadScreen(
     layerId: String,
@@ -31,23 +43,35 @@ fun GamepadScreen(
     content: @Composable () -> Unit
 ) {
     val processor = remember { GamepadInputProcessor() }
-    val inputModeController = rememberInputModeController()
 
-    DisposableEffect(layerId) {
+    DisposableEffect(layerId, onPreviewKey) {
         GamepadLayers.stack.push(layerId)
+        GamepadLayers.stack.setPreviewHandler(layerId, onPreviewKey)
         processor.onLayerPushed()
         onDispose {
+            GamepadLayers.stack.setPreviewHandler(layerId, null)
             GamepadLayers.stack.pop(layerId)
             processor.reset()
         }
     }
 
+    val inputModeController = rememberInputModeController()
+    val focusRingOverlay = rememberFocusRingOverlayState()
+    val textFieldEditing = GamepadTextEditRegistry.isEditing
+
+    BackHandler(enabled = textFieldEditing) {
+        GamepadTextEditRegistry.dismissIfEditing()
+    }
+
     CompositionLocalProvider(
         LocalInputModeController provides inputModeController,
-        LocalInputMode provides inputModeController.mode
+        LocalInputMode provides inputModeController.mode,
+        LocalFocusRingOverlay provides focusRingOverlay
     ) {
-        androidx.compose.foundation.layout.Box(
+        FocusRingOverlayHost(
+            state = focusRingOverlay,
             modifier = modifier
+                .fillMaxSize()
                 .pointerInput(inputModeController) {
                     detectTapGestures(
                         onPress = {
@@ -61,9 +85,15 @@ fun GamepadScreen(
                         inputModeController.onGamepadKey()
                     }
                     if (
+                        GamepadKeys.isBack(event.type, event.key) &&
+                        GamepadTextEditRegistry.dismissIfEditing()
+                    ) {
+                        return@onPreviewKeyEvent true
+                    }
+                    if (
                         onClaimGamepad != null &&
                         owner != null &&
-                        event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown &&
+                        event.type == KeyEventType.KeyDown &&
                         isGamepadClaimKey(event.key)
                     ) {
                         onClaimGamepad(owner)

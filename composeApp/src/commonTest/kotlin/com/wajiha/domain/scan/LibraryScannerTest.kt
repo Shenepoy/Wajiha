@@ -36,6 +36,37 @@ class LibraryScannerTest {
     }
 
     @Test
+    fun filtersFilesMatchingIgnorePatternsByFilename() {
+        val roms = listOf(
+            rom("Game.sfc"),
+            rom("Game DLC.sfc"),
+            rom("Expansion Pack.gba")
+        )
+        val visible = LibraryScanner.filterIgnoredNamePatterns(roms, listOf("dlc", "expansion"))
+            .map { it.fileName }
+        assertEquals(listOf("Game.sfc"), visible)
+    }
+
+    @Test
+    fun filtersFilesMatchingIgnorePatternsByUriPath() {
+        val roms = listOf(
+            rom("content.sfc", parent = "games"),
+            rom("bonus.sfc", parent = "dlc-pack")
+        )
+        val visible = LibraryScanner.filterIgnoredNamePatterns(roms, listOf("dlc"))
+            .map { it.fileName }
+        assertEquals(listOf("content.sfc"), visible)
+    }
+
+    @Test
+    fun ignorePatternMatchIsCaseInsensitive() {
+        val roms = listOf(rom("Super DEMO.sfc"), rom("Retail.sfc"))
+        val visible = LibraryScanner.filterIgnoredNamePatterns(roms, listOf("demo"))
+            .map { it.fileName }
+        assertEquals(listOf("Retail.sfc"), visible)
+    }
+
+    @Test
     fun cleansDisplayNames() {
         assertEquals(
             "Chrono Trigger",

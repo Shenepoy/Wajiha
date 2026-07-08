@@ -2,13 +2,17 @@ package com.wajiha.domain.scan
 
 import com.wajiha.data.db.GameEntity
 import com.wajiha.data.db.RomFolderEntity
+import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.PlatformRepository
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaTags
 import com.wajiha.platform.RomHasher
 import com.wajiha.platform.RomScanner
 import com.wajiha.platform.ScannedRom
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 
 data class ScanProgress(
     val running: Boolean = false,
@@ -17,6 +21,7 @@ data class ScanProgress(
     val foldersTotal: Int = 0,
     val gamesAdded: Int = 0,
     val gamesRemoved: Int = 0,
+    val gamesSkipped: Int = 0,
     val error: String? = null
 )
 
@@ -31,6 +36,7 @@ class LibraryScanner(
     private val platformRepository: PlatformRepository,
     private val romScanner: RomScanner,
     private val romHasher: RomHasher,
+    private val settingsRepository: SettingsRepository,
     private val now: () -> Long
 ) {
     private val _progress = MutableStateFlow(ScanProgress())
@@ -50,6 +56,10 @@ class LibraryScanner(
         _progress.value = ScanProgress(running = true, foldersTotal = folders.size)
         var added = 0
         var removed = 0
+        var skipped = 0
+        val appSettings = settingsRepository.settings.first()
+        val ignoreEnabled = appSettings.ignorePatternFilesEnabled
+        val ignorePatterns = appSettings.ignoreFileNamePatterns
         // platformId → all uris seen this run; null value marks a failed folder
         val seenByPlatform = mutableMapOf<String, MutableSet<String>?>()
 
@@ -75,7 +85,14 @@ class LibraryScanner(
                 return@forEachIndexed
             }
 
-            val visible = filterMultiDiscTracks(scanned)
+            val afterMultiDisc = filterMultiDiscTracks(scanned)
+            val visible = if (ignoreEnabled) {
+                val filtered = filterIgnoredNamePatterns(afterMultiDisc, ignorePatterns)
+                skipped += afterMultiDisc.size - filtered.size
+                filtered
+            } else {
+                afterMultiDisc
+            }
             val bucket = seenByPlatform.getOrPut(folder.platformId) { mutableSetOf() }
             bucket?.addAll(visible.map { it.uri })
 
@@ -111,8 +128,15 @@ class LibraryScanner(
             currentFolder = null,
             foldersDone = folders.size,
             gamesAdded = added,
-            gamesRemoved = removed
+            gamesRemoved = removed,
+            gamesSkipped = skipped
         )
+        if (skipped > 0) {
+            WajihaLog.i(
+                WajihaTags.LIBRARY,
+                "scan: skipped $skipped ROM(s) matching ignore name patterns"
+            )
+        }
         _progress.value = result
         return result
     }
@@ -160,6 +184,19 @@ class LibraryScanner(
 
         /** Disc files hidden when an .m3u playlist shares their directory. */
         private val discExtensions = setOf("cue", "gdi", "chd", "iso", "pbp")
+
+        fun filterIgnoredNamePatterns(
+            roms: List<ScannedRom>,
+            patterns: List<String>
+        ): List<ScannedRom> {
+            val needles = patterns.map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+            if (needles.isEmpty()) return roms
+            return roms.filter { rom ->
+                val fileHaystack = rom.fileName.lowercase()
+                val pathHaystack = rom.uri.lowercase()
+                needles.none { needle -> needle in fileHaystack || needle in pathHaystack }
+            }
+        }
 
         fun filterMultiDiscTracks(roms: List<ScannedRom>): List<ScannedRom> {
             val byParent = roms.groupBy { it.parentId }

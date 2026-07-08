@@ -16,4 +16,5 @@ object WajihaTags {
     const val LAUNCH = "Wajiha/Launch"
     const val NOW_PLAYING = "Wajiha/NowPlaying"
     const val SCRAPE = "Wajiha/Scrape"
+    const val LIBRARY = "Wajiha/Library"
 }

@@ -2,6 +2,7 @@ package com.wajiha.android.input
 
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import com.wajiha.input.tryDispatchTopLayerPreviewKey
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 
@@ -19,7 +20,9 @@ fun handleGamepadKey(
     activity: ComponentActivity,
     event: KeyEvent,
     dispatch: (KeyEvent) -> Boolean
-): Boolean = when (event.keyCode) {
+): Boolean {
+    if (tryDispatchTopLayerPreviewKey(event)) return true
+    return when (event.keyCode) {
     KeyEvent.KEYCODE_BUTTON_A -> {
         if (event.action == KeyEvent.ACTION_DOWN) {
             WajihaLog.d(
@@ -52,6 +55,7 @@ fun handleGamepadKey(
         dispatch(event)
         true
     }
+    KeyEvent.KEYCODE_BUTTON_Y,
     KeyEvent.KEYCODE_BUTTON_L1,
     KeyEvent.KEYCODE_BUTTON_R1,
     KeyEvent.KEYCODE_PAGE_UP,
@@ -59,11 +63,12 @@ fun handleGamepadKey(
         if (event.action == KeyEvent.ACTION_DOWN) {
             WajihaLog.d(
                 WajihaTags.GAMEPAD,
-                "map: shoulder keyCode=${event.keyCode} → pass-through (L1/R1)"
+                "map: shoulder/Y keyCode=${event.keyCode} → pass-through"
             )
         }
         dispatch(event)
         true
     }
     else -> false
+    }
 }

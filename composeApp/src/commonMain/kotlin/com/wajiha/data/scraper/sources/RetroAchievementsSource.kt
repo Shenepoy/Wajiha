@@ -56,17 +56,23 @@ class RetroAchievementsSource(private val http: HttpClient) : ScraperSource {
                 releaseDate = game.released,
                 raGameId = gameId.toLong()
             ),
-            media = listOfNotNull(
-                game.imageIcon?.let {
-                    MediaCandidate(type = MediaType.Icon, url = "https://media.retroachievements.org$it")
-                },
-                game.imageBoxArt?.let {
-                    MediaCandidate(type = MediaType.Boxart, url = "https://media.retroachievements.org$it")
-                },
-                game.imageTitle?.let {
-                    MediaCandidate(type = MediaType.Screenshot, url = "https://media.retroachievements.org$it")
+            media = buildList {
+                if (settings.raFetchIcon) {
+                    game.imageIcon?.let {
+                        add(MediaCandidate(type = MediaType.Icon, url = "https://media.retroachievements.org$it"))
+                    }
                 }
-            )
+                if (settings.raFetchBoxArt) {
+                    game.imageBoxArt?.let {
+                        add(MediaCandidate(type = MediaType.Boxart, url = "https://media.retroachievements.org$it"))
+                    }
+                }
+                if (settings.raFetchTitle) {
+                    game.imageTitle?.let {
+                        add(MediaCandidate(type = MediaType.Screenshot, url = "https://media.retroachievements.org$it"))
+                    }
+                }
+            }
         )
     }
 

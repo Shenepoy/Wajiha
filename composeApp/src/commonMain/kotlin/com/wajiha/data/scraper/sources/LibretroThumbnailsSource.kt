@@ -28,11 +28,12 @@ class LibretroThumbnailsSource(private val http: HttpClient) : ScraperSource {
         val gameName = sanitize(query.fileName.substringBeforeLast('.'))
         val media = mutableListOf<MediaCandidate>()
 
-        val kinds = mapOf(
-            "Named_Boxarts" to MediaType.Boxart,
-            "Named_Snaps" to MediaType.Screenshot,
-            "Named_Titles" to MediaType.Fanart
-        )
+        val kinds = buildMap {
+            if (settings.libretroFetchBoxart) put("Named_Boxarts", MediaType.Boxart)
+            if (settings.libretroFetchSnaps) put("Named_Snaps", MediaType.Screenshot)
+            if (settings.libretroFetchTitles) put("Named_Titles", MediaType.Fanart)
+        }
+        if (kinds.isEmpty()) return null
         for ((dir, type) in kinds) {
             val url = "https://thumbnails.libretro.com/" +
                 system.encodeURLPathPart() + "/$dir/" +

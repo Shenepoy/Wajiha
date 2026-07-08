@@ -226,6 +226,22 @@ class SystemController(private val context: Context) : SystemControls {
         )
     }
 
+    override fun isPackageInstalled(packageName: String): Boolean = try {
+        context.packageManager.getPackageInfo(packageName, 0)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    override fun appVersionLabel(): String {
+        val version = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        } catch (_: Exception) {
+            null
+        }
+        return if (version.isNullOrBlank()) "Wajiha" else "Wajiha $version"
+    }
+
     private fun startSettings(action: String) = startActivity(Intent(action))
 
     private fun startActivity(intent: Intent) {

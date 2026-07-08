@@ -1,6 +1,7 @@
 package com.wajiha.android.launch
 
 import android.content.Context
+import com.wajiha.android.monitor.ForegroundAppMonitor
 import com.wajiha.android.service.KeepAliveService
 import com.wajiha.data.config.AmStartArgumentsParser
 import com.wajiha.data.config.IntentExtra
@@ -25,7 +26,8 @@ class GameLauncher(
     private val platformRepository: PlatformRepository,
     private val gameRepository: GameRepository,
     private val sessionTracker: PlaySessionTracker,
-    private val dualScreenStore: DualScreenStore
+    private val dualScreenStore: DualScreenStore,
+    private val foregroundAppMonitor: ForegroundAppMonitor
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -64,16 +66,16 @@ class GameLauncher(
         val result = EmulatorLauncher.launch(context, spec)
         if (result is LaunchResult.Success) {
             sessionTracker.onGameLaunched(game, packageName)
-            dualScreenStore.onGameStarted(
-                NowPlayingState(
-                    packageName = packageName,
-                    gameId = game.id,
-                    gameName = game.displayName,
-                    platformId = game.platformId,
-                    sessionStartedAt = System.currentTimeMillis(),
-                    launchedByWajiha = true
-                )
+            val session = NowPlayingState(
+                packageName = packageName,
+                gameId = game.id,
+                gameName = game.displayName,
+                platformId = game.platformId,
+                sessionStartedAt = System.currentTimeMillis(),
+                launchedByWajiha = true
             )
+            dualScreenStore.beginGameSession(session)
+            foregroundAppMonitor.onSessionStarted(packageName)
             KeepAliveService.start(context)
         }
         return result

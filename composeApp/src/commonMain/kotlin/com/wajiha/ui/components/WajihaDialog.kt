@@ -15,6 +15,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadLayers
+import com.wajiha.input.GamepadTextEditRegistry
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.theme.WajihaSpacing
 
@@ -49,8 +50,12 @@ fun WajihaDialog(
         modifier = Modifier.onPreviewKeyEvent { event ->
             when {
                 GamepadKeys.isBack(event.type, event.key) -> {
-                    onDismiss()
-                    true
+                    if (GamepadTextEditRegistry.dismissIfEditing()) {
+                        true
+                    } else {
+                        onDismiss()
+                        true
+                    }
                 }
                 GamepadKeys.isConfirm(event.type, event.key) -> {
                     onConfirm()
@@ -83,8 +88,12 @@ fun GamepadModal(
             .padding(WajihaSpacing.lg)
             .onPreviewKeyEvent { event ->
                 if (GamepadKeys.isBack(event.type, event.key)) {
-                    onDismiss()
-                    true
+                    if (GamepadTextEditRegistry.dismissIfEditing()) {
+                        true
+                    } else {
+                        onDismiss()
+                        true
+                    }
                 } else {
                     false
                 }

@@ -47,6 +47,9 @@ object GamepadKeys {
     fun isX(type: KeyEventType, key: Key): Boolean =
         type == KeyEventType.KeyDown && key == Key.ButtonX
 
+    fun isY(type: KeyEventType, key: Key): Boolean =
+        type == KeyEventType.KeyDown && key == Key.ButtonY
+
     /** Any gamepad key that should restore gamepad chrome / input mode. */
     fun switchesToGamepadMode(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown) return false

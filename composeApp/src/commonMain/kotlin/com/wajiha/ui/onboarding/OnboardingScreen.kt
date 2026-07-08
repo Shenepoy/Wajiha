@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,6 +44,8 @@ import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadForm
 import com.wajiha.ui.theme.WajihaMotion
+import com.wajiha.ui.theme.WajihaShapes
+import com.wajiha.ui.theme.WajihaSpacing
 import com.wajiha.platform.PermissionStates
 import com.wajiha.platform.SystemControls
 import com.wajiha.ui.settings.SettingsViewModel
@@ -427,7 +428,7 @@ private fun ChoiceCard(title: String, description: String, onClick: () -> Unit) 
     Surface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = WajihaShapes.card,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
     ) {
         Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
@@ -453,7 +454,7 @@ private data class GrantItem(
 private fun GrantCard(item: GrantItem) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = WajihaShapes.card,
         color = if (item.granted) {
             MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
         } else {
@@ -498,7 +499,7 @@ private fun GrantCard(item: GrantItem) {
 @Composable
 private fun StatusPill(text: String) {
     Surface(
-        shape = RoundedCornerShape(50),
+        shape = WajihaShapes.chip,
         color = MaterialTheme.colorScheme.primaryContainer
     ) {
         Text(

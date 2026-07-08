@@ -4,16 +4,28 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
 object WajihaShapes {
-    val tile = RoundedCornerShape(12.dp)
-    val card = RoundedCornerShape(16.dp)
-    val chip = RoundedCornerShape(20.dp)
-    val dialog = RoundedCornerShape(20.dp)
-    val focus = RoundedCornerShape(8.dp)
+    /** Cover art / grid tiles — slight radius for artwork. */
+    val tileCornerRadius = 8.dp
+    val tile = RoundedCornerShape(tileCornerRadius)
+
+    /** Content panels and popover surfaces. */
+    val card = RoundedCornerShape(8.dp)
+
+    /** Chips, segmented pills, badges — boxy interactive controls. */
+    val chip = RoundedCornerShape(4.dp)
+
+    val dialog = RoundedCornerShape(8.dp)
+
+    /** Buttons and focusable row chrome — matches focus ring corners. */
+    val button = RoundedCornerShape(4.dp)
+
+    val focusCornerRadius = 4.dp
+    val focus = RoundedCornerShape(focusCornerRadius)
 
     /** Folder tab — rounded top, flat bottom to meet content panel. */
     val folderTab = RoundedCornerShape(
-        topStart = 16.dp,
-        topEnd = 16.dp,
+        topStart = 4.dp,
+        topEnd = 4.dp,
         bottomStart = 0.dp,
         bottomEnd = 0.dp
     )
@@ -22,7 +34,7 @@ object WajihaShapes {
     val folderPanel = RoundedCornerShape(
         topStart = 0.dp,
         topEnd = 0.dp,
-        bottomStart = 16.dp,
-        bottomEnd = 16.dp
+        bottomStart = 4.dp,
+        bottomEnd = 4.dp
     )
 }

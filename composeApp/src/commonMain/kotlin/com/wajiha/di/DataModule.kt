@@ -40,6 +40,7 @@ val dataModule: Module = module {
             platformRepository = get(),
             romScanner = get(),
             romHasher = get(),
+            settingsRepository = get(),
             now = { Clock.System.now().toEpochMilliseconds() }
         )
     }

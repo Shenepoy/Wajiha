@@ -1,6 +1,5 @@
 package com.wajiha.ui.components.gamepad
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -16,7 +15,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -25,8 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
-import com.wajiha.ui.theme.showGamepadChrome
-import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
 
 @Composable
@@ -53,16 +49,9 @@ fun GamepadChip(
         modifier = modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clip(WajihaShapes.chip)
-            .then(
-                if (showGamepadChrome(!useCustomNav && focused)) {
-                    Modifier.border(
-                        width = WajihaFocus.borderWidth,
-                        color = WajihaFocus.borderColor(),
-                        shape = WajihaShapes.chip
-                    )
-                } else {
-                    Modifier
-                }
+            .wajihaFocusIndicator(
+                highlighted = !useCustomNav && focused,
+                shape = WajihaShapes.chip
             )
             .then(
                 if (!useCustomNav) {

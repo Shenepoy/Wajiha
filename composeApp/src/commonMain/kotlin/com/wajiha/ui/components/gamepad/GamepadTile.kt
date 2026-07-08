@@ -1,7 +1,6 @@
 package com.wajiha.ui.components.gamepad
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.defaultMinSize
@@ -19,10 +18,10 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
-import com.wajiha.ui.theme.showGamepadChrome
 import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
+import com.wajiha.ui.theme.showGamepadChrome
 
 /**
  * Grid tile: touch first tap selects, second tap launches.
@@ -46,11 +45,10 @@ fun GamepadTile(
     val localRequester = remember { FocusRequester() }
     val requester = focusRequester ?: localRequester
     val rawHighlight = navHighlighted || (!useCustomNav && (focused || selected))
-    val highlight = showGamepadChrome(rawHighlight)
     val navChrome = showGamepadChrome(navHighlighted)
     val scale = when {
         navChrome -> WajihaFocus.selectedScale
-        highlight -> 1.05f
+        showGamepadChrome(rawHighlight) -> 1.05f
         else -> 1f
     }
 
@@ -66,19 +64,17 @@ fun GamepadTile(
                             color = WajihaFocus.selectedBackground(),
                             shape = WajihaShapes.tile
                         )
-                        .border(
-                            width = WajihaFocus.selectedBorderWidth,
-                            color = WajihaFocus.selectedBorderColor(),
-                            shape = WajihaShapes.tile
+                        .wajihaFocusIndicator(
+                            highlighted = true,
+                            shape = WajihaShapes.tile,
+                            selected = true
                         )
-                } else if (highlight) {
-                    Modifier.border(
-                        width = WajihaFocus.borderWidth,
-                        color = WajihaFocus.borderColor(),
-                        shape = WajihaShapes.tile
-                    )
                 } else {
-                    Modifier
+                    Modifier.wajihaFocusIndicator(
+                        highlighted = rawHighlight,
+                        shape = WajihaShapes.tile,
+                        selected = selected
+                    )
                 }
             )
             .then(

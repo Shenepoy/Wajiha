@@ -19,8 +19,8 @@ data class ActiveLaunch(
 
 /**
  * Tracks the currently running game session. Opened when Wajiha launches a
- * game (or the foreground monitor detects one), closed when the launcher
- * regains foreground.
+ * game (or the foreground monitor detects one), closed when the game process
+ * exits — not when the launcher regains focus on dual-display Thor.
  */
 class PlaySessionTracker(
     private val sessionRepository: SessionRepository,
@@ -41,6 +41,22 @@ class PlaySessionTracker(
         startSession(gameId, packageName, origin = "detected")
     }
 
+    /** Called by ForegroundAppMonitor when the game process is confirmed gone. */
+    fun onGameEnded(packageName: String) {
+        if (_active.value?.packageName != packageName) return
+        scope.launch { closeActiveInternal() }
+    }
+
+    /**
+     * Call from MainActivity onResume when no game session is active.
+     * Dual-display: bottom launcher stays foreground while gaming — do not close then.
+     */
+    fun onLauncherResumed(sessionActive: Boolean) {
+        if (sessionActive) return
+        if (_active.value == null) return
+        scope.launch { closeActiveInternal() }
+    }
+
     private fun startSession(gameId: Long?, packageName: String, origin: String) {
         val startedAt = System.currentTimeMillis()
         scope.launch {
@@ -49,12 +65,6 @@ class PlaySessionTracker(
             val sessionId = sessionRepository.startSession(gameId, packageName, startedAt, origin)
             _active.value = ActiveLaunch(sessionId, gameId, packageName, startedAt)
         }
-    }
-
-    /** Call from the launcher activity's onResume. */
-    fun onLauncherResumed() {
-        if (_active.value == null) return
-        scope.launch { closeActiveInternal() }
     }
 
     private suspend fun closeActiveInternal() {

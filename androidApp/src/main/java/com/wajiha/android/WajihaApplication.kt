@@ -88,7 +88,7 @@ class WajihaApplication : Application(), SingletonImageLoader.Factory {
             single<RomHasher> { ContentRomHasher(this@WajihaApplication) }
             single { RomFolderManager(this@WajihaApplication, get()) }
             single { PlaySessionTracker(get(), get()) }
-            single { GameLauncher(this@WajihaApplication, get(), get(), get(), get()) }
+            single { GameLauncher(this@WajihaApplication, get(), get(), get(), get(), get()) }
             single { DisplayCoordinator(this@WajihaApplication, get()) }
             single(named("applicationScope")) { appScope }
             single {

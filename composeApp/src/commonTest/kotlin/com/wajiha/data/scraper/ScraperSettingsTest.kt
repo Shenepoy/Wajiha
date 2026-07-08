@@ -18,22 +18,43 @@ class ScraperSettingsTest {
         val settings = ScraperSettings(
             enabledSources = listOf("screenscraper", "steamgriddb"),
             regionPriority = listOf("us", "eu"),
+            screenScraperBoxType = "prefer_2d",
             platformOverrides = mapOf(
                 "psx" to PlatformScraperOverride(
                     enabledSources = listOf("romm"),
-                    regionPriority = listOf("jp")
+                    regionPriority = listOf("jp"),
+                    screenScraperBoxType = "3d_only",
+                    mediaVariantIndex = 1
                 )
             )
         )
         val effective = settings.forPlatform("psx")
         assertEquals(listOf("romm"), effective.enabledSources)
         assertEquals(listOf("jp"), effective.regionPriority)
+        assertEquals("3d_only", effective.screenScraperBoxType)
+        assertEquals(1, effective.mediaVariantIndex)
         // Unset override fields inherit globals
         assertEquals(settings.metadataPriority, effective.metadataPriority)
         assertEquals(settings.mediaPriority, effective.mediaPriority)
         assertEquals(settings.languagePriority, effective.languagePriority)
+        assertEquals("prefer_2d", settings.forPlatform("snes").screenScraperBoxType)
         // Other platforms are unaffected
         assertEquals(settings.enabledSources, settings.forPlatform("snes").enabledSources)
+    }
+
+    @Test
+    fun pickMedia_respectsVariantIndex() {
+        val candidates = listOf(
+            MediaCandidate(type = MediaType.Boxart, url = "a", region = "us"),
+            MediaCandidate(
+                type = MediaType.Boxart,
+                url = "b",
+                region = "us",
+                sourceVariant = "alternate"
+            )
+        )
+        assertEquals("a", candidates.pickMedia(listOf("us"), 0)?.url)
+        assertEquals("b", candidates.pickMedia(listOf("us"), 1)?.url)
     }
 
     @Test

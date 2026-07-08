@@ -128,10 +128,14 @@ class ScreenScraperSource(
                 classifications,
                 settings.regionPriority
             )
-            val media = medias.orEmpty().mapNotNull { it.toCandidate() }
-            // Prefer steamgrid for hero; also map fanart as hero candidate for UI
-            val expandedMedia = media + media.filter { it.type == MediaType.Fanart }.map {
-                it.copy(type = MediaType.Hero)
+            val media = medias.orEmpty()
+                .mapNotNull { it.toCandidate(settings) }
+                .preferScreenScraperBoxArt(settings)
+            val expandedMedia = buildList {
+                addAll(media)
+                if (settings.screenScraperFanartAsHero) {
+                    addAll(media.filter { it.type == MediaType.Fanart }.map { it.copy(type = MediaType.Hero) })
+                }
             }
             return ScrapeCandidate(
                 sourceId = "screenscraper",
@@ -245,9 +249,10 @@ class ScreenScraperSource(
         val region: String? = null,
         val format: String? = null
     ) {
-        fun toCandidate(): MediaCandidate? {
+        fun toCandidate(settings: ScraperSettings): MediaCandidate? {
             val mediaUrl = url ?: return null
-            val mediaType = when (type) {
+            val ssType = type ?: return null
+            val mediaType = when (ssType) {
                 "box-2D", "box-3D" -> MediaType.Boxart
                 "wheel", "wheel-hd" -> MediaType.Logo
                 "ss", "ss-title" -> MediaType.Screenshot
@@ -257,12 +262,61 @@ class ScreenScraperSource(
                 "screenmarquee", "marquee" -> MediaType.Banner
                 else -> return null
             }
+            if (!acceptsScreenScraperType(ssType, mediaType, settings)) return null
             return MediaCandidate(
                 type = mediaType,
                 url = mediaUrl,
                 region = region,
-                format = format
+                format = format,
+                sourceVariant = ssType
             )
         }
     }
+}
+
+private fun acceptsScreenScraperType(
+    ssType: String,
+    mediaType: MediaType,
+    settings: ScraperSettings
+): Boolean = when (mediaType) {
+    MediaType.Boxart -> ssType in settings.resolvedScreenScraperBoxTypes()
+    MediaType.Screenshot -> ssType in settings.resolvedScreenScraperScreenshotTypes()
+    MediaType.Logo -> ssType == settings.resolvedScreenScraperLogoType()
+    else -> true
+}
+
+/** When preferring 2D/3D, drop the lower-priority box type if the preferred one exists. */
+private fun List<MediaCandidate>.preferScreenScraperBoxArt(
+    settings: ScraperSettings
+): List<MediaCandidate> {
+    val preference = when (settings.screenScraperBoxType) {
+        "prefer_2d" -> listOf("box-2D", "box-3D")
+        "prefer_3d" -> listOf("box-3D", "box-2D")
+        else -> return this
+    }
+    val boxArt = filter { it.type == MediaType.Boxart }
+    if (boxArt.size <= 1) return this
+    val preferred = preference.firstOrNull { pref ->
+        boxArt.any { it.sourceVariant == pref }
+    } ?: return this
+    return filter { it.type != MediaType.Boxart || it.sourceVariant == preferred }
+}
+
+internal fun ScraperSettings.resolvedScreenScraperBoxTypes(): Set<String> = when (screenScraperBoxType) {
+    "prefer_3d", "3d_only" -> if (screenScraperBoxType == "3d_only") setOf("box-3D") else setOf("box-3D", "box-2D")
+    "2d_only" -> setOf("box-2D")
+    else -> setOf("box-2D", "box-3D")
+}
+
+internal fun ScraperSettings.resolvedScreenScraperScreenshotTypes(): Set<String> = when (screenScraperScreenshotType) {
+    "title" -> setOf("ss-title")
+    "both" -> setOf("ss", "ss-title")
+    else -> setOf("ss")
+}
+
+internal fun ScraperSettings.resolvedScreenScraperLogoType(): String = when (screenScraperLogoType) {
+    "wheel_hd" -> "wheel-hd"
+    "marquee" -> "marquee"
+    "screenmarquee" -> "screenmarquee"
+    else -> "wheel"
 }

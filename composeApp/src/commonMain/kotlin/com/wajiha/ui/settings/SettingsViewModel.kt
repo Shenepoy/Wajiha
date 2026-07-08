@@ -59,6 +59,10 @@ class SettingsViewModel(
                 dualScreenStore.preferredGameMode =
                     runCatching { SecondaryMode.valueOf(s.gameSecondaryMode) }
                         .getOrDefault(SecondaryMode.NowPlaying)
+                dualScreenStore.gameDimEnabled = s.gameDimEnabled
+                dualScreenStore.gameDimPercent = s.gameDimPercent
+                dualScreenStore.gameplayDimDelaySeconds = s.gameplayDimDelaySeconds
+                dualScreenStore.gameplayDimIdleSeconds = s.gameplayDimIdleSeconds
             }
             .launchIn(viewModelScope)
     }
@@ -73,6 +77,22 @@ class SettingsViewModel(
 
     fun setGameSecondaryMode(mode: String) {
         viewModelScope.launch { settingsRepository.setGameSecondaryMode(mode) }
+    }
+
+    fun setGameDimEnabled(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setGameDimEnabled(value) }
+    }
+
+    fun setGameDimPercent(percent: Int) {
+        viewModelScope.launch { settingsRepository.setGameDimPercent(percent) }
+    }
+
+    fun setGameplayDimDelaySeconds(seconds: Int) {
+        viewModelScope.launch { settingsRepository.setGameplayDimDelaySeconds(seconds) }
+    }
+
+    fun setGameplayDimIdleSeconds(seconds: Int) {
+        viewModelScope.launch { settingsRepository.setGameplayDimIdleSeconds(seconds) }
     }
 
     fun setSoundsEnabled(value: Boolean) {
@@ -91,6 +111,86 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.setTheme(theme) }
     }
 
+    fun setFocusBorderStyle(style: String) {
+        viewModelScope.launch { settingsRepository.setFocusBorderStyle(style) }
+    }
+
+    fun setFocusColor(color: String) {
+        viewModelScope.launch { settingsRepository.setFocusColor(color) }
+    }
+
+    fun setFocusThickness(thickness: Int) {
+        viewModelScope.launch { settingsRepository.setFocusThickness(thickness) }
+    }
+
+    fun setFocusPlacement(placement: String) {
+        viewModelScope.launch { settingsRepository.setFocusPlacement(placement) }
+    }
+
+    fun setTopHeroBackdrop(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroBackdrop(value) }
+    }
+
+    fun setTopHeroCover(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroCover(value) }
+    }
+
+    fun setTopHeroCoverBorder(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroCoverBorder(value) }
+    }
+
+    fun setTopHeroLogo(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroLogo(value) }
+    }
+
+    fun setTopHeroPlatformIcon(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroPlatformIcon(value) }
+    }
+
+    fun setTopHeroPlatform(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroPlatform(value) }
+    }
+
+    fun setTopHeroTitle(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroTitle(value) }
+    }
+
+    fun setTopHeroMetadata(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroMetadata(value) }
+    }
+
+    fun setTopHeroDescription(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroDescription(value) }
+    }
+
+    fun setTopHeroPlayStats(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroPlayStats(value) }
+    }
+
+    fun setTopHeroFavorite(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroFavorite(value) }
+    }
+
+    fun setTopHeroSectionHint(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setTopHeroSectionHint(value) }
+    }
+
+    fun setIgnorePatternFilesEnabled(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setIgnorePatternFilesEnabled(value) }
+    }
+
+    fun addIgnoreFileNamePattern(pattern: String) {
+        viewModelScope.launch { settingsRepository.addIgnoreFileNamePattern(pattern) }
+    }
+
+    fun removeIgnoreFileNamePattern(pattern: String) {
+        viewModelScope.launch { settingsRepository.removeIgnoreFileNamePattern(pattern) }
+    }
+
+    fun resetIgnoreFileNamePatterns() {
+        viewModelScope.launch { settingsRepository.resetIgnoreFileNamePatterns() }
+    }
+
     fun setOnboardingDone() {
         viewModelScope.launch { settingsRepository.setOnboardingDone(true) }
     }
@@ -102,6 +202,8 @@ class SettingsViewModel(
     }
 
     fun rescanLibrary() = libraryActions.rescanLibrary()
+
+    fun rescanPlatform(platformId: String) = libraryActions.rescanPlatform(platformId)
 
     /** Platforms that belong on the Settings Library list. */
     fun inUsePlatformIds(

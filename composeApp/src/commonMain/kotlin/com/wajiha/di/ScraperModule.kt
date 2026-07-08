@@ -7,6 +7,7 @@ import com.wajiha.data.scraper.BatchScraper
 import com.wajiha.data.scraper.ImageProcessor
 import com.wajiha.data.scraper.NoopImageProcessor
 import com.wajiha.data.scraper.ScrapeEngine
+import com.wajiha.data.scraper.ScraperCredentialValidator
 import com.wajiha.data.scraper.ScraperSettingsRepository
 import com.wajiha.data.scraper.ScraperSource
 import com.wajiha.data.scraper.sources.LibretroThumbnailsSource
@@ -40,6 +41,11 @@ val scraperModule: Module = module {
     }
 
     single { ScraperSettingsRepository(get()) }
+
+    single {
+        val creds = getOrNull<ScreenScraperDevCredentials>() ?: ScreenScraperDevCredentials()
+        ScraperCredentialValidator(get(), creds)
+    }
 
     single {
         val creds = getOrNull<ScreenScraperDevCredentials>() ?: ScreenScraperDevCredentials()

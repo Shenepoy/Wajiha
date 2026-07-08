@@ -93,7 +93,7 @@ fun PlatformPickerScreen(
                 )
 
                 Text(
-                    text = "Pick a system, then set folders, emulator, and scraper ids.",
+                    text = "Pick a system, then set folders, emulator, scraper ids, and per-system scraper overrides.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.xs)

@@ -161,7 +161,10 @@ class ScrapeEngine(
                 candidates[sourceId]?.media
                     ?.filter { it.type == type }
                     ?.takeIf { it.isNotEmpty() }
-                    ?.let { list -> (list.bestByRegion(settings.regionPriority) ?: list.first()) to sourceId }
+                    ?.let { list ->
+                        (list.pickMedia(settings.regionPriority, settings.mediaVariantIndex)
+                            ?: list.first()) to sourceId
+                    }
             } ?: continue
 
             val (media, sourceId) = pick

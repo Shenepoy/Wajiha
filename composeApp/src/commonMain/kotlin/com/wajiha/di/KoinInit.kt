@@ -31,7 +31,7 @@ val uiModule: Module = module {
     single { HomeViewModel(get(), get(), get(), get()) }
     single { SettingsViewModel(get(), get(), get(), get(), get()) }
     single { PlatformSettingsViewModel(get(), get(), get()) }
-    single { ScraperViewModel(get(), get(), get(), get(), get(), get()) }
+    single { ScraperViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     single { GameDetailViewModel(get(), get(), get(), get(), get(), get()) }
     single { RaViewModel(get(), get()) }
 }

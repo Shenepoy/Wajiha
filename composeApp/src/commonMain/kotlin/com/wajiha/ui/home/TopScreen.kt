@@ -7,6 +7,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,11 +38,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.wajiha.data.prefs.AppSettings
+import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.platform.SystemControls
 import com.wajiha.state.HeroContext
 import com.wajiha.ui.gamedetail.GameDetailMetadataPanel
 import com.wajiha.ui.gamedetail.GameDetailViewModel
 import com.wajiha.ui.gamedetail.MetadataPanelStyle
+import com.wajiha.ui.gamedetail.MetadataPanelVisibility
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaMotion
 import org.koin.compose.koinInject
@@ -61,6 +64,8 @@ fun TopScreen(
     val scheme = MaterialTheme.colorScheme
     val isDark = scheme.onBackground.luminance() > 0.5f
     val frameTop = if (isDark) WajihaColors.ScreenFrame else WajihaColors.ScreenFrameLight
+    val settingsRepository = koinInject<SettingsRepository>()
+    val settings by settingsRepository.settings.collectAsState(initial = AppSettings())
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -79,18 +84,22 @@ fun TopScreen(
             label = "hero-context"
         ) { context ->
             when (context) {
-                is HeroContext.GameLibrary -> GameLibraryHero(focused, platformName)
+                is HeroContext.GameLibrary -> GameLibraryHero(focused, platformName, settings)
                 is HeroContext.Settings -> SettingsHero(context)
                 is HeroContext.Apps -> AppsHero(context)
                 is HeroContext.System -> SystemHero(context)
-                is HeroContext.GameDetail -> GameDetailHero(context.gameId)
+                is HeroContext.GameDetail -> GameDetailHero(context.gameId, settings)
             }
         }
     }
 }
 
 @Composable
-private fun GameLibraryHero(focused: GameTile?, platformName: String?) {
+private fun GameLibraryHero(
+    focused: GameTile?,
+    platformName: String?,
+    settings: AppSettings
+) {
     AnimatedContent(
         targetState = focused != null,
         transitionSpec = {
@@ -101,7 +110,7 @@ private fun GameLibraryHero(focused: GameTile?, platformName: String?) {
         if (!hasFocus) {
             IdleHero()
         } else {
-            GameHero(requireNotNull(focused), platformName)
+            GameHero(requireNotNull(focused), platformName, settings)
         }
     }
 }
@@ -192,7 +201,7 @@ private fun SettingsHero(context: HeroContext.Settings) {
 }
 
 @Composable
-private fun GameDetailHero(gameId: Long) {
+private fun GameDetailHero(gameId: Long, settings: AppSettings) {
     val viewModel = koinInject<GameDetailViewModel>()
     LaunchedEffect(gameId) { viewModel.open(gameId) }
     val state by viewModel.uiState.collectAsState()
@@ -213,55 +222,73 @@ private fun GameDetailHero(gameId: Long) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        heroPath?.let { backdrop ->
-            AsyncImage(
-                model = backdrop,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                scheme.background.copy(alpha = 0.55f),
-                                scheme.background.copy(alpha = 0.92f)
+        if (settings.topHeroBackdrop) {
+            heroPath?.let { backdrop ->
+                AsyncImage(
+                    model = backdrop,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    scheme.background.copy(alpha = 0.55f),
+                                    scheme.background.copy(alpha = 0.92f)
+                                )
                             )
                         )
-                    )
-            )
+                )
+            }
         }
         Row(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.Top
         ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .aspectRatio(3f / 4f)
-                    .clip(RoundedCornerShape(12.dp)),
-                color = scheme.surfaceVariant
-            ) {
+            if (settings.topHeroCover) {
+                val coverShape = RoundedCornerShape(12.dp)
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .aspectRatio(3f / 4f)
+                        .clip(coverShape)
+                        .then(
+                            if (settings.topHeroCoverBorder) {
+                                Modifier.border(
+                                    width = 1.dp,
+                                    color = scheme.outline.copy(alpha = 0.35f),
+                                    shape = coverShape
+                                )
+                            } else {
+                                Modifier
+                            }
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     if (boxartPath != null) {
                         AsyncImage(
                             model = boxartPath,
                             contentDescription = game.displayName,
-                            contentScale = ContentScale.Fit,
+                            contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
-                        Text(
-                            text = game.displayName.take(2).uppercase(),
-                            style = MaterialTheme.typography.displayLarge,
-                            color = scheme.primary
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(scheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = game.displayName.take(2).uppercase(),
+                                style = MaterialTheme.typography.displayLarge,
+                                color = scheme.primary
+                            )
+                        }
                     }
                 }
             }
@@ -272,26 +299,40 @@ private fun GameDetailHero(gameId: Long) {
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.Top
             ) {
-                Text(
-                    text = game.displayName,
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = scheme.onBackground,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                state.platform?.name?.let { platform ->
+                if (settings.topHeroTitle) {
                     Text(
-                        text = platform,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = scheme.primary,
-                        modifier = Modifier.padding(top = 6.dp)
+                        text = game.displayName,
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = scheme.onBackground,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (game.favorite) {
+                if (settings.topHeroPlatform) {
+                    state.platform?.name?.let { platform ->
+                        Text(
+                            text = platform,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = scheme.primary,
+                            modifier = Modifier.padding(
+                                top = if (settings.topHeroTitle) 6.dp else 0.dp
+                            )
+                        )
+                    }
+                }
+                if (settings.topHeroFavorite && game.favorite) {
                     Text(
                         text = "★ Favorite",
                         style = MaterialTheme.typography.labelMedium,
                         color = scheme.tertiary,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                if (settings.topHeroSectionHint) {
+                    Text(
+                        text = "Launch, emulator, and scraper on the bottom screen  ·  L1 / R1 switch tabs",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = scheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
@@ -300,6 +341,11 @@ private fun GameDetailHero(gameId: Long) {
                     platformName = state.platform?.name,
                     totalPlaytimeSec = state.totalPlaytimeSec,
                     style = MetadataPanelStyle.Full,
+                    visibility = MetadataPanelVisibility(
+                        metadata = settings.topHeroMetadata,
+                        description = settings.topHeroDescription,
+                        playStats = settings.topHeroPlayStats
+                    ),
                     modifier = Modifier.padding(top = 12.dp)
                 )
             }
@@ -396,50 +442,65 @@ private fun HeroMetadataTransition(
 }
 
 @Composable
-private fun GameHero(tile: GameTile, platformName: String?) {
+private fun GameHero(tile: GameTile, platformName: String?, settings: AppSettings) {
     val scheme = MaterialTheme.colorScheme
     val backdrop = tile.heroPath ?: tile.boxartPath
+    val showCover = settings.topHeroCover
+    val showLogo = settings.topHeroLogo && showCover
     Box(modifier = Modifier.fillMaxSize()) {
-        HeroArtworkTransition(
-            tile = tile,
-            modifier = Modifier.fillMaxSize()
-        ) { current ->
-            val currentBackdrop = current.heroPath ?: current.boxartPath
-            if (currentBackdrop != null) {
-                AsyncImage(
-                    model = currentBackdrop,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
+        if (settings.topHeroBackdrop) {
+            HeroArtworkTransition(
+                tile = tile,
+                modifier = Modifier.fillMaxSize()
+            ) { current ->
+                val currentBackdrop = current.heroPath ?: current.boxartPath
+                if (currentBackdrop != null) {
+                    AsyncImage(
+                        model = currentBackdrop,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
-        }
-        if (backdrop != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                scheme.background.copy(alpha = 0.55f),
-                                scheme.background.copy(alpha = 0.92f)
+            if (backdrop != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    scheme.background.copy(alpha = 0.55f),
+                                    scheme.background.copy(alpha = 0.92f)
+                                )
                             )
                         )
-                    )
-            )
+                )
+            }
         }
         Row(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .aspectRatio(3f / 4f)
-                    .clip(RoundedCornerShape(12.dp)),
-                color = scheme.surfaceVariant
-            ) {
-                Box(modifier = Modifier.fillMaxSize()) {
+            if (showCover) {
+                val coverShape = RoundedCornerShape(12.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .aspectRatio(3f / 4f)
+                        .clip(coverShape)
+                        .then(
+                            if (settings.topHeroCoverBorder) {
+                                Modifier.border(
+                                    width = 1.dp,
+                                    color = scheme.outline.copy(alpha = 0.35f),
+                                    shape = coverShape
+                                )
+                            } else {
+                                Modifier
+                            }
+                        )
+                ) {
                     HeroArtworkTransition(
                         tile = tile,
                         modifier = Modifier.fillMaxSize()
@@ -455,14 +516,16 @@ private fun GameHero(tile: GameTile, platformName: String?) {
                                 AsyncImage(
                                     model = current.boxartPath,
                                     contentDescription = current.game.displayName,
-                                    contentScale = ContentScale.Fit,
+                                    contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
                             else -> {
                                 Box(
                                     contentAlignment = Alignment.Center,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(scheme.surfaceVariant)
                                 ) {
                                     Text(
                                         text = current.game.displayName.take(2).uppercase(),
@@ -473,20 +536,22 @@ private fun GameHero(tile: GameTile, platformName: String?) {
                             }
                         }
                     }
-                    HeroArtworkTransition(
-                        tile = tile,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth(0.85f)
-                            .padding(12.dp)
-                    ) { current ->
-                        current.logoPath?.let { logo ->
-                            AsyncImage(
-                                model = logo,
-                                contentDescription = null,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                    if (showLogo) {
+                        HeroArtworkTransition(
+                            tile = tile,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth(0.85f)
+                                .padding(12.dp)
+                        ) { current ->
+                            current.logoPath?.let { logo ->
+                                AsyncImage(
+                                    model = logo,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }
@@ -497,75 +562,94 @@ private fun GameHero(tile: GameTile, platformName: String?) {
                     .fillMaxHeight()
                     .weight(1f)
             ) { current ->
-                GameHeroMetadata(current, platformName)
+                GameHeroMetadata(current, platformName, settings)
             }
         }
     }
 }
 
 @Composable
-private fun GameHeroMetadata(tile: GameTile, platformName: String?) {
+private fun GameHeroMetadata(
+    tile: GameTile,
+    platformName: String?,
+    settings: AppSettings
+) {
     val scheme = MaterialTheme.colorScheme
+    val showPlatformRow =
+        (settings.topHeroPlatformIcon && tile.iconPath != null) ||
+            (settings.topHeroPlatform && platformName != null)
     Column(
         modifier = Modifier.fillMaxHeight(),
         verticalArrangement = Arrangement.Center
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            tile.iconPath?.let { icon ->
-                AsyncImage(
-                    model = icon,
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
+        if (showPlatformRow) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (settings.topHeroPlatformIcon) {
+                    tile.iconPath?.let { icon ->
+                        AsyncImage(
+                            model = icon,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+                    }
+                }
+                if (settings.topHeroPlatform) {
+                    platformName?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = scheme.primary
+                        )
+                    }
+                }
+            }
+        }
+        if (settings.topHeroTitle) {
+            Text(
+                text = tile.game.displayName,
+                style = MaterialTheme.typography.headlineLarge,
+                color = scheme.onBackground,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = if (showPlatformRow) 4.dp else 0.dp)
+            )
+        }
+        if (settings.topHeroMetadata) {
+            val meta = listOfNotNull(
+                tile.game.developer,
+                tile.game.releaseDate?.take(4),
+                tile.game.genre,
+                tile.game.region?.uppercase(),
+                tile.game.ageRating
+            ).joinToString("  ·  ")
+            if (meta.isNotEmpty()) {
+                Text(
+                    text = meta,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
-            platformName?.let {
+        }
+        if (settings.topHeroDescription) {
+            tile.game.description?.let {
                 Text(
                     text = it,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = scheme.primary
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 12.dp)
                 )
             }
         }
-        Text(
-            text = tile.game.displayName,
-            style = MaterialTheme.typography.headlineLarge,
-            color = scheme.onBackground,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 4.dp)
-        )
-        val meta = listOfNotNull(
-            tile.game.developer,
-            tile.game.releaseDate?.take(4),
-            tile.game.genre,
-            tile.game.region?.uppercase(),
-            tile.game.ageRating
-        ).joinToString("  ·  ")
-        if (meta.isNotEmpty()) {
-            Text(
-                text = meta,
-                style = MaterialTheme.typography.bodyLarge,
-                color = scheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-        }
-        tile.game.description?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodyMedium,
-                color = scheme.onSurfaceVariant,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 12.dp)
-            )
-        }
-        if (tile.game.playCount > 0) {
+        if (settings.topHeroPlayStats && tile.game.playCount > 0) {
             Text(
                 text = "Played ${tile.game.playCount}×",
                 style = MaterialTheme.typography.labelMedium,

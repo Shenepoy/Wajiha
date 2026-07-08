@@ -72,6 +72,43 @@ class GamepadNavController(
     fun activate(): Boolean {
         if (focusState.editing) return false
         val slot = enabledSlotAt(focusState.focusedIndex) ?: return false
+        return enterEditForSlot(slot)
+    }
+
+    /** Focus a slot by id and enter edit mode (touch) or run its activate handler. */
+    fun enterEditFor(id: Any): Boolean {
+        if (focusState.editing) {
+            val current = enabledSlotAt(focusState.focusedIndex)
+            if (current?.id == id) return true
+            back()
+        }
+        val idx = slotIndex(id)
+        if (idx < 0) return false
+        focusState.focusedIndex = idx
+        val slot = enabledSlotAt(idx) ?: return false
+        return enterEditForSlot(slot)
+    }
+
+    fun back(): Boolean {
+        if (focusState.editing) {
+            exitEdit()
+            return true
+        }
+        return onBack?.invoke() == true
+    }
+
+    fun exitEdit(): Boolean {
+        if (!focusState.editing) return false
+        val slot = enabledSlotAt(focusState.focusedIndex)
+        if (slot?.onExitEdit?.invoke() == true) {
+            focusState.editing = false
+            return true
+        }
+        focusState.editing = false
+        return true
+    }
+
+    private fun enterEditForSlot(slot: NavSlot): Boolean {
         if (slot.onEnterEdit != null) {
             if (slot.onEnterEdit()) {
                 focusState.editing = true
@@ -82,23 +119,16 @@ class GamepadNavController(
         return true
     }
 
-    fun back(): Boolean {
-        if (focusState.editing) {
-            val slot = enabledSlotAt(focusState.focusedIndex)
-            if (slot?.onExitEdit?.invoke() == true) {
-                focusState.editing = false
-                return true
-            }
-            focusState.editing = false
-            return true
-        }
-        return onBack?.invoke() == true
-    }
-
     fun handleKeyEvent(event: KeyEvent): Boolean {
         if (!active) return false
         if (event.type != KeyEventType.KeyDown) return false
-        if (focusState.editing) return false
+        if (focusState.editing) {
+            return if (GamepadKeys.isBack(event.type, event.key)) {
+                exitEdit()
+            } else {
+                false
+            }
+        }
 
         return when {
             GamepadKeys.isConfirm(event.type, event.key) -> activate()

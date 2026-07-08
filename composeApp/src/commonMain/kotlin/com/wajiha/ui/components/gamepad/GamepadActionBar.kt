@@ -31,9 +31,17 @@ val achievementsGamepadHints: List<Pair<String, String>> = listOf(
     "B" to "Back"
 )
 
+val settingsGamepadHints: List<Pair<String, String>> = listOf(
+    "A" to "Select/Toggle",
+    "B" to "Back",
+    "Y" to "Reset",
+    "L1/R1" to "Section"
+)
+
 val gameDetailGamepadHints: List<Pair<String, String>> = listOf(
     "A" to "Select/Launch",
     "B" to "Back",
+    "Y" to "Reset",
     "L1/R1" to "Tab"
 )
 

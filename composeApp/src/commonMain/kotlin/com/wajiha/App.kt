@@ -20,6 +20,7 @@ import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.LauncherPanel
+import com.wajiha.state.SecondaryMode
 import com.wajiha.ui.apps.AppDrawerScreen
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaSnackbarHost
@@ -40,6 +41,7 @@ import com.wajiha.ui.components.gamepad.quickSettingsGamepadHints
 import com.wajiha.ui.system.QuickSettingsPanel
 import com.wajiha.ui.theme.WajihaTheme
 import com.wajiha.ui.theme.themeIsDark
+import com.wajiha.ui.theme.toFocusIndicatorStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -71,12 +73,16 @@ fun App() {
     val systemControls = koinInject<SystemControls>()
     val settings by settingsViewModel.settings.collectAsState()
 
-    WajihaTheme(darkTheme = themeIsDark(settings.theme)) {
+    WajihaTheme(
+        darkTheme = themeIsDark(settings.theme),
+        focusIndicatorStyle = settings.toFocusIndicatorStyle()
+    ) {
         val state by viewModel.uiState.collectAsState()
         val screenState by viewModel.dualScreenStore.state.collectAsState()
         val focusedGameId by viewModel.dualScreenStore.focusedGameId.collectAsState()
         val heroContext by viewModel.dualScreenStore.heroContext.collectAsState()
         val secondaryDisplayId by viewModel.dualScreenStore.secondaryDisplayId.collectAsState()
+        val nowPlaying by viewModel.dualScreenStore.nowPlaying.collectAsState()
         val apps by viewModel.apps.collectAsState()
 
         var route by remember { mutableStateOf(Route.Home) }
@@ -219,10 +225,6 @@ fun App() {
                             onBack = {
                                 viewModel.playBack()
                                 route = Route.Settings
-                            },
-                            onOpenScraper = {
-                                viewModel.playOpen()
-                                route = Route.Scraper
                             }
                         )
                         LaunchedEffect(Unit) {
@@ -327,6 +329,10 @@ fun App() {
                                     viewModel.playOpen()
                                     route = Route.PlatformPicker
                                 },
+                                nowPlayingActive = nowPlaying != null,
+                                onOpenNowPlaying = {
+                                    dualStore.setSecondaryMode(SecondaryMode.NowPlaying)
+                                },
                                 gamepadOwner = GamepadOwner.Primary,
                                 onClaimGamepad = dualStore::claimGamepad
                             )
@@ -371,6 +377,10 @@ fun App() {
                                 onAddGames = {
                                     viewModel.playOpen()
                                     route = Route.PlatformPicker
+                                },
+                                nowPlayingActive = nowPlaying != null,
+                                onOpenNowPlaying = {
+                                    dualStore.setSecondaryMode(SecondaryMode.NowPlaying)
                                 },
                                 gamepadOwner = GamepadOwner.Primary,
                                 onClaimGamepad = dualStore::claimGamepad,

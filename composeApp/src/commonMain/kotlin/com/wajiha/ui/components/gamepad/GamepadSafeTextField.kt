@@ -1,14 +1,18 @@
 package com.wajiha.ui.components.gamepad
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -23,11 +27,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import com.wajiha.input.GamepadKeys
+import com.wajiha.input.GamepadTextEditRegistry
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.ui.theme.InputMode
 import com.wajiha.ui.theme.LocalInputMode
 import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
+import com.wajiha.ui.theme.WajihaSpacing
 
 /**
  * Text field integrated with custom gamepad nav.
@@ -41,14 +48,55 @@ fun GamepadSafeTextField(
     modifier: Modifier = Modifier,
     secret: Boolean = false,
     singleLine: Boolean = true,
-    navItemId: Any? = null
+    navItemId: Any? = null,
+    overridden: Boolean = false,
+    overrideHint: String = "Changed from global default"
 ) {
     var editing by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
-    val useCustomNav = LocalGamepadNavController.current != null
+    val controller = LocalGamepadNavController.current
+    val useCustomNav = controller != null
     val inputMode = LocalInputMode.current
     val id = navItemId ?: remember { Any() }
     var highlighted by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+
+    fun exitEditing(): Boolean {
+        if (!editing) return false
+        return if (controller != null) {
+            controller.exitEdit()
+        } else {
+            editing = false
+            keyboard?.hide()
+            true
+        }
+    }
+
+    val dismissHandler = remember(controller, keyboard) {
+        { exitEditing() }
+    }
+
+    DisposableEffect(editing) {
+        if (editing) {
+            GamepadTextEditRegistry.register(dismissHandler)
+        }
+        onDispose {
+            GamepadTextEditRegistry.unregister(dismissHandler)
+        }
+    }
+
+    fun enterEditing() {
+        if (controller != null) {
+            controller.enterEditFor(id)
+        } else {
+            editing = true
+            try {
+                focusRequester.requestFocus()
+            } catch (_: Exception) {
+            }
+            keyboard?.show()
+        }
+    }
 
     val fieldModifier = modifier
         .clip(WajihaShapes.focus)
@@ -66,10 +114,14 @@ fun GamepadSafeTextField(
 
     if (useCustomNav) {
         com.wajiha.input.GamepadNavItem(
-            onActivate = { },
+            onActivate = { enterEditing() },
             itemId = id,
             onEnterEdit = {
                 editing = true
+                try {
+                    focusRequester.requestFocus()
+                } catch (_: Exception) {
+                }
                 keyboard?.show()
                 true
             },
@@ -88,6 +140,16 @@ fun GamepadSafeTextField(
                 secret = secret,
                 singleLine = singleLine,
                 editing = editing,
+                overridden = overridden,
+                overrideHint = overrideHint,
+                focusRequester = focusRequester,
+                onTap = { enterEditing() },
+                onFocusChanged = { focused ->
+                    if (!focused && editing) {
+                        editing = false
+                        controller.focusState.editing = false
+                    }
+                },
                 modifier = Modifier
             )
         }
@@ -98,8 +160,27 @@ fun GamepadSafeTextField(
             label = label,
             secret = secret,
             singleLine = singleLine,
+            overridden = overridden,
+            overrideHint = overrideHint,
             modifier = fieldModifier
         )
+    }
+}
+
+@Composable
+private fun TextFieldLabel(
+    label: String,
+    overridden: Boolean,
+    overrideHint: String
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+    ) {
+        Text(label)
+        if (overridden) {
+            PlatformOverrideIndicator(hint = overrideHint)
+        }
     }
 }
 
@@ -111,12 +192,17 @@ private fun TextFieldBody(
     secret: Boolean,
     singleLine: Boolean,
     editing: Boolean,
-    modifier: Modifier = Modifier
+    overridden: Boolean = false,
+    overrideHint: String = "Changed from global default",
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+    onTap: (() -> Unit)? = null,
+    onFocusChanged: ((Boolean) -> Unit)? = null
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label) },
+        label = { TextFieldLabel(label, overridden, overrideHint) },
         singleLine = singleLine,
         readOnly = !editing,
         visualTransformation = if (secret) {
@@ -125,6 +211,25 @@ private fun TextFieldBody(
             VisualTransformation.None
         },
         modifier = modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .then(
+                if (onFocusChanged != null) {
+                    Modifier.onFocusChanged { onFocusChanged(it.isFocused) }
+                } else {
+                    Modifier
+                }
+            )
+            .then(
+                if (onTap != null) {
+                    Modifier.pointerInput(onTap, editing) {
+                        detectTapGestures {
+                            onTap()
+                        }
+                    }
+                } else {
+                    Modifier
+                }
+            )
     )
 }
 
@@ -136,6 +241,8 @@ private fun LegacyGamepadSafeTextField(
     label: String,
     secret: Boolean,
     singleLine: Boolean,
+    overridden: Boolean = false,
+    overrideHint: String = "Changed from global default",
     modifier: Modifier = Modifier
 ) {
     var editing by remember { mutableStateOf(false) }
@@ -143,10 +250,28 @@ private fun LegacyGamepadSafeTextField(
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
 
+    fun exitEditing(): Boolean {
+        if (!editing) return false
+        editing = false
+        keyboard?.hide()
+        return true
+    }
+
+    val dismissHandler = remember(keyboard) { { exitEditing() } }
+
+    DisposableEffect(editing) {
+        if (editing) {
+            GamepadTextEditRegistry.register(dismissHandler)
+        }
+        onDispose {
+            GamepadTextEditRegistry.unregister(dismissHandler)
+        }
+    }
+
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label) },
+        label = { TextFieldLabel(label, overridden, overrideHint) },
         singleLine = singleLine,
         readOnly = !editing,
         visualTransformation = if (secret) {
@@ -161,10 +286,11 @@ private fun LegacyGamepadSafeTextField(
                     return@onPreviewKeyEvent false
                 }
                 when {
+                    editing && GamepadKeys.isBack(event.type, event.key) -> {
+                        exitEditing()
+                    }
                     editing && event.key == androidx.compose.ui.input.key.Key.DirectionUp -> {
-                        editing = false
-                        keyboard?.hide()
-                        true
+                        exitEditing()
                     }
                     !editing -> {
                         val direction = when (event.key) {
