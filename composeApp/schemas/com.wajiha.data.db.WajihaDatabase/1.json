@@ -1,0 +1,671 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "85ba4e8d22c6d19609004fe10137458f",
+    "entities": [
+      {
+        "tableName": "platforms",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `shortName` TEXT NOT NULL, `extensions` TEXT NOT NULL, `raConsoleId` INTEGER, `screenScraperId` INTEGER, `libretroName` TEXT, `boxartAspectRatio` TEXT, `sortIndex` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `defaultEmulatorId` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shortName",
+            "columnName": "shortName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extensions",
+            "columnName": "extensions",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "raConsoleId",
+            "columnName": "raConsoleId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "screenScraperId",
+            "columnName": "screenScraperId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "libretroName",
+            "columnName": "libretroName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "boxartAspectRatio",
+            "columnName": "boxartAspectRatio",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sortIndex",
+            "columnName": "sortIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultEmulatorId",
+            "columnName": "defaultEmulatorId",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "emulators",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `platformId` TEXT NOT NULL, `name` TEXT NOT NULL, `packageNames` TEXT NOT NULL, `activityName` TEXT, `action` TEXT, `routeType` TEXT NOT NULL, `amStartArguments` TEXT, `extrasJson` TEXT, `activityFlagsJson` TEXT, `keepSafUri` INTEGER NOT NULL, `killBeforeLaunch` INTEGER NOT NULL, `libretroCore` TEXT, `isDefault` INTEGER NOT NULL, `custom` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "platformId",
+            "columnName": "platformId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "packageNames",
+            "columnName": "packageNames",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activityName",
+            "columnName": "activityName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "action",
+            "columnName": "action",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "routeType",
+            "columnName": "routeType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amStartArguments",
+            "columnName": "amStartArguments",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "extrasJson",
+            "columnName": "extrasJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "activityFlagsJson",
+            "columnName": "activityFlagsJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "keepSafUri",
+            "columnName": "keepSafUri",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "killBeforeLaunch",
+            "columnName": "killBeforeLaunch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "libretroCore",
+            "columnName": "libretroCore",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isDefault",
+            "columnName": "isDefault",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "custom",
+            "columnName": "custom",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_emulators_platformId",
+            "unique": false,
+            "columnNames": [
+              "platformId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_emulators_platformId` ON `${TABLE_NAME}` (`platformId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "games",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uri` TEXT NOT NULL, `platformId` TEXT NOT NULL, `displayName` TEXT NOT NULL, `sortName` TEXT NOT NULL, `fileName` TEXT NOT NULL, `fileSize` INTEGER NOT NULL, `crc32` TEXT, `md5` TEXT, `favorite` INTEGER NOT NULL, `hidden` INTEGER NOT NULL, `playCount` INTEGER NOT NULL, `lastPlayedAt` INTEGER, `addedAt` INTEGER NOT NULL, `emulatorOverrideId` TEXT, `launchOnDisplay` INTEGER, `description` TEXT, `developer` TEXT, `publisher` TEXT, `releaseDate` TEXT, `genre` TEXT, `rating` REAL, `players` TEXT, `region` TEXT, `raGameId` INTEGER, `scrapedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uri",
+            "columnName": "uri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "platformId",
+            "columnName": "platformId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortName",
+            "columnName": "sortName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileName",
+            "columnName": "fileName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileSize",
+            "columnName": "fileSize",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "crc32",
+            "columnName": "crc32",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "md5",
+            "columnName": "md5",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "favorite",
+            "columnName": "favorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hidden",
+            "columnName": "hidden",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playCount",
+            "columnName": "playCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastPlayedAt",
+            "columnName": "lastPlayedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "addedAt",
+            "columnName": "addedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "emulatorOverrideId",
+            "columnName": "emulatorOverrideId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "launchOnDisplay",
+            "columnName": "launchOnDisplay",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "developer",
+            "columnName": "developer",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "publisher",
+            "columnName": "publisher",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseDate",
+            "columnName": "releaseDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "genre",
+            "columnName": "genre",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rating",
+            "columnName": "rating",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "players",
+            "columnName": "players",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "region",
+            "columnName": "region",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "raGameId",
+            "columnName": "raGameId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "scrapedAt",
+            "columnName": "scrapedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_games_uri",
+            "unique": true,
+            "columnNames": [
+              "uri"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_games_uri` ON `${TABLE_NAME}` (`uri`)"
+          },
+          {
+            "name": "index_games_platformId_displayName",
+            "unique": false,
+            "columnNames": [
+              "platformId",
+              "displayName"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_games_platformId_displayName` ON `${TABLE_NAME}` (`platformId`, `displayName`)"
+          },
+          {
+            "name": "index_games_crc32",
+            "unique": false,
+            "columnNames": [
+              "crc32"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_games_crc32` ON `${TABLE_NAME}` (`crc32`)"
+          },
+          {
+            "name": "index_games_md5",
+            "unique": false,
+            "columnNames": [
+              "md5"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_games_md5` ON `${TABLE_NAME}` (`md5`)"
+          }
+        ]
+      },
+      {
+        "tableName": "rom_folders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `platformId` TEXT NOT NULL, `treeUri` TEXT NOT NULL, `scanDepth` INTEGER NOT NULL, `extraExtensions` TEXT, `lastScanAt` INTEGER, `enabled` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "platformId",
+            "columnName": "platformId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "treeUri",
+            "columnName": "treeUri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scanDepth",
+            "columnName": "scanDepth",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extraExtensions",
+            "columnName": "extraExtensions",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastScanAt",
+            "columnName": "lastScanAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_rom_folders_platformId",
+            "unique": false,
+            "columnNames": [
+              "platformId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_rom_folders_platformId` ON `${TABLE_NAME}` (`platformId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "game_media",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `gameId` INTEGER NOT NULL, `type` TEXT NOT NULL, `source` TEXT NOT NULL, `localPath` TEXT, `remoteUrl` TEXT, `width` INTEGER, `height` INTEGER, `updatedAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gameId",
+            "columnName": "gameId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localPath",
+            "columnName": "localPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteUrl",
+            "columnName": "remoteUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "width",
+            "columnName": "width",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "height",
+            "columnName": "height",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_game_media_gameId_type",
+            "unique": false,
+            "columnNames": [
+              "gameId",
+              "type"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_game_media_gameId_type` ON `${TABLE_NAME}` (`gameId`, `type`)"
+          }
+        ]
+      },
+      {
+        "tableName": "play_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `gameId` INTEGER, `packageName` TEXT NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER, `durationSec` INTEGER NOT NULL, `origin` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gameId",
+            "columnName": "gameId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "packageName",
+            "columnName": "packageName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "startedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAt",
+            "columnName": "endedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "durationSec",
+            "columnName": "durationSec",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "origin",
+            "columnName": "origin",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_play_sessions_gameId",
+            "unique": false,
+            "columnNames": [
+              "gameId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_play_sessions_gameId` ON `${TABLE_NAME}` (`gameId`)"
+          },
+          {
+            "name": "index_play_sessions_startedAt",
+            "unique": false,
+            "columnNames": [
+              "startedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_play_sessions_startedAt` ON `${TABLE_NAME}` (`startedAt`)"
+          }
+        ]
+      },
+      {
+        "tableName": "collections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `iconPath` TEXT, `sortIndex` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "iconPath",
+            "columnName": "iconPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sortIndex",
+            "columnName": "sortIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "collection_games",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`collectionId` INTEGER NOT NULL, `gameId` INTEGER NOT NULL, `position` INTEGER NOT NULL, PRIMARY KEY(`collectionId`, `gameId`))",
+        "fields": [
+          {
+            "fieldPath": "collectionId",
+            "columnName": "collectionId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gameId",
+            "columnName": "gameId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "collectionId",
+            "gameId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_collection_games_gameId",
+            "unique": false,
+            "columnNames": [
+              "gameId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_collection_games_gameId` ON `${TABLE_NAME}` (`gameId`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '85ba4e8d22c6d19609004fe10137458f')"
+    ]
+  }
+}

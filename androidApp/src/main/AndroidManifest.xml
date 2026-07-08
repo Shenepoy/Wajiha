@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- Legacy read for direct-path emulators on ROM folders (user opt-in, Android 11+ all-files) -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <queries>
+        <!-- App drawer: list all launchable apps -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- Home-role peers (default-launcher detection) -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+
+        <!-- Known emulator packages (union of RetroHrai + iiSU query lists) -->
+        <package android:name="com.retroarch" />
+        <package android:name="com.retroarch.aarch64" />
+        <package android:name="com.retroarch.ra32" />
+        <package android:name="com.retroarch.plus" />
+        <package android:name="com.github.stenzek.duckstation" />
+        <package android:name="org.dolphinemu.dolphinemu" />
+        <package android:name="org.mm.jr" />
+        <package android:name="org.ppsspp.ppsspp" />
+        <package android:name="org.ppsspp.ppssppgold" />
+        <package android:name="com.dsemu.drastic" />
+        <package android:name="me.magnum.melonds" />
+        <package android:name="me.magnum.melondualds" />
+        <package android:name="org.citra.citra_emu" />
+        <package android:name="org.citra.emu" />
+        <package android:name="io.github.lime3ds.android" />
+        <package android:name="org.azahar_emu.azahar" />
+        <package android:name="org.yuzu.yuzu_emu" />
+        <package android:name="org.sudachi.sudachi_emu" />
+        <package android:name="dev.eden.eden_emulator" />
+        <package android:name="org.ryujinx.android" />
+        <package android:name="xyz.aethersx2.android" />
+        <package android:name="net.rpcsx" />
+        <package android:name="com.explusalpha.Snes9xPlus" />
+        <package android:name="com.explusalpha.MdEmu" />
+        <package android:name="com.explusalpha.NesEmu" />
+        <package android:name="com.explusalpha.GbaEmu" />
+        <package android:name="com.explusalpha.GbcEmu" />
+        <package android:name="com.explusalpha.PceEmu" />
+        <package android:name="com.explusalpha.NeoEmu" />
+        <package android:name="com.explusalpha.NgpEmu" />
+        <package android:name="com.explusalpha.LynxEmu" />
+        <package android:name="com.explusalpha.SwanEmu" />
+        <package android:name="com.explusalpha.Saturn" />
+        <package android:name="com.explusalpha.A2600Emu" />
+        <package android:name="com.explusalpha.C64Emu" />
+        <package android:name="com.explusalpha.MsxEmu" />
+        <package android:name="com.fms.emulib" />
+        <package android:name="com.flycast.emulator" />
+        <package android:name="io.recompiled.redream" />
+        <package android:name="org.mupen64plusae.v3.fzurita" />
+        <package android:name="org.mupen64plusae.v3.fzurita.pro" />
+        <package android:name="paulscode.android.mupen64plusae.v3.alpha" />
+        <package android:name="com.vita3k.emulator" />
+        <package android:name="org.vita3k.emulator" />
+        <package android:name="org.scummvm.scummvm" />
+        <package android:name="org.libsdl.app" />
+        <package android:name="com.winlator" />
+        <package android:name="com.cmodded.winlator" />
+        <package android:name="app.gamenative" />
+        <package android:name="com.termux" />
+        <package android:name="org.emulator.arcade" />
+        <package android:name="com.seleuco.mame4droid" />
+        <package android:name="org.openbor.engine" />
+        <package android:name="org.devmiyax.yabasanshioro2" />
+        <package android:name="org.devmiyax.yabasanshioro2.pro" />
+        <package android:name="com.virtualapplications.play" />
+        <package android:name="org.purei.play" />
+        <package android:name="com.fastemulator.gba" />
+        <package android:name="com.fastemulator.gbc" />
+        <package android:name="it.dbtecno.pizzaboygba" />
+        <package android:name="it.dbtecno.pizzaboygbapro" />
+        <package android:name="com.pocketstation.pocketstationemu" />
+        <package android:name="ru.vastness.altmer.real3doplayer" />
+        <package android:name="com.arcadia.gearsystem" />
+        <package android:name="skyline.emu" />
+        <package android:name="com.antutu.ABenchMark" />
+    </queries>
+
+    <application
+        android:name=".WajihaApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Wajiha">
+
+        <!-- Primary display: LAUNCHER + HOME on one activity (RetroHrai/Cocoon).
+             Runtime trampoline in DisplayCoordinator hops to display 0 when the
+             drawer or HOME lands us on the Thor bottom screen. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:excludeFromRecents="true"
+            android:clearTaskOnLaunch="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:theme="@style/Theme.Wajiha">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Bottom screen (Cocoon ExternalDisplayActivity pattern):
+             separate taskAffinity so HOME / recents on display 0 never steal it. -->
+        <activity
+            android:name=".SecondaryHomeActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:taskAffinity="com.wajiha.secondary"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:excludeFromRecents="true"
+            android:clearTaskOnLaunch="false"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:theme="@style/Theme.Wajiha">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.SECONDARY_HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Optional: instant foreground detection (user opt-in) -->
+        <service
+            android:name=".monitor.GameDetectAccessibilityService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- Warm the process on boot so the HOME activity appears instantly -->
+        <receiver
+            android:name=".system.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".service.KeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps launcher state alive on the secondary display while an external game is running" />
+        </service>
+
+        <!-- Scrape batch job runs as a dataSync foreground worker -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_provider_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

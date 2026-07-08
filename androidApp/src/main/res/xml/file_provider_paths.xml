@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Primary shared storage (resolved SAF real paths) -->
+    <external-path name="external" path="." />
+    <!-- Secondary volumes (/storage/XXXX-XXXX/...) resolved from SAF doc ids -->
+    <root-path name="root" path="/storage" />
+    <!-- Cached NAS/remote ROM copies -->
+    <external-cache-path name="rom_import" path="rom_import" />
+    <cache-path name="rom_import_internal" path="rom_import" />
+</paths>

@@ -1,0 +1,7 @@
+# Wajiha baseline profile: precompile app startup + home grid paths.
+# Broad rules are intentional — the app is a launcher; nearly all of its own
+# code runs at startup (Koin graph, Room DAOs, Compose home screens).
+HSPLcom/wajiha/android/**->**(**)**
+HSPLcom/wajiha/**->**(**)**
+Lcom/wajiha/android/**
+Lcom/wajiha/**

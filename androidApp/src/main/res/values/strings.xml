@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Wajiha</string>
+    <string name="accessibility_service_description">Detects when a game or emulator comes to the foreground so the second screen can show Now Playing instantly, even for games launched outside Wajiha. No window content is read.</string>
+</resources>

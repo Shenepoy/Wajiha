@@ -1,0 +1,88 @@
+# Study reference corpus — track docs; keep heavy assets local (see Study/README.md)
+Study/_extracted/
+Study/neostation-frontend/
+Study/Daijishou/
+Study/**/*.apk
+
+# Kotlin/Gradle
+.gradle/
+build/
+out/
+bin/
+generated/
+*.class
+*.log
+*.jar
+*.war
+*.ear
+*.kotlin_module
+*.db
+*.lock
+*.tmp
+*.bak
+.kotlin/
+
+# Local configuration
+local.properties
+keystore.properties
+
+# Android
+/.cxx/
+/captures/
+/.externalNativeBuild/
+*.apk
+*.ap_
+*.dex
+*.so
+*.hprof
+
+# iOS/macOS
+DerivedData/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcworkspace
+*.xcuserdata
+*.moved-aside
+*.xcuserstate
+/iosApp/iosApp.xcodeproj/xcuserdata
+.build/
+.swiftpm/
+Package.resolved
+Pods/
+*.crash
+*.ips
+*.dSYM.zip
+*.dSYM
+
+# System files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*~
+.nfs*
+
+# IDE
+.fleet/
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.code-workspace
+
+# Environment
+.env
+.env.*
+
+# Secrets
+*.pem
+*.key
+*.crt
+google-services.json
+GoogleService-Info.plist

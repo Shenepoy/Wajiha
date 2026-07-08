@@ -1,0 +1,96 @@
+{
+  "purpose": "Machine-readable index of Study corpus for Wajiha emulation launcher",
+  "updated": "2026-07-08",
+  "wajiha": {
+    "root": "../",
+    "stack": "Kotlin Multiplatform, Compose Multiplatform, Gradle",
+    "primaryPlatform": "android",
+    "targetDevices": ["AYN Thor (dual display)", "single-display Android handhelds"]
+  },
+  "references": [
+    {
+      "id": "neostation-frontend",
+      "path": "neostation-frontend/",
+      "type": "open_source",
+      "license": "GPL-3.0",
+      "stack": ["Flutter", "Dart", "SQLite", "Kotlin platform channels"],
+      "package": "com.neogamelab.neostation",
+      "dualDisplay": true,
+      "homeLauncher": true,
+      "doc": "docs/02-neostation-frontend.md"
+    },
+    {
+      "id": "daijishou",
+      "path": "Daijishou/",
+      "type": "open_source_assets",
+      "license": "see repo",
+      "stack": ["closed app", "platform JSON on GitHub"],
+      "package": "com.magneticchen.daijishou",
+      "note": "Assets only; remote https://github.com/TapiocaFox/Daijishou",
+      "localPaths": ["platforms/", "docs/", "themes/", "extension-repositories/"],
+      "platformCount": 119,
+      "platformIndex": "platforms/index.json",
+      "themesSizeGb": 6.5,
+      "dualDisplay": "unknown (closed)",
+      "homeLauncher": true,
+      "doc": "docs/03-daijishou.md"
+    },
+    {
+      "id": "retrohrai",
+      "path": "RetroHrai-v0.5.1.apk",
+      "extracted": "_extracted/retrohrai/",
+      "type": "apk",
+      "stack": ["Kotlin", "Jetpack Compose", "Room", "Hilt", "Firebase/Ads"],
+      "package": "com.retrohrai.launcher",
+      "versionName": "0.5.1",
+      "versionCode": 51,
+      "minSdk": 26,
+      "targetSdk": 36,
+      "dualDisplay": true,
+      "homeLauncher": true,
+      "doc": "docs/04-retrohrai-apk.md"
+    },
+    {
+      "id": "cocoon",
+      "path": "cocoon-beta-2-2.apk",
+      "extracted": "_extracted/cocoon/",
+      "type": "apk",
+      "stack": ["Kotlin", "Jetpack Compose", "Room", "Discord SDK", "rcheevos"],
+      "package": "rip.moth.cocoonshell",
+      "versionName": "b2.2",
+      "versionCode": 1,
+      "minSdk": 24,
+      "targetSdk": 36,
+      "dualDisplay": true,
+      "homeLauncher": true,
+      "doc": "docs/05-cocoon-apk.md"
+    },
+    {
+      "id": "iisu",
+      "path": "iiSU-Alpha-0.0.7.3.apk",
+      "extracted": "_extracted/iisu/",
+      "type": "apk",
+      "stack": ["Kotlin", "Jetpack Compose", "Hilt", "Room", "Discord SDK", "rcheevos_jni"],
+      "package": "com.iisulauncher",
+      "versionName": "0.1.6.1",
+      "versionCode": 9,
+      "filenameLabel": "Alpha-0.0.7.3",
+      "minSdk": 30,
+      "targetSdk": 34,
+      "dualDisplay": true,
+      "dualDisplayFeatures": ["SECONDARY_HOME", "LauncherKeepAliveService", "blackOutUnusedDisplayOnLaunch"],
+      "homeLauncher": true,
+      "emulatorConfig": "assets/emuladores_default.json",
+      "consoleCount": 173,
+      "doc": "docs/09-iisu-apk.md"
+    }
+  ],
+  "crossCuttingDocs": [
+    "docs/00-overview.md",
+    "docs/01-comparison-matrix.md",
+    "docs/06-emulator-launch-patterns.md",
+    "docs/07-dual-display-handhelds.md",
+    "docs/08-platform-json-schema.md",
+    "docs/09-iisu-apk.md"
+  ]
+}
