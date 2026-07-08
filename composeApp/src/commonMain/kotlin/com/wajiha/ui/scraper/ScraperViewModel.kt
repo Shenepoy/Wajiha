@@ -19,6 +19,7 @@ import com.wajiha.platform.LibraryActions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -56,6 +57,13 @@ class ScraperViewModel(
 
     val platforms: StateFlow<List<PlatformEntity>> = platformRepository.observeEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Platforms with at least one ROM folder — the ones actually in the library. */
+    val inUsePlatforms: StateFlow<List<PlatformEntity>> =
+        combine(platformRepository.observeEnabled(), gameRepository.observeRomFolders()) { platformList, folderList ->
+            val folderPlatformIds = folderList.map { it.platformId }.toSet()
+            platformList.filter { it.id in folderPlatformIds }.sortedBy { it.name }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _gameResults = MutableStateFlow<List<GameEntity>>(emptyList())
     val gameResults: StateFlow<List<GameEntity>> = _gameResults

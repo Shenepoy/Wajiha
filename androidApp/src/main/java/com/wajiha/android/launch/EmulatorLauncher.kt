@@ -1,6 +1,7 @@
 package com.wajiha.android.launch
 
 import android.app.ActivityManager
+import android.app.ActivityOptions
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ComponentName
@@ -174,7 +175,14 @@ object EmulatorLauncher {
 
             // Don't pre-resolve — returns null on Android 11+ for visible-but-unqueried
             // apps. Catch ActivityNotFoundException instead.
-            context.startActivity(intent)
+            val options = spec.launchDisplayId?.let {
+                ActivityOptions.makeBasic().setLaunchDisplayId(it).toBundle()
+            }
+            if (options != null) {
+                context.startActivity(intent, options)
+            } else {
+                context.startActivity(intent)
+            }
             return LaunchResult.Success
         } catch (e: ActivityNotFoundException) {
             return if (!isPackageInstalled(context, spec.packageName)) {

@@ -34,15 +34,33 @@ class GameLauncher(
             ?: return LaunchResult.Failed("Game $gameId not found")
         val emulator = platformRepository.resolveEmulator(game.platformId, game.emulatorOverrideId)
             ?: return LaunchResult.Failed("No emulator configured for ${game.platformId}")
-        return launchGame(game, emulator)
+        return launchGame(game, emulator, game.launchOnDisplay)
     }
 
-    suspend fun launchGame(game: GameEntity, emulator: EmulatorEntity): LaunchResult {
+    suspend fun launchGame(
+        gameId: Long,
+        displayId: Int
+    ): LaunchResult {
+        val game = gameRepository.byId(gameId)
+            ?: return LaunchResult.Failed("Game $gameId not found")
+        val emulator = platformRepository.resolveEmulator(game.platformId, game.emulatorOverrideId)
+            ?: return LaunchResult.Failed("No emulator configured for ${game.platformId}")
+        return launchGame(game, emulator, displayId)
+    }
+
+    suspend fun launchGame(game: GameEntity, emulator: EmulatorEntity): LaunchResult =
+        launchGame(game, emulator, game.launchOnDisplay)
+
+    suspend fun launchGame(
+        game: GameEntity,
+        emulator: EmulatorEntity,
+        displayId: Int?
+    ): LaunchResult {
         val packageName = pickInstalledPackage(emulator)
             ?: return LaunchResult.EmulatorNotInstalled(
                 emulator.packageNames.substringBefore(',')
             )
-        val spec = buildSpec(game, emulator, packageName)
+        val spec = buildSpec(game, emulator, packageName, displayId)
         val result = EmulatorLauncher.launch(context, spec)
         if (result is LaunchResult.Success) {
             sessionTracker.onGameLaunched(game, packageName)
@@ -70,7 +88,8 @@ class GameLauncher(
     internal fun buildSpec(
         game: GameEntity,
         emulator: EmulatorEntity,
-        packageName: String
+        packageName: String,
+        launchDisplayId: Int? = null
     ): LaunchSpec {
         // Prefer raw am-start arguments when present (Daijishō/iiSU imports);
         // fall back to structured fields.
@@ -98,7 +117,8 @@ class GameLauncher(
             extras = extras.map { LaunchExtra(it.key, substitute(it.value, game), it.type) },
             activityFlags = flags,
             keepSafUri = emulator.keepSafUri,
-            killBeforeLaunch = emulator.killBeforeLaunch
+            killBeforeLaunch = emulator.killBeforeLaunch,
+            launchDisplayId = launchDisplayId
         )
     }
 

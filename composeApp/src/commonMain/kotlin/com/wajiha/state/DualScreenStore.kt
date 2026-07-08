@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import com.wajiha.input.GamepadLayers
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 
@@ -95,6 +96,8 @@ class DualScreenStore {
     private val _primaryPanel = MutableStateFlow(LauncherPanel.GameLibrary)
     private val _secondaryPanel = MutableStateFlow(LauncherPanel.GameLibrary)
     private val _settingsSectionLabel = MutableStateFlow<String?>(null)
+    private val _gameDetailId = MutableStateFlow<Long?>(null)
+    val gameDetailId: StateFlow<Long?> = _gameDetailId.asStateFlow()
     private val _appsHeroCount = MutableStateFlow(0)
     private val _appsHeroFocusedLabel = MutableStateFlow<String?>(null)
     private val _systemHeroSnapshot = MutableStateFlow(HeroContext.System())
@@ -108,10 +111,19 @@ class DualScreenStore {
             _appsHeroCount,
             _appsHeroFocusedLabel
         ) { primary, secondary, section, appCount, focusedApp ->
-            HeroInputs(primary, secondary, section, appCount, focusedApp)
+            HeroInputsPartial(primary, secondary, section, appCount, focusedApp)
         },
+        _gameDetailId,
         _systemHeroSnapshot
-    ) { inputs, system ->
+    ) { partial, detailId, system ->
+        val inputs = HeroInputs(
+            primary = partial.primary,
+            secondary = partial.secondary,
+            section = partial.section,
+            appCount = partial.appCount,
+            focusedApp = partial.focusedApp,
+            gameDetailId = detailId
+        )
         val panel = when {
             inputs.primary != LauncherPanel.GameLibrary -> inputs.primary
             inputs.secondary != LauncherPanel.GameLibrary -> inputs.secondary
@@ -125,6 +137,10 @@ class DualScreenStore {
                 focusedLabel = inputs.focusedApp
             )
             LauncherPanel.System -> system
+            LauncherPanel.GameDetail -> {
+                val id = inputs.gameDetailId
+                if (id != null) HeroContext.GameDetail(id) else HeroContext.GameLibrary
+            }
         }
     }.stateIn(scope, SharingStarted.Eagerly, HeroContext.GameLibrary)
 
@@ -163,6 +179,7 @@ class DualScreenStore {
     }
 
     fun onGameStarted(nowPlaying: NowPlayingState) {
+        GamepadLayers.stack.deactivateAll()
         _nowPlaying.value = nowPlaying
         if (_state.value == DualScreenState.SingleDisplay) return
         _state.value =
@@ -286,6 +303,10 @@ class DualScreenStore {
         _settingsSectionLabel.value = label
     }
 
+    fun setGameDetailGameId(gameId: Long?) {
+        _gameDetailId.value = gameId
+    }
+
     fun setAppsHeroDetail(appCount: Int, focusedLabel: String? = null) {
         _appsHeroCount.value = appCount
         _appsHeroFocusedLabel.value = focusedLabel
@@ -347,10 +368,19 @@ class DualScreenStore {
     }
 }
 
-private data class HeroInputs(
+private data class HeroInputsPartial(
     val primary: LauncherPanel,
     val secondary: LauncherPanel,
     val section: String?,
     val appCount: Int,
     val focusedApp: String?
+)
+
+private data class HeroInputs(
+    val primary: LauncherPanel,
+    val secondary: LauncherPanel,
+    val section: String?,
+    val appCount: Int,
+    val focusedApp: String?,
+    val gameDetailId: Long?
 )

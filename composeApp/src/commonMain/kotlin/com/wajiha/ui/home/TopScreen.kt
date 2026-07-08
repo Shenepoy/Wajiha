@@ -1,7 +1,6 @@
 package com.wajiha.ui.home
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -18,11 +17,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -38,13 +40,12 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.wajiha.platform.SystemControls
 import com.wajiha.state.HeroContext
+import com.wajiha.ui.gamedetail.GameDetailMetadataPanel
+import com.wajiha.ui.gamedetail.GameDetailViewModel
+import com.wajiha.ui.gamedetail.MetadataPanelStyle
 import com.wajiha.ui.theme.WajihaColors
+import com.wajiha.ui.theme.WajihaMotion
 import org.koin.compose.koinInject
-
-private const val HeroFadeInMs = 240
-private const val HeroFadeOutMs = 180
-private const val HeroIdleFadeInMs = 280
-private const val HeroIdleFadeOutMs = 220
 
 /**
  * Top screen (3DS style): hero/preview of the focused game — backdrop,
@@ -73,7 +74,7 @@ fun TopScreen(
             targetState = heroContext,
             contentKey = { it.transitionKey },
             transitionSpec = {
-                fadeIn(tween(HeroIdleFadeInMs)) togetherWith fadeOut(tween(HeroIdleFadeOutMs))
+                fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
             },
             label = "hero-context"
         ) { context ->
@@ -82,6 +83,7 @@ fun TopScreen(
                 is HeroContext.Settings -> SettingsHero(context)
                 is HeroContext.Apps -> AppsHero(context)
                 is HeroContext.System -> SystemHero(context)
+                is HeroContext.GameDetail -> GameDetailHero(context.gameId)
             }
         }
     }
@@ -92,7 +94,7 @@ private fun GameLibraryHero(focused: GameTile?, platformName: String?) {
     AnimatedContent(
         targetState = focused != null,
         transitionSpec = {
-            fadeIn(tween(HeroIdleFadeInMs)) togetherWith fadeOut(tween(HeroIdleFadeOutMs))
+            fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
         },
         label = "hero-mode"
     ) { hasFocus ->
@@ -183,10 +185,126 @@ private fun ContextHeroFrame(
 @Composable
 private fun SettingsHero(context: HeroContext.Settings) {
     ContextHeroFrame(
-        title = "Settings",
+        title = "Wajiha Settings",
         subtitle = context.sectionLabel,
-        hint = "L1 / R1 switch sections  ·  ← menu  → content"
+        hint = "Settings open on the bottom screen  ·  L1 / R1 switch sections"
     )
+}
+
+@Composable
+private fun GameDetailHero(gameId: Long) {
+    val viewModel = koinInject<GameDetailViewModel>()
+    LaunchedEffect(gameId) { viewModel.open(gameId) }
+    val state by viewModel.uiState.collectAsState()
+    val game = state.game
+    val scheme = MaterialTheme.colorScheme
+    val boxartPath = state.media.firstOrNull { it.type == "boxart" }?.localPath
+    val heroPath = state.media.firstOrNull { it.type == "hero" }?.localPath
+
+    if (game == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                text = "Loading…",
+                style = MaterialTheme.typography.bodyLarge,
+                color = scheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        heroPath?.let { backdrop ->
+            AsyncImage(
+                model = backdrop,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                scheme.background.copy(alpha = 0.55f),
+                                scheme.background.copy(alpha = 0.92f)
+                            )
+                        )
+                    )
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .aspectRatio(3f / 4f)
+                    .clip(RoundedCornerShape(12.dp)),
+                color = scheme.surfaceVariant
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (boxartPath != null) {
+                        AsyncImage(
+                            model = boxartPath,
+                            contentDescription = game.displayName,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Text(
+                            text = game.displayName.take(2).uppercase(),
+                            style = MaterialTheme.typography.displayLarge,
+                            color = scheme.primary
+                        )
+                    }
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.Top
+            ) {
+                Text(
+                    text = game.displayName,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = scheme.onBackground,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                state.platform?.name?.let { platform ->
+                    Text(
+                        text = platform,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = scheme.primary,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
+                if (game.favorite) {
+                    Text(
+                        text = "★ Favorite",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = scheme.tertiary,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                GameDetailMetadataPanel(
+                    game = game,
+                    platformName = state.platform?.name,
+                    totalPlaytimeSec = state.totalPlaytimeSec,
+                    style = MetadataPanelStyle.Full,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -245,11 +363,11 @@ private fun HeroArtworkTransition(
         modifier = modifier,
         contentKey = { it.game.id },
         transitionSpec = {
-            (fadeIn(tween(HeroFadeInMs)) +
-                slideInHorizontally(tween(HeroFadeInMs)) { it / 24 })
+            (fadeIn(WajihaMotion.fadeInSpec()) +
+                slideInHorizontally(WajihaMotion.fadeInSpec()) { it / 24 })
                 .togetherWith(
-                    fadeOut(tween(HeroFadeOutMs)) +
-                        slideOutHorizontally(tween(HeroFadeOutMs)) { -it / 24 }
+                    fadeOut(WajihaMotion.fadeOutSpec()) +
+                        slideOutHorizontally(WajihaMotion.fadeOutSpec()) { -it / 24 }
                 )
         },
         label = "hero-artwork"
@@ -269,7 +387,7 @@ private fun HeroMetadataTransition(
         modifier = modifier,
         contentKey = { it.game.id },
         transitionSpec = {
-            fadeIn(tween(HeroFadeInMs)) togetherWith fadeOut(tween(HeroFadeOutMs))
+            fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
         },
         label = "hero-metadata"
     ) { current ->

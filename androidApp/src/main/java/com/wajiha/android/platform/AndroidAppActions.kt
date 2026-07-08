@@ -11,7 +11,9 @@ import androidx.core.graphics.drawable.toBitmap
 import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.launch.GameLauncher
 import com.wajiha.android.launch.LaunchResult
+import com.wajiha.android.library.RomFileDeleter
 import com.wajiha.android.monitor.ForegroundAppMonitor
+import com.wajiha.domain.repository.GameRepository
 import com.wajiha.platform.AppActions
 import com.wajiha.platform.LaunchableApp
 import com.wajiha.platform.SoundAssets
@@ -27,7 +29,9 @@ class AndroidAppActions(
     private val context: Context,
     private val gameLauncher: GameLauncher,
     private val displayCoordinator: DisplayCoordinator,
-    private val monitor: ForegroundAppMonitor
+    private val monitor: ForegroundAppMonitor,
+    private val gameRepository: GameRepository,
+    private val romFileDeleter: RomFileDeleter
 ) : AppActions {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -101,7 +105,31 @@ class AndroidAppActions(
     }
 
     override suspend fun launchGame(gameId: Long): String? =
-        when (val result = gameLauncher.launchGame(gameId)) {
+        launchResultToError(gameLauncher.launchGame(gameId))
+
+    override suspend fun launchGameOnDisplay(gameId: Long, displayId: Int): String? =
+        launchResultToError(gameLauncher.launchGame(gameId, displayId))
+
+    override suspend fun removeFromLibrary(gameId: Long): String? = try {
+        gameRepository.removeFromLibrary(gameId)
+        null
+    } catch (e: Exception) {
+        e.message ?: "Could not remove game"
+    }
+
+    override suspend fun deleteGameFile(gameId: Long): String? {
+        val game = gameRepository.byId(gameId) ?: return "Game not found"
+        val fileError = romFileDeleter.delete(game.uri)
+        if (fileError != null) return fileError
+        return try {
+            gameRepository.removeFromLibrary(gameId)
+            null
+        } catch (e: Exception) {
+            e.message ?: "Could not remove from library"
+        }
+    }
+
+    private fun launchResultToError(result: LaunchResult): String? = when (result) {
             is LaunchResult.Success -> null
             is LaunchResult.EmulatorNotInstalled ->
                 "Emulator not installed: ${result.packageName}"
@@ -110,7 +138,7 @@ class AndroidAppActions(
             is LaunchResult.PermissionDenied ->
                 "Permission denied: ${result.message ?: "unknown"}"
             is LaunchResult.Failed -> "Launch failed: ${result.message ?: "unknown"}"
-        }
+    }
 
     override fun playSound(sound: UiSound) {
         if (!soundsEnabled) return

@@ -123,6 +123,11 @@ private fun isSwapScreenKey(keyCode: Int): Boolean =
 private fun isMappedGamepadKey(keyCode: Int): Boolean =
     keyCode == KeyEvent.KEYCODE_BUTTON_A ||
         keyCode == KeyEvent.KEYCODE_BUTTON_B ||
+        keyCode == KeyEvent.KEYCODE_BUTTON_X ||
+        keyCode == KeyEvent.KEYCODE_BUTTON_L1 ||
+        keyCode == KeyEvent.KEYCODE_BUTTON_R1 ||
+        keyCode == KeyEvent.KEYCODE_PAGE_UP ||
+        keyCode == KeyEvent.KEYCODE_PAGE_DOWN ||
         isSwapScreenKey(keyCode)
 
 private fun <T> runOnMainBlocking(block: () -> T): T {

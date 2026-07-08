@@ -18,6 +18,15 @@ interface AppActions {
     /** Returns null on success, otherwise a user-displayable error. */
     suspend fun launchGame(gameId: Long): String?
 
+    /** Launch on a specific display (0 = primary/top, secondary id = bottom). */
+    suspend fun launchGameOnDisplay(gameId: Long, displayId: Int): String?
+
+    /** Remove from library DB only; ROM file is kept. Returns null on success. */
+    suspend fun removeFromLibrary(gameId: Long): String?
+
+    /** Delete ROM file and remove from library. Returns null on success. */
+    suspend fun deleteGameFile(gameId: Long): String?
+
     fun playSound(sound: UiSound)
 
     fun killApp(packageName: String)

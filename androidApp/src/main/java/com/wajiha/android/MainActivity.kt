@@ -14,6 +14,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.lifecycleScope
 import com.wajiha.App
 import com.wajiha.android.display.DisplayCoordinator
+import com.wajiha.android.input.GamepadGate
 import com.wajiha.android.input.GamepadKeyRouter
 import com.wajiha.android.input.handleGamepadKey
 import com.wajiha.android.launch.PlaySessionTracker
@@ -35,6 +36,7 @@ class MainActivity : ComponentActivity() {
     private val dualScreenStore: DualScreenStore by inject()
     private val displayCoordinator: DisplayCoordinator by inject()
     private val gamepadKeyRouter: GamepadKeyRouter by inject()
+    private val gamepadGate: GamepadGate by inject()
     private val foregroundAppMonitor: ForegroundAppMonitor by inject()
     private val libraryActions: AndroidLibraryActions by inject()
     private val romFolderManager: RomFolderManager by inject()
@@ -93,6 +95,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (gamepadGate.shouldBlockGamepad()) return false
         return gamepadKeyRouter.dispatch(GamepadOwner.Primary, event) { remappedOrRaw ->
             handleGamepadKey(this, remappedOrRaw) { super.dispatchKeyEvent(it) } ||
                 super.dispatchKeyEvent(remappedOrRaw)
@@ -110,7 +113,14 @@ class MainActivity : ComponentActivity() {
         )
         // singleTask can deliver LAUNCHER/HOME while the task sits on the
         // wrong display — re-hop to display 0.
-        displayCoordinator.redirectMainToPrimaryIfNeeded(this)
+        if (displayCoordinator.redirectMainToPrimaryIfNeeded(this)) return
+        // HOME while MainActivity is already resumed does not call onResume again;
+        // reclaim the bottom screen when stock SECONDARY_HOME stole display 4.
+        if (intent.hasCategory(Intent.CATEGORY_HOME) &&
+            (display?.displayId ?: Display.DEFAULT_DISPLAY) == Display.DEFAULT_DISPLAY
+        ) {
+            displayCoordinator.scheduleSecondaryHome(this)
+        }
     }
 
     override fun onResume() {
@@ -118,6 +128,7 @@ class MainActivity : ComponentActivity() {
         // Returning from an external game: close the session, restore browsing
         sessionTracker.onLauncherResumed()
         foregroundAppMonitor.onLauncherForegrounded()
+        gamepadGate.onLauncherForegrounded()
         KeepAliveService.stop(this)
         // Bring the bottom screen back after primary has focus (covers first
         // start as a regular app and coming back after HOME sent the bottom
@@ -131,6 +142,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        gamepadGate.onLauncherBackgrounded()
         if ((display?.displayId ?: Display.DEFAULT_DISPLAY) == Display.DEFAULT_DISPLAY) {
             displayCoordinator.onPrimaryMainStopped()
         }

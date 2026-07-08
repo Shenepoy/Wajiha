@@ -35,6 +35,16 @@ class GameRepository(
     suspend fun insertAll(games: List<GameEntity>): List<Long> = gameDao.insertAll(games)
     suspend fun update(game: GameEntity) = gameDao.update(game)
     suspend fun deleteByUris(uris: List<String>) = gameDao.deleteByUris(uris)
+    suspend fun deleteById(id: Long) = gameDao.deleteById(id)
+
+    /** Removes DB entry and scraped media; keeps the ROM file on disk. */
+    suspend fun removeFromLibrary(id: Long) {
+        mediaDao.deleteForGame(id)
+        gameDao.deleteById(id)
+    }
+
+    suspend fun setLaunchOnDisplay(id: Long, displayId: Int?) =
+        gameDao.setLaunchOnDisplay(id, displayId)
 
     suspend fun setFavorite(id: Long, favorite: Boolean) = gameDao.setFavorite(id, favorite)
     suspend fun setHidden(id: Long, hidden: Boolean) = gameDao.setHidden(id, hidden)

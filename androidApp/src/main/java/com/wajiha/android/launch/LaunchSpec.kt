@@ -16,7 +16,9 @@ data class LaunchSpec(
     val extras: List<LaunchExtra> = emptyList(),
     val activityFlags: List<String> = emptyList(),
     val keepSafUri: Boolean = false,
-    val killBeforeLaunch: Boolean = false
+    val killBeforeLaunch: Boolean = false,
+    /** When set, launches on this display via [ActivityOptions.setLaunchDisplayId]. */
+    val launchDisplayId: Int? = null
 )
 
 data class LaunchExtra(

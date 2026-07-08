@@ -1,6 +1,7 @@
 package com.wajiha.di
 
 import com.wajiha.state.DualScreenStore
+import com.wajiha.ui.gamedetail.GameDetailViewModel
 import com.wajiha.ui.home.HomeViewModel
 import com.wajiha.ui.ra.RaViewModel
 import com.wajiha.ui.scraper.ScraperViewModel
@@ -31,6 +32,7 @@ val uiModule: Module = module {
     single { SettingsViewModel(get(), get(), get(), get(), get()) }
     single { PlatformSettingsViewModel(get(), get(), get()) }
     single { ScraperViewModel(get(), get(), get(), get(), get(), get()) }
+    single { GameDetailViewModel(get(), get(), get(), get(), get(), get()) }
     single { RaViewModel(get(), get()) }
 }
 

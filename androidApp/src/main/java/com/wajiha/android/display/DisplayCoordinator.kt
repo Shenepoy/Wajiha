@@ -8,6 +8,7 @@ import android.content.Intent
 import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
+import android.content.ComponentName
 import android.view.Display
 import com.wajiha.android.MainActivity
 import com.wajiha.android.SecondaryHomeActivity
@@ -34,6 +35,11 @@ class DisplayCoordinator(
         context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
     private val mainHandler = Handler(Looper.getMainLooper())
     private var listenerRegistered = false
+    private var reclaimRunnable: Runnable? = null
+    private var secondaryWatchdogRunning = false
+    private var fastReclaimRunnable: Runnable? = null
+    @Volatile
+    private var fastReclaimDisplayId: Int? = null
 
     /** True while a display-0 [MainActivity] instance is in the resumed lifecycle. */
     @Volatile
@@ -48,6 +54,7 @@ class DisplayCoordinator(
             WajihaLog.d(WajihaTags.DISPLAY, "start: display listener already registered")
         }
         refresh()
+        ensureSecondaryWatchdog()
     }
 
     fun onPrimaryMainResumed() {
@@ -88,6 +95,11 @@ class DisplayCoordinator(
                 "displayId=$currentDisplayId taskId=${from.taskId} — " +
                 "redirecting to primary (display 0)"
         )
+        // HOME on the bottom display can land CATEGORY_HOME on MainActivity;
+        // reclaim SecondaryHome on this display before hopping primary.
+        if (from.intent?.hasCategory(Intent.CATEGORY_HOME) == true) {
+            launchSecondaryHomeOn(currentDisplayId, reclaim = true)
+        }
         launchPrimaryMain(from)
         from.finish()
         from.overridePendingTransition(0, 0)
@@ -170,6 +182,129 @@ class DisplayCoordinator(
         }, 300)
     }
 
+    /**
+     * Thor ROM (uid 0) hard-starts Launcher3's SECONDARY_HOME task on bottom
+     * HOME, bypassing preferred-activity resolution. Reclaim must beat its first
+     * frame — delayed posts caused the visible Launcher3 flash.
+     */
+    fun scheduleSecondaryHomeReclaim(displayId: Int? = null, delayMs: Long = 0) {
+        val targetDisplayId = displayId ?: secondaryDisplay()?.displayId ?: return
+        if (delayMs <= 0L) {
+            reclaimRunnable?.let { mainHandler.removeCallbacks(it) }
+            reclaimSecondaryHomeOnDisplay(targetDisplayId)
+            return
+        }
+        reclaimRunnable?.let { mainHandler.removeCallbacks(it) }
+        val runnable = Runnable { reclaimSecondaryHomeOnDisplay(targetDisplayId) }
+        reclaimRunnable = runnable
+        WajihaLog.d(
+            WajihaTags.DISPLAY,
+            "scheduleSecondaryHomeReclaim: displayId=$targetDisplayId delayMs=$delayMs"
+        )
+        mainHandler.postDelayed(runnable, delayMs)
+    }
+
+    /**
+     * Frame-paced reclaim loop after bottom HOME — runs every ~16 ms until
+     * [SecondaryHomeActivity] is resumed on the target display again.
+     */
+    fun beginFastSecondaryReclaim(displayId: Int) {
+        if (store.state.value == DualScreenState.AppOnSecondary) return
+        fastReclaimDisplayId = displayId
+        reclaimSecondaryHomeOnDisplay(displayId)
+        fastReclaimRunnable?.let { mainHandler.removeCallbacks(it) }
+        val loop = object : Runnable {
+            override fun run() {
+                val targetId = fastReclaimDisplayId ?: return
+                if (store.state.value == DualScreenState.AppOnSecondary) {
+                    stopFastSecondaryReclaim()
+                    return
+                }
+                val onScreen = SecondaryHomeActivity.isResumed &&
+                    SecondaryHomeActivity.visibleDisplayId == targetId
+                if (onScreen) {
+                    stopFastSecondaryReclaim()
+                    return
+                }
+                reclaimSecondaryHomeOnDisplay(targetId, launchIfNeeded = false)
+                mainHandler.postDelayed(this, FAST_RECLAIM_INTERVAL_MS)
+            }
+        }
+        fastReclaimRunnable = loop
+        mainHandler.postAtFrontOfQueue(loop)
+    }
+
+    fun stopFastSecondaryReclaim() {
+        fastReclaimDisplayId = null
+        fastReclaimRunnable?.let { mainHandler.removeCallbacks(it) }
+        fastReclaimRunnable = null
+    }
+
+    fun reclaimSecondaryHomeOnDisplay(displayId: Int, launchIfNeeded: Boolean = true) {
+        if (store.state.value == DualScreenState.AppOnSecondary) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "reclaimSecondaryHomeOnDisplay: skip — AppOnSecondary"
+            )
+            return
+        }
+        val taskId = SecondaryHomeActivity.taskIdForDisplay(displayId)
+        var moved = false
+        if (taskId != null) {
+            try {
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                WajihaLog.i(
+                    WajihaTags.DISPLAY,
+                    "reclaimSecondaryHomeOnDisplay: moveTaskToFront taskId=$taskId " +
+                        "displayId=$displayId"
+                )
+                am.moveTaskToFront(taskId, ActivityManager.MOVE_TASK_WITH_HOME)
+                moved = true
+            } catch (e: Exception) {
+                WajihaLog.w(
+                    WajihaTags.DISPLAY,
+                    "reclaimSecondaryHomeOnDisplay: moveTaskToFront failed — ${e.message}"
+                )
+            }
+        }
+        if (!moved && launchIfNeeded) {
+            launchSecondaryHomeOn(displayId, reclaim = true)
+        }
+    }
+
+    /**
+     * While a secondary display is connected, keep Wajiha's bottom-screen task
+     * resumed. Covers bottom-screen HOME when Launcher3 already owns display 4
+     * (no lifecycle callback reaches a paused SecondaryHomeActivity).
+     */
+    private fun ensureSecondaryWatchdog() {
+        if (secondaryWatchdogRunning) return
+        secondaryWatchdogRunning = true
+        val tick = object : Runnable {
+            override fun run() {
+                val display = secondaryDisplay()
+                if (display == null) {
+                    secondaryWatchdogRunning = false
+                    return
+                }
+                if (store.state.value != DualScreenState.AppOnSecondary) {
+                    val onScreen = SecondaryHomeActivity.isResumed &&
+                        SecondaryHomeActivity.visibleDisplayId == display.displayId
+                    if (!onScreen) {
+                        WajihaLog.d(
+                            WajihaTags.DISPLAY,
+                            "watchdog: secondary not resumed on displayId=" +
+                                "${display.displayId} — reclaiming"
+                        )
+                        reclaimSecondaryHomeOnDisplay(display.displayId)
+                    }
+                }
+                mainHandler.postDelayed(this, WATCHDOG_INTERVAL_MS)
+            }
+        }
+        mainHandler.post(tick)
+    }
+
     private fun refresh() {
         store.onDisplaysChanged(secondaryDisplay()?.displayId)
     }
@@ -188,29 +323,38 @@ class DisplayCoordinator(
             store.setSecondaryMode(SecondaryMode.GameGrid)
         }
         val visibleId = SecondaryHomeActivity.visibleDisplayId
-        if (visibleId == display.displayId) {
+        val onScreen = visibleId == display.displayId && SecondaryHomeActivity.isResumed
+        if (onScreen) {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
-                "ensureSecondaryHome: already visible on displayId=${display.displayId}"
+                "ensureSecondaryHome: already resumed on displayId=${display.displayId}"
             )
             return
         }
         WajihaLog.i(
             WajihaTags.DISPLAY,
             "ensureSecondaryHome: launching SecondaryHome on displayId=${display.displayId} " +
-                "(visibleDisplayId=$visibleId)"
+                "(visibleDisplayId=$visibleId resumed=${SecondaryHomeActivity.isResumed})"
         )
-        val reclaim = visibleId != null && visibleId != display.displayId
-        launchSecondaryHomeOn(display.displayId, reclaim = reclaim)
+        launchSecondaryHomeOn(display.displayId, reclaim = true)
     }
 
     fun launchSecondaryHomeOn(displayId: Int, reclaim: Boolean = false) {
         var flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-        if (reclaim) flags = flags or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-        val intent = Intent(context, SecondaryHomeActivity::class.java).addFlags(flags)
+        if (reclaim) {
+            flags = flags or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val component = ComponentName(context, SecondaryHomeActivity::class.java)
+        val intent = Intent(Intent.ACTION_MAIN)
+            .setComponent(component)
+            .addCategory(SECONDARY_HOME_CATEGORY)
+            .addCategory(Intent.CATEGORY_DEFAULT)
+            .setPackage(context.packageName)
+            .addFlags(flags)
         val options = ActivityOptions.makeBasic().setLaunchDisplayId(displayId)
         val flagLabel = if (reclaim) {
-            "NEW_TASK|REORDER_TO_FRONT|RESET_TASK_IF_NEEDED"
+            "NEW_TASK|REORDER_TO_FRONT|CLEAR_TOP|RESET_TASK_IF_NEEDED"
         } else {
             "NEW_TASK|RESET_TASK_IF_NEEDED"
         }
@@ -242,6 +386,13 @@ class DisplayCoordinator(
     override fun onDisplayChanged(displayId: Int) {
         WajihaLog.d(WajihaTags.DISPLAY, "onDisplayChanged: displayId=$displayId")
         refresh()
+    }
+
+    private companion object {
+        /** minSdk 30 — [Intent.CATEGORY_SECONDARY_HOME] is API 33+. */
+        const val SECONDARY_HOME_CATEGORY = "android.intent.category.SECONDARY_HOME"
+        private const val WATCHDOG_INTERVAL_MS = 200L
+        private const val FAST_RECLAIM_INTERVAL_MS = 16L
     }
 
     /** Launch an app on a specific display (running-apps "move to display"). */

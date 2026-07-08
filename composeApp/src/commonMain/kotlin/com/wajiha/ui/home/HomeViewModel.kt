@@ -118,6 +118,25 @@ class HomeViewModel(
         }
     }
 
+    fun launchGameOnDisplay(gameId: Long, displayId: Int) {
+        appActions.playSound(UiSound.Launch)
+        viewModelScope.launch {
+            launchError.value = appActions.launchGameOnDisplay(gameId, displayId)
+        }
+    }
+
+    fun removeFromLibrary(gameId: Long) {
+        viewModelScope.launch {
+            launchError.value = appActions.removeFromLibrary(gameId)
+        }
+    }
+
+    fun deleteGameFile(gameId: Long) {
+        viewModelScope.launch {
+            launchError.value = appActions.deleteGameFile(gameId)
+        }
+    }
+
     fun dismissLaunchError() {
         launchError.value = null
     }

@@ -2,9 +2,6 @@ package com.wajiha.ui.apps
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,19 +26,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import com.wajiha.input.GamepadKeys
 import com.wajiha.platform.LaunchableApp
+import com.wajiha.state.GamepadOwner
+import com.wajiha.ui.components.WajihaScreen
+import com.wajiha.ui.components.gamepad.GamepadTile
+import com.wajiha.ui.theme.WajihaShapes
+import com.wajiha.ui.theme.WajihaSpacing
 
 /** App drawer: same NeoStation select/confirm model as game tiles. */
 @Composable
@@ -52,6 +46,8 @@ fun AppDrawerScreen(
     onLaunch: (String) -> Unit,
     onBack: () -> Unit,
     onFocusChange: (LaunchableApp?) -> Unit = {},
+    gamepadOwner: GamepadOwner? = null,
+    onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     LaunchedEffect(Unit) { onLoad() }
@@ -64,72 +60,71 @@ fun AppDrawerScreen(
         onFocusChange(focused)
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .onPreviewKeyEvent { event ->
-                val pkg = selectedPackage
-                if (
-                    aTileHasFocus &&
-                    pkg != null &&
-                    isConfirmKeyDown(event.type, event.key)
-                ) {
-                    onLaunch(pkg)
-                    true
-                } else {
-                    false
-                }
+    WajihaScreen(
+        layerId = "app_drawer",
+        modifier = modifier,
+        showActionBar = true,
+        gamepadHints = listOf("A" to "Open app", "B" to "Back"),
+        gamepadOwner = gamepadOwner,
+        onClaimGamepad = onClaimGamepad,
+        onPreviewKey = { event ->
+            val pkg = selectedPackage
+            if (
+                aTileHasFocus &&
+                pkg != null &&
+                GamepadKeys.isConfirm(event.type, event.key)
+            ) {
+                onLaunch(pkg)
+                true
+            } else {
+                false
             }
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = onBack) { Text("< Back") }
-            Text(
-                text = "Apps",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 8.dp)
-            )
         }
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(88.dp),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(apps, key = { it.packageName }) { app ->
-                AppTile(
-                    app = app,
-                    selected = app.packageName == selectedPackage,
-                    onSelect = {
-                        selectedPackage = app.packageName
-                        onFocusChange(app)
-                    },
-                    onLaunch = { onLaunch(app.packageName) },
-                    onTileFocusChanged = { focused ->
-                        if (focused) {
-                            aTileHasFocus = true
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = WajihaSpacing.sm + WajihaSpacing.xs, vertical = WajihaSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onBack) { Text("< Back") }
+                Text(
+                    text = "Apps",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = WajihaSpacing.sm)
+                )
+            }
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(WajihaSpacing.touchMin + WajihaSpacing.xl + WajihaSpacing.sm),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(WajihaSpacing.sm + WajihaSpacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm + WajihaSpacing.xs)
+            ) {
+                items(apps, key = { it.packageName }) { app ->
+                    AppTile(
+                        app = app,
+                        selected = app.packageName == selectedPackage,
+                        onSelect = {
                             selectedPackage = app.packageName
                             onFocusChange(app)
-                        } else {
-                            aTileHasFocus = false
+                        },
+                        onLaunch = { onLaunch(app.packageName) },
+                        onTileFocusChanged = { focused ->
+                            if (focused) {
+                                aTileHasFocus = true
+                                selectedPackage = app.packageName
+                                onFocusChange(app)
+                            } else {
+                                aTileHasFocus = false
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
-}
-
-private fun isConfirmKeyDown(type: KeyEventType, key: Key): Boolean {
-    if (type != KeyEventType.KeyDown) return false
-    return key == Key.DirectionCenter ||
-        key == Key.Enter ||
-        key == Key.NumPadEnter ||
-        key == Key.ButtonA
 }
 
 @Composable
@@ -140,73 +135,45 @@ private fun AppTile(
     onLaunch: () -> Unit,
     onTileFocusChanged: (Boolean) -> Unit
 ) {
-    var focused by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
-    val highlight = focused || selected
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .border(
-                width = if (highlight) 2.dp else 0.dp,
-                color = if (highlight) {
-                    MaterialTheme.colorScheme.primary
+    GamepadTile(
+        selected = selected,
+        onSelect = onSelect,
+        onLaunch = onLaunch,
+        onFocusChanged = onTileFocusChanged,
+        modifier = Modifier.padding(WajihaSpacing.sm)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .size(WajihaSpacing.touchMin + WajihaSpacing.sm)
+                    .clip(WajihaShapes.tile)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                val icon = app.icon
+                if (icon != null) {
+                    Image(
+                        bitmap = icon,
+                        contentDescription = app.label,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 } else {
-                    MaterialTheme.colorScheme.background
-                },
-                shape = RoundedCornerShape(12.dp)
-            )
-            .focusRequester(focusRequester)
-            .onFocusChanged {
-                focused = it.isFocused
-                onTileFocusChanged(it.isFocused)
-            }
-            .focusable()
-            .pointerInput(selected, focused) {
-                detectTapGestures {
-                    if (focused) {
-                        onLaunch()
-                    } else {
-                        onSelect()
-                        try {
-                            focusRequester.requestFocus()
-                        } catch (_: Exception) {
-                        }
-                    }
+                    Text(
+                        text = app.label.take(1).uppercase(),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
-            .padding(8.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            val icon = app.icon
-            if (icon != null) {
-                Image(
-                    bitmap = icon,
-                    contentDescription = app.label,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Text(
-                    text = app.label.take(1).uppercase(),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+            Text(
+                text = app.label,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(top = WajihaSpacing.xs)
+            )
         }
-        Text(
-            text = app.label,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(top = 4.dp)
-        )
     }
 }

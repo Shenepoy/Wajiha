@@ -41,6 +41,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.wajiha.ui.components.WajihaScreen
+import com.wajiha.ui.components.gamepad.GamepadButton
+import com.wajiha.ui.components.gamepad.GamepadForm
+import com.wajiha.ui.theme.WajihaMotion
 import com.wajiha.platform.PermissionStates
 import com.wajiha.platform.SystemControls
 import com.wajiha.ui.settings.SettingsViewModel
@@ -79,69 +83,75 @@ fun OnboardingScreen(
         }
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surface
-                    )
-                )
-            ),
-        contentAlignment = Alignment.Center
+    WajihaScreen(
+        layerId = "onboarding",
+        modifier = modifier,
+        showActionBar = true,
+        gamepadHints = listOf(
+            "A" to "Continue",
+            "B" to "Back / Skip"
+        )
     ) {
-        AnimatedContent(
-            targetState = step,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "setup"
-        ) { current ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 560.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 28.dp, vertical = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                when (current) {
-                    SetupStep.Welcome -> WelcomeBeat(
-                        onContinue = { step = SetupStep.Theme },
-                        onSkip = onFinished
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.surface
+                        )
                     )
-                    SetupStep.Theme -> ThemeBeat(
-                        onPick = { theme ->
-                            settingsViewModel.setTheme(theme)
-                            step = SetupStep.GrantAccess
-                        },
-                        onBack = { step = SetupStep.Welcome }
-                    )
-                    SetupStep.GrantAccess -> GrantAccessBeat(
-                        perms = perms,
-                        controls = controls,
-                        onBack = { step = SetupStep.Theme },
-                        onContinue = { step = SetupStep.DefaultHome }
-                    )
-                    SetupStep.DefaultHome -> HomeBeat(
-                        isDefault = perms.isDefaultLauncher,
-                        onOpenHome = controls::openHomeSettings,
-                        onBack = { step = SetupStep.GrantAccess },
-                        onContinue = { step = SetupStep.AddGames }
-                    )
-                    SetupStep.AddGames -> AddGamesBeat(
-                        folderCount = folders.size,
-                        onAddPlatform = {
-                            onOpenPlatformPicker?.invoke() ?: run {
-                                // Finish onboarding so Settings Add flow is reachable
-                                onFinished()
-                            }
-                        },
-                        onBack = { step = SetupStep.DefaultHome },
-                        onContinue = { step = SetupStep.Done },
-                        onSkip = { step = SetupStep.Done }
-                    )
-                    SetupStep.Done -> DoneBeat(onFinished = onFinished)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedContent(
+                targetState = step,
+                transitionSpec = {
+                    fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
+                },
+                label = "setup"
+            ) { current ->
+                GamepadForm(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 560.dp)
+                ) {
+                    when (current) {
+                        SetupStep.Welcome -> WelcomeBeat(
+                            onContinue = { step = SetupStep.Theme },
+                            onSkip = onFinished
+                        )
+                        SetupStep.Theme -> ThemeBeat(
+                            onPick = { theme ->
+                                settingsViewModel.setTheme(theme)
+                                step = SetupStep.GrantAccess
+                            },
+                            onBack = { step = SetupStep.Welcome }
+                        )
+                        SetupStep.GrantAccess -> GrantAccessBeat(
+                            perms = perms,
+                            controls = controls,
+                            onBack = { step = SetupStep.Theme },
+                            onContinue = { step = SetupStep.DefaultHome }
+                        )
+                        SetupStep.DefaultHome -> HomeBeat(
+                            isDefault = perms.isDefaultLauncher,
+                            onOpenHome = controls::openHomeSettings,
+                            onBack = { step = SetupStep.GrantAccess },
+                            onContinue = { step = SetupStep.AddGames }
+                        )
+                        SetupStep.AddGames -> AddGamesBeat(
+                            folderCount = folders.size,
+                            onAddPlatform = {
+                                onOpenPlatformPicker?.invoke() ?: onFinished()
+                            },
+                            onBack = { step = SetupStep.DefaultHome },
+                            onContinue = { step = SetupStep.Done },
+                            onSkip = { step = SetupStep.Done }
+                        )
+                        SetupStep.Done -> DoneBeat(onFinished = onFinished)
+                    }
                 }
             }
         }
@@ -181,12 +191,13 @@ private fun WelcomeBeat(onContinue: () -> Unit, onSkip: () -> Unit) {
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Spacer(modifier = Modifier.height(36.dp))
-    Button(
+    GamepadButton(
+        text = "Let's go",
         onClick = onContinue,
         enabled = typed.length >= full.length,
         modifier = Modifier.fillMaxWidth().widthIn(max = 320.dp)
-    ) { Text("Let's go") }
-    TextButton(onClick = onSkip) { Text("Skip for now") }
+    )
+    GamepadButton(text = "Skip for now", onClick = onSkip, outlined = true)
 }
 
 @Composable
@@ -285,9 +296,11 @@ private fun HomeBeat(
     if (isDefault) {
         StatusPill("Default home set")
     } else {
-        Button(onClick = onOpenHome, modifier = Modifier.fillMaxWidth().widthIn(max = 360.dp)) {
-            Text("Open home settings")
-        }
+        GamepadButton(
+            text = "Open home settings",
+            onClick = onOpenHome,
+            modifier = Modifier.fillMaxWidth().widthIn(max = 360.dp)
+        )
     }
     BeatNav(
         onBack = onBack,
@@ -314,12 +327,11 @@ private fun AddGamesBeat(
         }
     )
     Spacer(modifier = Modifier.height(16.dp))
-    Button(
+    GamepadButton(
+        text = "Choose a platform",
         onClick = onAddPlatform,
         modifier = Modifier.fillMaxWidth().widthIn(max = 360.dp)
-    ) {
-        Text("Choose a platform")
-    }
+    )
     Spacer(modifier = Modifier.height(8.dp))
     Text(
         text = "You’ll pick from the full catalog, then set emulator and folders.",
@@ -332,12 +344,14 @@ private fun AddGamesBeat(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TextButton(onClick = onBack) { Text("Back") }
+        GamepadButton(text = "Back", onClick = onBack, outlined = true)
         Row {
-            TextButton(onClick = onSkip) { Text("Skip") }
-            Button(onClick = onContinue, modifier = Modifier.padding(start = 4.dp)) {
-                Text(if (folderCount > 0) "Continue" else "Continue anyway")
-            }
+            GamepadButton(text = "Skip", onClick = onSkip, outlined = true)
+            GamepadButton(
+                text = if (folderCount > 0) "Continue" else "Continue anyway",
+                onClick = onContinue,
+                modifier = Modifier.padding(start = 4.dp)
+            )
         }
     }
 }
@@ -361,10 +375,11 @@ private fun DoneBeat(onFinished: () -> Unit) {
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Spacer(modifier = Modifier.height(32.dp))
-    Button(
+    GamepadButton(
+        text = "Show me around",
         onClick = onFinished,
         modifier = Modifier.fillMaxWidth().widthIn(max = 320.dp)
-    ) { Text("Show me around") }
+    )
 }
 
 // —— shared beats ——
@@ -397,14 +412,14 @@ private fun BeatNav(onBack: () -> Unit, onNext: () -> Unit, nextLabel: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TextButton(onClick = onBack) { Text("Back") }
-        Button(onClick = onNext) { Text(nextLabel) }
+        GamepadButton(text = "Back", onClick = onBack, outlined = true)
+        GamepadButton(text = nextLabel, onClick = onNext)
     }
 }
 
 @Composable
 private fun BackOnly(onBack: () -> Unit) {
-    TextButton(onClick = onBack, modifier = Modifier.padding(top = 20.dp)) { Text("Back") }
+    GamepadButton(text = "Back", onClick = onBack, outlined = true)
 }
 
 @Composable
@@ -474,12 +489,7 @@ private fun GrantCard(item: GrantItem) {
                     color = MaterialTheme.colorScheme.primary
                 )
             } else {
-                OutlinedButton(
-                    onClick = item.onRequest,
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
-                    )
-                ) { Text("Grant Access") }
+                GamepadButton(text = "Grant Access", onClick = item.onRequest, outlined = true)
             }
         }
     }

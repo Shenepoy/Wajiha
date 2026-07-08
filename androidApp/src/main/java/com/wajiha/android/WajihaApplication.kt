@@ -16,6 +16,7 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.launch.GameLauncher
 import com.wajiha.android.launch.PlaySessionTracker
+import com.wajiha.android.library.RomFileDeleter
 import com.wajiha.android.library.RomFolderManager
 import com.wajiha.android.monitor.ForegroundAppMonitor
 import com.wajiha.android.platform.AndroidAppActions
@@ -98,8 +99,10 @@ class WajihaApplication : Application(), SingletonImageLoader.Factory {
                     scope = get(named("applicationScope"))
                 )
             }
+            single { com.wajiha.android.input.GamepadGate(get()) }
             single { ForegroundAppMonitor(this@WajihaApplication, get(), get(), get()) }
-            single { AndroidAppActions(this@WajihaApplication, get(), get(), get()) } binds
+            single { RomFileDeleter(this@WajihaApplication) }
+            single { AndroidAppActions(this@WajihaApplication, get(), get(), get(), get(), get()) } binds
                 arrayOf(AppActions::class)
             single { AndroidLibraryActions(this@WajihaApplication, get()) } binds
                 arrayOf(LibraryActions::class)

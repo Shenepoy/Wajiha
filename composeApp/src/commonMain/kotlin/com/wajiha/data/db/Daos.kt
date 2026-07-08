@@ -118,6 +118,12 @@ interface GameDao {
     @Query("DELETE FROM games WHERE uri IN (:uris)")
     suspend fun deleteByUris(uris: List<String>)
 
+    @Query("DELETE FROM games WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("UPDATE games SET launchOnDisplay = :displayId WHERE id = :id")
+    suspend fun setLaunchOnDisplay(id: Long, displayId: Int?)
+
     @Query("SELECT COUNT(*) FROM games WHERE platformId = :platformId AND hidden = 0")
     fun observeCountForPlatform(platformId: String): Flow<Int>
 
@@ -171,6 +177,9 @@ interface GameMediaDao {
 
     @Query("DELETE FROM game_media WHERE gameId = :gameId AND type = :type")
     suspend fun deleteForGameAndType(gameId: Long, type: String)
+
+    @Query("DELETE FROM game_media WHERE gameId = :gameId")
+    suspend fun deleteForGame(gameId: Long)
 
     @Query("DELETE FROM game_media WHERE id = :id")
     suspend fun delete(id: Long)

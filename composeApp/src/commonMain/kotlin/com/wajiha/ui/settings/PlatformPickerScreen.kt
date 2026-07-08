@@ -1,20 +1,13 @@
 package com.wajiha.ui.settings
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,8 +16,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.wajiha.data.db.PlatformEntity
+import com.wajiha.input.GamepadNavHost
+import com.wajiha.input.GamepadNavItem
+import com.wajiha.input.GamepadNavMode
+import com.wajiha.input.rememberGamepadNavController
+import com.wajiha.ui.components.WajihaScreen
+import com.wajiha.ui.components.WajihaToolbar
+import com.wajiha.ui.components.gamepad.GamepadList
+import com.wajiha.ui.components.gamepad.GamepadSearchField
+import com.wajiha.ui.theme.WajihaSpacing
 
 /**
  * Searchable catalog of all known platforms (Daijishō / iiSU index style).
@@ -44,6 +45,10 @@ fun PlatformPickerScreen(
         settingsViewModel.inUsePlatformIds(allPlatforms, folders)
     }
     var query by remember { mutableStateOf("") }
+    val navController = rememberGamepadNavController(
+        mode = GamepadNavMode.Vertical,
+        onBack = { onBack(); true }
+    )
 
     val filtered = remember(allPlatforms, query) {
         val q = query.trim().lowercase()
@@ -62,49 +67,54 @@ fun PlatformPickerScreen(
         )
     }
 
-    Column(
-        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+    WajihaScreen(
+        layerId = "platform_picker",
+        modifier = modifier,
+        onBack = onBack,
+        showActionBar = true,
+        gamepadHints = listOf(
+            "A" to "Add/Open",
+            "B" to "Back",
+            "Search" to "A to edit"
+        )
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = onBack) { Text("< Back") }
-            Text(
-                text = "Add platform",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
+        GamepadNavHost(controller = navController) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                WajihaToolbar(title = "Add platform", onBack = onBack)
 
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            label = { Text("Search systems") },
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp)
-        )
-
-        Text(
-            text = "Pick a system, then set folders, emulator, and scraper ids.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-        )
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            items(filtered, key = { it.id }) { platform ->
-                PlatformPickRow(
-                    platform = platform,
-                    alreadyInUse = platform.id in inUseIds,
-                    onClick = { onPick(platform.id) }
+                GamepadSearchField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = "Search systems",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.xs),
+                    navItemId = "search"
                 )
+
+                Text(
+                    text = "Pick a system, then set folders, emulator, and scraper ids.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.xs)
+                )
+
+                GamepadList(
+                    items = filtered,
+                    key = { it.id },
+                    modifier = Modifier.weight(1f)
+                ) { platform ->
+                    GamepadNavItem(
+                        onActivate = { onPick(platform.id) },
+                        itemId = platform.id
+                    ) {
+                        PlatformPickRow(
+                            platform = platform,
+                            alreadyInUse = platform.id in inUseIds,
+                            onClick = { onPick(platform.id) }
+                        )
+                    }
+                }
             }
         }
     }
@@ -119,8 +129,7 @@ private fun PlatformPickRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 4.dp),
+            .padding(vertical = WajihaSpacing.sm + WajihaSpacing.xs, horizontal = WajihaSpacing.xs),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {

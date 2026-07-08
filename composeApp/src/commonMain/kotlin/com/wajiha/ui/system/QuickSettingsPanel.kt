@@ -1,26 +1,23 @@
 package com.wajiha.ui.system
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.wajiha.platform.SystemControls
+import com.wajiha.ui.components.WajihaPanel
+import com.wajiha.ui.components.gamepad.GamepadActionBar
+import com.wajiha.ui.components.gamepad.GamepadButton
+import com.wajiha.ui.components.gamepad.GamepadForm
+import com.wajiha.ui.components.gamepad.GamepadSlider
+import com.wajiha.ui.components.gamepad.quickSettingsGamepadHints
+import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
 
@@ -29,7 +26,10 @@ import org.koin.compose.koinInject
  * volume, battery, wifi/bt shortcuts, screen timeout, torch.
  */
 @Composable
-fun QuickSettingsPanel(modifier: Modifier = Modifier) {
+fun QuickSettingsPanel(
+    modifier: Modifier = Modifier,
+    showGamepadHints: Boolean = true
+) {
     val controls = koinInject<SystemControls>()
     val status by controls.status.collectAsState()
 
@@ -40,73 +40,78 @@ fun QuickSettingsPanel(modifier: Modifier = Modifier) {
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Quick Settings", style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = if (status.batteryPercent >= 0) {
-                    "${status.batteryPercent}%" + if (status.charging) " ⚡" else ""
-                } else {
-                    ""
-                },
-                style = MaterialTheme.typography.titleSmall
+    Column(modifier = modifier.fillMaxSize()) {
+        WajihaPanel(modifier = Modifier.weight(1f)) {
+            GamepadForm(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.Text(
+                    "Quick Settings",
+                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                )
+                androidx.compose.material3.Text(
+                    text = if (status.batteryPercent >= 0) {
+                        "${status.batteryPercent}%" + if (status.charging) " ⚡" else ""
+                    } else {
+                        ""
+                    },
+                    style = androidx.compose.material3.MaterialTheme.typography.titleSmall
+                )
+            }
+
+            GamepadSlider(
+                label = "Brightness",
+                value = status.brightness.coerceIn(0f, 1f),
+                onValueChange = controls::setBrightness
             )
-        }
 
-        Text("Brightness", style = MaterialTheme.typography.labelMedium)
-        Slider(
-            value = status.brightness.coerceIn(0f, 1f),
-            onValueChange = { controls.setBrightness(it) },
-            modifier = Modifier.fillMaxWidth()
-        )
+            GamepadSlider(
+                label = "Volume",
+                value = status.volume.coerceIn(0f, 1f),
+                onValueChange = controls::setVolume
+            )
 
-        Text("Volume", style = MaterialTheme.typography.labelMedium)
-        Slider(
-            value = status.volume.coerceIn(0f, 1f),
-            onValueChange = { controls.setVolume(it) },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            TextButton(onClick = controls::openWifiSettings) {
-                Text("Wi-Fi" + if (status.wifiEnabled) " (on)" else " (off)")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+            ) {
+                GamepadButton(
+                    text = "Wi-Fi" + if (status.wifiEnabled) " (on)" else " (off)",
+                    onClick = controls::openWifiSettings,
+                    outlined = true
+                )
+                GamepadButton(
+                    text = "Bluetooth" + if (status.bluetoothEnabled) " (on)" else " (off)",
+                    onClick = controls::openBluetoothSettings,
+                    outlined = true
+                )
+                GamepadButton(
+                    text = "Torch" + if (status.torchOn) " (on)" else "",
+                    onClick = controls::toggleTorch,
+                    outlined = true
+                )
             }
-            TextButton(onClick = controls::openBluetoothSettings) {
-                Text("Bluetooth" + if (status.bluetoothEnabled) " (on)" else " (off)")
-            }
-            TextButton(onClick = controls::toggleTorch) {
-                Text("Torch" + if (status.torchOn) " (on)" else "")
-            }
-        }
 
-        Text("Screen timeout", style = MaterialTheme.typography.labelMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf(30 to "30s", 60 to "1m", 300 to "5m", 1800 to "30m").forEach { (sec, label) ->
-                TextButton(onClick = { controls.setScreenTimeout(sec) }) {
-                    Text(
+            androidx.compose.material3.Text(
+                "Screen timeout",
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)) {
+                listOf(30 to "30s", 60 to "1m", 300 to "5m", 1800 to "30m").forEach { (sec, label) ->
+                    GamepadButton(
                         text = label,
-                        color = if (status.screenTimeoutSec == sec) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
+                        onClick = { controls.setScreenTimeout(sec) },
+                        outlined = status.screenTimeoutSec != sec
                     )
                 }
             }
+            }
+        }
+        if (showGamepadHints) {
+            GamepadActionBar(hints = quickSettingsGamepadHints)
         }
     }
 }
