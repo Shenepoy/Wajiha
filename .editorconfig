@@ -1,0 +1,25 @@
+root = true
+
+[*.{kt,kts}]
+indent_style = space
+indent_size = 4
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+ktlint_function_naming_ignore_when_annotated_with = Composable
+
+# Reference corpus — do not lint/format
+[Study/**/*]
+ktlint = disabled
+
+# Generated / build outputs — do not lint/format
+[build/**/*]
+ktlint = disabled
+
+[androidApp/build/**/*]
+ktlint = disabled
+
+[composeApp/build/**/*]
+ktlint = disabled
+
+[iosApp/build/**/*]
+ktlint = disabled

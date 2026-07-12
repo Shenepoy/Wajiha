@@ -1,0 +1,12 @@
+---
+description: Never format, edit, or lint Study/ or build outputs
+alwaysApply: true
+---
+
+# Ignore Study and build files
+
+- Do **not** format, lint, refactor, or edit anything under `Study/` (reference corpus only).
+- Do **not** format, lint, refactor, or edit generated/build outputs: `**/build/**`, `**/.gradle/**`, `**/generated/**`, `**/.cxx/**`, `**/out/**`, `**/bin/**`.
+- Format/check via `./scripts/ktlint.sh format` or `./scripts/ktlint.sh check` (excludes `Study/` and `**/build/**`). Do not invoke raw ktlint over the whole tree.
+- Exclusions also live in `.editorconfig` (`ktlint = disabled` for `Study/**/*` and `*/build/**/*`).
+- Prefer reading `Study/` docs for context; treat code there as third-party reference, not project source.

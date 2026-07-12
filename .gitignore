@@ -67,6 +67,9 @@ Desktop.ini
 *~
 .nfs*
 
+# Local tooling caches (ktlint binary, etc.)
+.tools/
+
 # IDE
 .fleet/
 .idea/
