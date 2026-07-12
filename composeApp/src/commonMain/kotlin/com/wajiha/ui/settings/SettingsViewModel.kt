@@ -10,6 +10,7 @@ import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.PlatformRepository
 import com.wajiha.platform.LibraryActions
 import com.wajiha.state.DualScreenStore
+import com.wajiha.state.NowPlayingDisplayMode
 import com.wajiha.state.SecondaryMode
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -59,7 +60,9 @@ class SettingsViewModel(
                 dualScreenStore.preferredGameMode =
                     runCatching { SecondaryMode.valueOf(s.gameSecondaryMode) }
                         .getOrDefault(SecondaryMode.NowPlaying)
+                dualScreenStore.nowPlayingDisplay = NowPlayingDisplayMode.fromName(s.nowPlayingDisplay)
                 dualScreenStore.gameDimEnabled = s.gameDimEnabled
+                dualScreenStore.gameDimOnlyOnNowPlaying = s.gameDimOnlyOnNowPlaying
                 dualScreenStore.gameDimPercent = s.gameDimPercent
                 dualScreenStore.gameplayDimTimeoutSeconds = s.gameplayDimTimeoutSeconds
             }
@@ -74,6 +77,10 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.setDetectManualLaunches(value) }
     }
 
+    fun setMemoryGuardEnabled(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setMemoryGuardEnabled(value) }
+    }
+
     fun setRomReconciliationEnabled(value: Boolean) {
         viewModelScope.launch { settingsRepository.setRomReconciliationEnabled(value) }
     }
@@ -86,8 +93,16 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.setGameSecondaryMode(mode) }
     }
 
+    fun setNowPlayingDisplay(mode: String) {
+        viewModelScope.launch { settingsRepository.setNowPlayingDisplay(mode) }
+    }
+
     fun setGameDimEnabled(value: Boolean) {
         viewModelScope.launch { settingsRepository.setGameDimEnabled(value) }
+    }
+
+    fun setGameDimOnlyOnNowPlaying(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setGameDimOnlyOnNowPlaying(value) }
     }
 
     fun setGameDimPercent(percent: Int) {

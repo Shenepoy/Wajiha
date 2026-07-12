@@ -14,6 +14,8 @@ fun defaultGamepadHints(): List<Pair<String, String>> = listOf(
     "A" to "Confirm",
     "B" to "Back",
     "L1/R1" to "Section",
+    "L2" to "Focus screen",
+    "R2" to "Notifications",
     "SELECT" to "Swap screens"
 )
 
@@ -35,14 +37,16 @@ val settingsGamepadHints: List<Pair<String, String>> = listOf(
     "A" to "Select/Toggle",
     "B" to "Back",
     "Y" to "Reset",
-    "L1/R1" to "Section"
+    "L1/R1" to "Section",
+    "L2" to "Focus screen"
 )
 
 val gameDetailGamepadHints: List<Pair<String, String>> = listOf(
     "A" to "Select/Launch",
     "B" to "Back",
     "Y" to "Reset",
-    "L1/R1" to "Tab"
+    "L1/R1" to "Tab",
+    "L2" to "Focus screen"
 )
 
 val secondaryModeTabGamepadHints: List<Pair<String, String>> = listOf(

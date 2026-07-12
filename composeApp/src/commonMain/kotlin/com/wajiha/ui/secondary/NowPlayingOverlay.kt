@@ -54,6 +54,7 @@ fun NowPlayingOverlay(
 
     val show = nowPlaying != null &&
         shouldShowNowPlayingOverlay(mode) &&
+        store.nowPlayingDisplay.showsFloatingChip &&
         !hiddenByGameplayDim
     if (!show) return
 
@@ -72,7 +73,7 @@ private fun NowPlayingOverlayChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val label = state.gameName ?: state.appLabel ?: state.packageName
+    val label = sessionDisplayLabel(state) ?: state.packageName
     val scheme = MaterialTheme.colorScheme
     val chipShape = WajihaShapes.chip
 

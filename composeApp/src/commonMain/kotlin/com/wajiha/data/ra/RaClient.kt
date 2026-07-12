@@ -1,12 +1,12 @@
 package com.wajiha.data.ra
 
+import com.wajiha.data.WajihaJson
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 @Serializable
 data class RaUserProfile(
@@ -28,8 +28,8 @@ data class RaAchievement(
     @SerialName("DateEarnedHardcore") val dateEarnedHardcore: String? = null
 ) {
     val earned: Boolean get() = dateEarned != null || dateEarnedHardcore != null
-    val badgeUrl: String get() = "https://media.retroachievements.org/Badge/$badgeName.png"
-    val badgeLockedUrl: String get() = "https://media.retroachievements.org/Badge/${badgeName}_lock.png"
+    val badgeUrl: String get() = RaMediaUrls.badge(badgeName)
+    val badgeLockedUrl: String get() = RaMediaUrls.badgeLocked(badgeName)
 }
 
 @Serializable
@@ -51,8 +51,6 @@ data class RaGameProgress(
 /** Thin client for the RetroAchievements Web API (user API key auth). */
 class RaClient(private val http: HttpClient) {
 
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
-
     /** Validates credentials by fetching the user's profile; null on failure. */
     suspend fun profile(username: String, apiKey: String): RaUserProfile? = try {
         val body = http.get("$BASE/API_GetUserProfile.php") {
@@ -60,7 +58,7 @@ class RaClient(private val http: HttpClient) {
             parameter("y", apiKey)
             parameter("u", username)
         }.body<String>()
-        json.decodeFromString<RaUserProfile>(body).takeIf { it.user.isNotBlank() }
+        WajihaJson.Lenient.decodeFromString<RaUserProfile>(body).takeIf { it.user.isNotBlank() }
     } catch (_: Exception) {
         null
     }
@@ -72,7 +70,7 @@ class RaClient(private val http: HttpClient) {
             parameter("y", apiKey)
             parameter("h", md5)
         }.body<String>()
-        json.decodeFromString<HashEnvelope>(body).id?.takeIf { it > 0 }
+        parseRaGameIdFromHashResponse(body)
     } catch (_: Exception) {
         null
     }
@@ -85,13 +83,10 @@ class RaClient(private val http: HttpClient) {
             parameter("g", raGameId)
             parameter("u", username)
         }.body<String>()
-        json.decodeFromString<RaGameProgress>(body).takeIf { it.id > 0 }
+        WajihaJson.Lenient.decodeFromString<RaGameProgress>(body).takeIf { it.id > 0 }
     } catch (_: Exception) {
         null
     }
-
-    @Serializable
-    private data class HashEnvelope(@SerialName("ID") val id: Long? = null)
 
     private companion object {
         const val BASE = "https://retroachievements.org/API"

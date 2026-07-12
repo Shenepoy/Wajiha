@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,14 +45,19 @@ import com.wajiha.data.db.RomFolderEntity
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadLayers
 import com.wajiha.input.LocalGamepadNavController
+import com.wajiha.input.requestContentFocus
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.SystemControls
+import com.wajiha.state.DualScreenState
+import com.wajiha.state.DualScreenStore
+import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.WajihaSection
 import com.wajiha.ui.components.WajihaSectionDivider
 import com.wajiha.ui.components.gamepad.GamepadButton
+import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.GamepadFormField
 import com.wajiha.ui.components.gamepad.GamepadSafeTextField
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
@@ -60,9 +66,16 @@ import com.wajiha.ui.components.gamepad.SettingType
 import com.wajiha.ui.components.gamepad.gameDetailGamepadHints
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
 import com.wajiha.ui.scraper.PlatformScraperSettingsSection
+import com.wajiha.ui.scraper.ScrapeModeSelector
+import com.wajiha.ui.scraper.ScrapeUiMode
 import com.wajiha.ui.scraper.ScraperViewModel
+import com.wajiha.ui.scraper.batchPolicyOrNull
+import com.wajiha.ui.scraper.toPolicy
+import com.wajiha.ui.scraper.review.ScrapeReviewPicker
+import com.wajiha.ui.scraper.review.ScrapeReviewViewModel
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 private enum class PlatformSettingsTab(val label: String) {
@@ -82,6 +95,8 @@ fun PlatformSettingsScreen(
     platformId: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    gamepadOwner: GamepadOwner? = null,
+    onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     viewModel: PlatformSettingsViewModel = koinInject(),
     scraperViewModel: ScraperViewModel = koinInject()
 ) {
@@ -115,6 +130,9 @@ fun PlatformSettingsScreen(
         onBack = onBack,
         showActionBar = true,
         gamepadHints = gameDetailGamepadHints,
+        gamepadOwner = gamepadOwner,
+        onClaimGamepad = onClaimGamepad,
+        onOwnerGainedFocus = { sectionFocus.requestContentFocus() },
         onPreviewKey = { event ->
             if (GamepadLayers.stack.topLayer != screenLayer) return@WajihaScreen false
             when {
@@ -452,12 +470,230 @@ private fun PlatformScraperTabContent(
     platform: PlatformEntity,
     viewModel: PlatformSettingsViewModel,
     scraperViewModel: ScraperViewModel,
-    firstFocusRequester: FocusRequester
+    firstFocusRequester: FocusRequester,
+    reviewViewModel: ScrapeReviewViewModel = koinInject(),
+    dualStore: DualScreenStore = koinInject()
 ) {
+    val progress by scraperViewModel.progress.collectAsState()
+    val settings by scraperViewModel.settings.collectAsState()
+    val batchFeedback by scraperViewModel.batchFeedback.collectAsState()
+    val screenState by dualStore.state.collectAsState()
+    val dualDisplay = screenState != DualScreenState.SingleDisplay
+    val sourcesReady = scraperViewModel.hasConfiguredSources(platform.id)
+    val effective = settings.forPlatform(platform.id)
+    val canRetry = scraperViewModel.canRetryFailed(platform.id)
+    val scope = rememberCoroutineScope()
+    var mode by remember { mutableStateOf(ScrapeUiMode.FillGaps) }
+    var estimate by remember { mutableStateOf<Int?>(null) }
+    var reviewing by remember { mutableStateOf(false) }
+    var includeScraped by remember { mutableStateOf(false) }
+    val linkageWarning = buildList {
+        if ("screenscraper" in effective.enabledSources && platform.screenScraperId == null) {
+            add("ScreenScraper system id is empty")
+        }
+        if ("ra" in effective.enabledSources && platform.raConsoleId == null) {
+            add("RetroAchievements console id is empty")
+        }
+        if ("libretro" in effective.enabledSources && platform.libretroName.isNullOrBlank()) {
+            add("Libretro system name is empty")
+        }
+    }
+    val scrapeBusy = progress.running &&
+        (progress.platformId == platform.id || progress.platformId == null)
+
+    LaunchedEffect(platform.id, mode, includeScraped) {
+        estimate = when (mode) {
+            ScrapeUiMode.Review ->
+                scraperViewModel.reviewQueueGames(platform.id, includeScraped).size
+            else -> {
+                val policy = mode.batchPolicyOrNull() ?: return@LaunchedEffect
+                scraperViewModel.estimateBatchCount(platform.id, policy)
+            }
+        }
+    }
+
+    if (reviewing) {
+        ScrapeReviewPicker(
+            viewModel = reviewViewModel,
+            onCancel = { reviewing = false },
+            showSkip = true,
+            dualDisplay = dualDisplay,
+            hostGamepadOwner = if (dualDisplay) dualStore.menuGamepadOwner() else null
+        )
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
     ) {
+        Text(
+            text = "Scrape metadata and media for games on this platform, " +
+                "or adjust linkage IDs and per-system source overrides.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = WajihaSpacing.xs)
+        )
+
+        ScrapeModeSelector(
+            selected = mode,
+            onSelect = { mode = it },
+            firstFocusRequester = firstFocusRequester,
+            enabled = !progress.running
+        )
+
+        if (mode == ScrapeUiMode.Review) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+            ) {
+                GamepadChip(
+                    label = "Gaps only",
+                    selected = !includeScraped,
+                    onClick = { if (!progress.running) includeScraped = false }
+                )
+                GamepadChip(
+                    label = "Include scraped",
+                    selected = includeScraped,
+                    onClick = { if (!progress.running) includeScraped = true }
+                )
+            }
+        }
+
+        estimate?.let { count ->
+            Text(
+                text = when (mode) {
+                    ScrapeUiMode.Review -> "$count game(s) in review queue"
+                    ScrapeUiMode.Force -> "$count game(s) will be force-scraped"
+                    ScrapeUiMode.FillGaps -> "$count game(s) need gap fill"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            if (canRetry && mode != ScrapeUiMode.Review) {
+                GamepadButton(
+                    text = "Retry failed",
+                    onClick = { scraperViewModel.retryFailedBatch(platform.id) },
+                    outlined = true,
+                    enabled = !progress.running
+                )
+            }
+            when (mode) {
+                ScrapeUiMode.Review -> {
+                    GamepadButton(
+                        text = "Start review",
+                        onClick = {
+                            scope.launch {
+                                val games = scraperViewModel.reviewQueueGames(
+                                    platform.id,
+                                    includeScraped
+                                )
+                                if (games.isEmpty()) {
+                                    scraperViewModel.dismissBatchFeedback()
+                                    return@launch
+                                }
+                                reviewing = true
+                                reviewViewModel.openQueue(games) {
+                                    reviewing = false
+                                }
+                            }
+                        },
+                        enabled = !progress.running && sourcesReady && (estimate ?: 0) > 0,
+                        modifier = Modifier.padding(start = WajihaSpacing.sm)
+                    )
+                }
+                else -> {
+                    GamepadButton(
+                        text = if (scrapeBusy) {
+                            "Scraping…"
+                        } else {
+                            when (mode) {
+                                ScrapeUiMode.Force -> "Force scrape"
+                                else -> "Fill gaps"
+                            }
+                        },
+                        onClick = {
+                            scraperViewModel.dismissBatchFeedback()
+                            scraperViewModel.startBatch(platform.id, mode.toPolicy())
+                        },
+                        enabled = !progress.running && sourcesReady,
+                        modifier = Modifier.padding(start = WajihaSpacing.sm)
+                    )
+                }
+            }
+        }
+
+        if (scrapeBusy) {
+            Row(horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
+                if (progress.paused) {
+                    GamepadButton(
+                        text = "Resume",
+                        onClick = scraperViewModel::resumeBatch,
+                        outlined = true
+                    )
+                } else {
+                    GamepadButton(
+                        text = "Pause",
+                        onClick = scraperViewModel::pauseBatch,
+                        outlined = true
+                    )
+                }
+                GamepadButton(
+                    text = "Cancel",
+                    onClick = scraperViewModel::cancelBatch,
+                    outlined = true
+                )
+            }
+        }
+
+        if (!sourcesReady) {
+            Text(
+                text = "No scraper sources configured — enable and sign in under Settings → Scraper.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        linkageWarning.forEach { warning ->
+            Text(
+                text = warning,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        batchFeedback?.let { feedback ->
+            Text(
+                text = feedback,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+        if (scrapeBusy) {
+            Text(
+                text = when {
+                    progress.paused -> "Paused — ${progress.summaryLine()}"
+                    progress.currentGameName != null -> "Scraping: ${progress.currentGameName}"
+                    else -> "Scraping…"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else if (
+            progress.done > 0 &&
+            (progress.platformId == platform.id || progress.platformId == null)
+        ) {
+            Text(
+                text = "Last run: ${progress.summaryLine()}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        WajihaSectionDivider()
         WajihaSection(title = "Scraper linkage") {
             Text(
                 text = "IDs used to match games on ScreenScraper, RetroAchievements, and Libretro. " +
@@ -471,7 +707,7 @@ private fun PlatformScraperTabContent(
                 onScreenScraperId = viewModel::setScreenScraperId,
                 onRaConsoleId = viewModel::setRaConsoleId,
                 onLibretroName = viewModel::setLibretroName,
-                firstFocusRequester = firstFocusRequester
+                firstFocusRequester = remember { FocusRequester() }
             )
         }
 

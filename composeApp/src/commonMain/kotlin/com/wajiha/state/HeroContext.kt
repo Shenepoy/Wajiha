@@ -34,6 +34,14 @@ sealed class HeroContext {
     ) : HeroContext() {
         override val transitionKey: String = "game_detail_$gameId"
     }
+
+    /**
+     * Manual scrape review: top screen shows the active slot candidate grid
+     * (or a select-slot hint while the bottom overview is idle).
+     */
+    data object ScrapeReview : HeroContext() {
+        override val transitionKey: String = "scrape_review"
+    }
 }
 
 /** Which launcher surface is active on each display (drives [HeroContext] resolution). */

@@ -27,6 +27,11 @@ class SessionRepository(private val sessionDao: PlaySessionDao) {
 
     suspend fun latestOpenSession(): PlaySessionEntity? = sessionDao.latestOpen()
 
+    suspend fun latestOpenSessionForPackage(packageName: String): PlaySessionEntity? =
+        sessionDao.latestOpenForPackage(packageName)
+
+    suspend fun allOpenSessions(): List<PlaySessionEntity> = sessionDao.allOpen()
+
     suspend fun updateGameId(sessionId: Long, gameId: Long?) =
         sessionDao.updateGameId(sessionId, gameId)
 

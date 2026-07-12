@@ -66,15 +66,12 @@ data class ScrapeCandidate(
 )
 
 /**
- * Per-platform overrides; null fields fall back to the global setting.
- * Applied via [ScraperSettings.forPlatform].
- */
-/**
  * Per-platform scraper overrides. Null fields inherit the global [ScraperSettings] value.
  *
  * Source-specific fields:
  * - ScreenScraper: [screenScraperBoxType], [screenScraperScreenshotType], [screenScraperLogoType]
- * - SteamGridDB: [steamGridDbGridStyles], [steamGridDbAnimation], [steamGridDbIncludeNsfw/Humor]
+ * - SteamGridDB: [steamGridDbGridStyles]/[steamGridDbHeroStyles]/[steamGridDbLogoStyles]/
+ *   [steamGridDbIconStyles], [steamGridDbAnimation], [steamGridDbIncludeNsfw/Humor]
  * - Libretro: [libretroFetchBoxart/Snaps/Titles]
  * - RetroAchievements: [raFetchIcon/BoxArt/Title]
  */
@@ -92,8 +89,11 @@ data class PlatformScraperOverride(
     val screenScraperLogoType: String? = null,
     val screenScraperFanartAsHero: Boolean? = null,
 
-    // SteamGridDB API query filters
+    // SteamGridDB API query filters (per photo type; empty/null = all styles)
     val steamGridDbGridStyles: List<String>? = null,
+    val steamGridDbHeroStyles: List<String>? = null,
+    val steamGridDbLogoStyles: List<String>? = null,
+    val steamGridDbIconStyles: List<String>? = null,
     val steamGridDbAnimation: String? = null,
     val steamGridDbIncludeNsfw: Boolean? = null,
     val steamGridDbIncludeHumor: Boolean? = null,
@@ -116,12 +116,27 @@ data class PlatformScraperOverride(
             mediaPriority == null && regionPriority == null && languagePriority == null &&
             screenScraperBoxType == null && screenScraperScreenshotType == null &&
             screenScraperLogoType == null && screenScraperFanartAsHero == null &&
-            steamGridDbGridStyles == null && steamGridDbAnimation == null &&
+            steamGridDbGridStyles == null && steamGridDbHeroStyles == null &&
+            steamGridDbLogoStyles == null && steamGridDbIconStyles == null &&
+            steamGridDbAnimation == null &&
             steamGridDbIncludeNsfw == null && steamGridDbIncludeHumor == null &&
             libretroFetchBoxart == null && libretroFetchSnaps == null &&
             libretroFetchTitles == null && raFetchIcon == null && raFetchBoxArt == null &&
             raFetchTitle == null && mediaVariantIndex == null
 }
+
+/** Known SteamGridDB `styles` query values (hints for settings UI). */
+object SteamGridDbStyleHints {
+    const val Grid = "alternate, blurred, white_logo, material, no_logo"
+    const val Hero = "alternate, blurred, material"
+    const val Logo = "official, white, black, custom"
+    const val Icon = "official, custom"
+    const val EmptyMeansAll = "Leave empty to request all styles."
+}
+
+/** Parses a comma-separated SteamGridDB styles field. */
+fun parseSteamGridDbStyles(raw: String): List<String> =
+    raw.split(',').map(String::trim).filter(String::isNotEmpty)
 
 /** All user-tunable scraper options (persisted as JSON in DataStore). */
 @Serializable
@@ -180,12 +195,17 @@ data class ScraperSettings(
     val screenScraperFanartAsHero: Boolean = true,
 
     /**
-     * SteamGridDB grid styles to request, in priority order.
-     * API values: alternate, material, no_logo, white_logo, blurred.
+     * SteamGridDB styles per photo type (priority order when sorting).
+     * Empty = do not filter; API returns all styles.
+     * Grids: [SteamGridDbStyleHints.Grid]
+     * Heroes: [SteamGridDbStyleHints.Hero]
+     * Logos: [SteamGridDbStyleHints.Logo]
+     * Icons: [SteamGridDbStyleHints.Icon]
      */
-    val steamGridDbGridStyles: List<String> = listOf(
-        "alternate", "material", "no_logo", "white_logo", "blurred"
-    ),
+    val steamGridDbGridStyles: List<String> = emptyList(),
+    val steamGridDbHeroStyles: List<String> = emptyList(),
+    val steamGridDbLogoStyles: List<String> = emptyList(),
+    val steamGridDbIconStyles: List<String> = emptyList(),
 
     /** SteamGridDB animation filter: static, animated, or both. */
     val steamGridDbAnimation: String = "static",
@@ -222,6 +242,9 @@ data class ScraperSettings(
             screenScraperLogoType = override.screenScraperLogoType ?: screenScraperLogoType,
             screenScraperFanartAsHero = override.screenScraperFanartAsHero ?: screenScraperFanartAsHero,
             steamGridDbGridStyles = override.steamGridDbGridStyles ?: steamGridDbGridStyles,
+            steamGridDbHeroStyles = override.steamGridDbHeroStyles ?: steamGridDbHeroStyles,
+            steamGridDbLogoStyles = override.steamGridDbLogoStyles ?: steamGridDbLogoStyles,
+            steamGridDbIconStyles = override.steamGridDbIconStyles ?: steamGridDbIconStyles,
             steamGridDbAnimation = override.steamGridDbAnimation ?: steamGridDbAnimation,
             steamGridDbIncludeNsfw = override.steamGridDbIncludeNsfw ?: steamGridDbIncludeNsfw,
             steamGridDbIncludeHumor = override.steamGridDbIncludeHumor ?: steamGridDbIncludeHumor,
@@ -262,7 +285,3 @@ fun List<MediaCandidate>.pickMedia(
     }
     return sorted.getOrNull(variantIndex.coerceIn(0, sorted.lastIndex))
 }
-
-/** Sorts candidate media by the user's region priority. */
-fun List<MediaCandidate>.bestByRegion(regionPriority: List<String>): MediaCandidate? =
-    pickMedia(regionPriority, 0)

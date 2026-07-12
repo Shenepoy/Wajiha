@@ -26,42 +26,14 @@ object GamingAppCatalog {
     )
 
     /** Common standalone emulators and RetroArch variants. */
-    val defaultEmulatorPackages: Set<String> = setOf(
-        "com.retroarch",
-        "com.retroarch.aarch64",
-        "com.retroarch.ra32",
-        "org.ppsspp.ppsspp",
-        "org.ppsspp.ppssppgold",
-        "org.dolphinemu.dolphinemu",
-        "org.citra.citra_emu",
-        "org.yuzu.yuzu_emu",
-        "org.duckstation.android",
-        "com.github.stenzek.duckstation",
-        "xyz.aethersx2.android",
-        "org.easyrpg.player",
-        "com.drastic",
-        "com.explusalpha.NeoEmu",
-        "com.explusalpha.Snes9xPlus",
-        "com.explusalpha.GbaEmu",
-        "com.explusalpha.MdEmu",
-        "com.explusalpha.MsxEmu",
-        "com.explusalpha.NgpEmu",
-        "com.explusalpha.PceEmu",
-        "info.cemu.cemu",
-        "com.limelight",
-        "com.limelight.noir",
-        "com.moonlight_stream",
-        "com.parsec.client",
-        "com.bluestacks.appmart",
-        "com.gameloop.global"
-    )
+    val defaultEmulatorPackages: Set<String> = EmulatorPackages.all
 
     val defaultGamingPackages: Set<String> =
         defaultStreamingPackages + defaultEmulatorPackages
 
     fun isDefaultGamingPackage(packageName: String): Boolean =
         packageName in defaultGamingPackages ||
-            packageName.startsWith("com.retroarch")
+            EmulatorPackages.isRetroArch(packageName)
 
     fun isKnownGamingPackage(
         packageName: String,

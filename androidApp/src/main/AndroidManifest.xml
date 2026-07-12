@@ -179,6 +179,18 @@
             </intent-filter>
         </receiver>
 
+        <!-- Refresh known emulator packages when user installs/updates/removes apps. -->
+        <receiver
+            android:name=".monitor.EmulatorPackageReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <action android:name="android.intent.action.PACKAGE_REMOVED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".service.KeepAliveService"
             android:exported="false"

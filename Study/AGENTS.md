@@ -2,11 +2,13 @@
 
 ## Project context
 
-**Wajiha** (`/home/zyzto/Documents/Code/Wajiha`) is a **Kotlin Multiplatform + Compose** app (`composeApp` + `androidApp`). It is early-stage (default KMP template). Target product:
+**Wajiha** (`/home/zyzto/Documents/Code/Wajiha`) is a **Kotlin Multiplatform + Compose** dual-screen Android launcher (`composeApp` + `androidApp`). It is **feature-complete on Android** for Thor-style handhelds; iOS targets are scaffolding only. Target product:
 
 - Android **HOME launcher** and device shell
 - **Emulation frontend** optimized for **AYN Thor** (top + bottom displays)
 - Must degrade gracefully on **single-display** handhelds / phones
+
+Authoritative implementation docs: root `README.md`, `docs/architecture.md`, `docs/sessions.md`, `docs/gamepad.md`.
 
 Do **not** assume iOS/desktop parity for launcher features; Android is the primary platform.
 
@@ -46,7 +48,7 @@ Study/               # Reference material (this tree)
 1. Read the comparison matrix (`docs/01-comparison-matrix.md`) to pick the closest reference.
 2. For Thor dual-screen, read `docs/07-dual-display-handhelds.md` before designing UI split.
 3. For game launch, read `docs/06-emulator-launch-patterns.md` and mirror NeoStation's permission-grant strategy on Android.
-4. Prefer **Compose Multiplatform** in `composeApp`; put Android-only APIs (DisplayManager, HOME intent, SAF) in `androidApp` or `composeApp/src/androidMain` via expect/actual.
+4. Prefer **Compose Multiplatform** in `composeApp`; put Android-only APIs (DisplayManager, HOME intent, SAF) in `androidApp` or bind plain interfaces in `com.wajiha.platform` via Koin (not `expect/actual`).
 
 ## Updating this study
 

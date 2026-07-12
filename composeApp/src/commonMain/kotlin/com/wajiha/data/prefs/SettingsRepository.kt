@@ -7,20 +7,30 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.compose.ui.graphics.Color
+import com.wajiha.state.NowPlayingDisplayMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 data class AppSettings(
     val blackoutOnLaunch: Boolean = false,
     val detectManualLaunches: Boolean = true,
+    /**
+     * Force-stop runaway emulator sessions when RSS balloons or system memory
+     * is critically low (protects the launcher from LMK death spirals).
+     */
+    val memoryGuardEnabled: Boolean = true,
     /** Tier 3: read emulator data files to identify externally launched games. */
     val romReconciliationEnabled: Boolean = false,
     /** Show cleaned filename when ROM is not in the library (Tier 3). */
     val romReconciliationShowFilenameFallback: Boolean = true,
     /** SecondaryMode name shown while a game runs */
     val gameSecondaryMode: String = "NowPlaying",
+    /** How active sessions appear on the bottom screen grid and/or floating chip. */
+    val nowPlayingDisplay: String = NowPlayingDisplayMode.Both.name,
     /** Overlay dim on the bottom screen while a game runs on the top display. */
     val gameDimEnabled: Boolean = false,
+    /** When true, dim applies only on the Now Playing secondary screen; when false, any mode except Off. */
+    val gameDimOnlyOnNowPlaying: Boolean = true,
     /** Dim strength in percent (0–100, stepped by 10). */
     val gameDimPercent: Int = 90,
     /** Seconds before dim applies after gameplay starts, and before re-dimming after idle (0 = immediate / stay lifted). */
@@ -64,11 +74,14 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         AppSettings(
             blackoutOnLaunch = prefs[BLACKOUT_ON_LAUNCH] ?: false,
             detectManualLaunches = prefs[DETECT_MANUAL] ?: true,
+            memoryGuardEnabled = prefs[MEMORY_GUARD_ENABLED] ?: true,
             romReconciliationEnabled = prefs[ROM_RECONCILIATION_ENABLED] ?: false,
             romReconciliationShowFilenameFallback =
                 prefs[ROM_RECONCILIATION_FILENAME_FALLBACK] ?: true,
             gameSecondaryMode = prefs[GAME_SECONDARY_MODE] ?: "NowPlaying",
+            nowPlayingDisplay = normalizeNowPlayingDisplay(prefs[NOW_PLAYING_DISPLAY]),
             gameDimEnabled = prefs[GAME_DIM_ENABLED] ?: false,
+            gameDimOnlyOnNowPlaying = prefs[GAME_DIM_ONLY_ON_NOW_PLAYING] ?: true,
             gameDimPercent = normalizeGameDimPercent(prefs[GAME_DIM_PERCENT]),
             gameplayDimTimeoutSeconds = readGameplayDimTimeoutSeconds(prefs),
             gridRows = prefs[GRID_ROWS] ?: 2,
@@ -103,6 +116,9 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setDetectManualLaunches(value: Boolean) =
         dataStore.edit { it[DETECT_MANUAL] = value }
 
+    suspend fun setMemoryGuardEnabled(value: Boolean) =
+        dataStore.edit { it[MEMORY_GUARD_ENABLED] = value }
+
     suspend fun setRomReconciliationEnabled(value: Boolean) =
         dataStore.edit { it[ROM_RECONCILIATION_ENABLED] = value }
 
@@ -112,8 +128,14 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setGameSecondaryMode(value: String) =
         dataStore.edit { it[GAME_SECONDARY_MODE] = value }
 
+    suspend fun setNowPlayingDisplay(value: String) =
+        dataStore.edit { it[NOW_PLAYING_DISPLAY] = normalizeNowPlayingDisplay(value) }
+
     suspend fun setGameDimEnabled(value: Boolean) =
         dataStore.edit { it[GAME_DIM_ENABLED] = value }
+
+    suspend fun setGameDimOnlyOnNowPlaying(value: Boolean) =
+        dataStore.edit { it[GAME_DIM_ONLY_ON_NOW_PLAYING] = value }
 
     suspend fun setGameDimPercent(value: Int) =
         dataStore.edit { it[GAME_DIM_PERCENT] = normalizeGameDimPercent(value) }
@@ -291,13 +313,19 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         fun normalizeFocusPlacement(value: String?): String =
             FocusIndicatorPreferenceValues.normalizePlacement(value)
 
+        fun normalizeNowPlayingDisplay(value: String?): String =
+            NowPlayingDisplayMode.fromName(value).name
+
         private val BLACKOUT_ON_LAUNCH = booleanPreferencesKey("blackout_on_launch")
         val DETECT_MANUAL = booleanPreferencesKey("detect_manual_launches")
+        val MEMORY_GUARD_ENABLED = booleanPreferencesKey("memory_guard_enabled")
         val ROM_RECONCILIATION_ENABLED = booleanPreferencesKey("rom_reconciliation_enabled")
         val ROM_RECONCILIATION_FILENAME_FALLBACK =
             booleanPreferencesKey("rom_reconciliation_filename_fallback")
         val GAME_SECONDARY_MODE = stringPreferencesKey("game_secondary_mode")
+        private val NOW_PLAYING_DISPLAY = stringPreferencesKey("now_playing_display")
         val GAME_DIM_ENABLED = booleanPreferencesKey("game_dim_enabled")
+        val GAME_DIM_ONLY_ON_NOW_PLAYING = booleanPreferencesKey("game_dim_only_on_now_playing")
         val GAME_DIM_PERCENT = intPreferencesKey("game_dim_percent")
         val GAMEPLAY_DIM_TIMEOUT_SECONDS = intPreferencesKey("gameplay_dim_timeout_seconds")
         private val GAMEPLAY_DIM_DELAY_SECONDS = intPreferencesKey("gameplay_dim_delay_seconds")

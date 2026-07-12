@@ -7,6 +7,7 @@ import com.wajiha.data.scraper.ScrapeCandidate
 import com.wajiha.data.scraper.ScrapeQuery
 import com.wajiha.data.scraper.ScraperSettings
 import com.wajiha.data.scraper.ScraperSource
+import com.wajiha.data.scraper.SourceLookupOutcome
 
 /**
  * Local media folders in ES-DE layout:
@@ -21,7 +22,10 @@ class LocalMediaSource(private val files: LocalMediaFiles) : ScraperSource {
     override fun isConfigured(settings: ScraperSettings): Boolean =
         settings.localMediaPath.isNotBlank()
 
-    override suspend fun lookup(query: ScrapeQuery, settings: ScraperSettings): ScrapeCandidate? {
+    override suspend fun lookupResult(
+        query: ScrapeQuery,
+        settings: ScraperSettings
+    ): SourceLookupOutcome {
         val root = settings.localMediaPath
         val baseName = query.fileName.substringBeforeLast('.')
         val media = MediaType.entries.mapNotNull { type ->
@@ -29,12 +33,14 @@ class LocalMediaSource(private val files: LocalMediaFiles) : ScraperSource {
                 MediaCandidate(type = type, url = "file://$path")
             }
         }
-        if (media.isEmpty()) return null
-        return ScrapeCandidate(
-            sourceId = id,
-            sourceGameId = baseName,
-            name = query.displayName,
-            media = media
+        if (media.isEmpty()) return SourceLookupOutcome.Miss
+        return SourceLookupOutcome.Hit(
+            ScrapeCandidate(
+                sourceId = id,
+                sourceGameId = baseName,
+                name = query.displayName,
+                media = media
+            )
         )
     }
 
@@ -44,3 +50,4 @@ class LocalMediaSource(private val files: LocalMediaFiles) : ScraperSource {
         settings: ScraperSettings
     ): List<ScrapeCandidate> = emptyList()
 }
+

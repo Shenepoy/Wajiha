@@ -3,6 +3,7 @@ package com.wajiha.android.detect.probes
 import com.wajiha.android.detect.EmulatorDataReader
 import com.wajiha.android.detect.RomPathCandidate
 import com.wajiha.android.detect.RomPathProbe
+import com.wajiha.domain.EmulatorPackages
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -19,6 +20,7 @@ class AetherSx2RomPathProbe(
 
     override val probeId = "aethersx2"
     override val supportedPackages = setOf("xyz.aethersx2.android")
+        .intersect(EmulatorPackages.standalone)
     override val priority = 10
 
     override suspend fun probe(packageName: String, sessionStartedAt: Long): RomPathCandidate? =
@@ -96,24 +98,16 @@ class AetherSx2RomPathProbe(
                 }
                 .maxByOrNull { it.second }
 
-        fun extractPathFromIni(ini: String): String? {
-            val keys = listOf(
+        fun extractPathFromIni(ini: String): String? = IniKeyParser.extractValue(
+            ini,
+            listOf(
                 "Filename",
                 "DiscPath",
                 "RecentISOFileName",
                 "LastBootedFilename",
                 "LastPlayedPath"
             )
-            for (key in keys) {
-                val pattern = Regex("""^\s*$key\s*=\s*(.+)\s*$""", RegexOption.MULTILINE)
-                val match = pattern.find(ini) ?: continue
-                val value = match.groupValues[1].trim().trim('"')
-                if (value.isNotEmpty() && !value.equals("null", ignoreCase = true)) {
-                    return value
-                }
-            }
-            return null
-        }
+        )
 
         fun serialFromSaveStateName(fileName: String): String? {
             val base = fileName.substringBeforeLast('.')

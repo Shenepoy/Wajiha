@@ -4,25 +4,26 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Display
 import android.view.KeyEvent
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.lifecycleScope
 import com.wajiha.App
 import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.input.GamepadGate
 import com.wajiha.android.input.GamepadKeyRouter
-import com.wajiha.android.input.handleGamepadKey
+import com.wajiha.android.input.TriggerAxisHandler
+import com.wajiha.android.input.dispatchLauncherKeyEvent
 import com.wajiha.android.launch.PlaySessionTracker
 import com.wajiha.android.library.RomFolderManager
 import com.wajiha.android.monitor.ForegroundAppMonitor
 import com.wajiha.android.platform.AndroidLibraryActions
 import com.wajiha.android.service.KeepAliveService
 import com.wajiha.android.system.SystemController
+import com.wajiha.android.ui.hideSystemStatusBar
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 import com.wajiha.state.DualScreenStore
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private val dualScreenStore: DualScreenStore by inject()
     private val displayCoordinator: DisplayCoordinator by inject()
     private val gamepadKeyRouter: GamepadKeyRouter by inject()
+    private val triggerAxisHandler: TriggerAxisHandler by inject()
     private val gamepadGate: GamepadGate by inject()
     private val foregroundAppMonitor: ForegroundAppMonitor by inject()
     private val libraryActions: AndroidLibraryActions by inject()
@@ -88,18 +90,43 @@ class MainActivity : ComponentActivity() {
         // HOME launcher: swallow BACK so the home screen can't be dismissed
         // (in-app screens navigate with their own back buttons).
         onBackPressedDispatcher.addCallback(this) { }
+        hideSystemStatusBar()
 
         setContent {
             App()
         }
+        // Post so we wrap Compose's window callback after it attaches.
+        window.decorView.post {
+            triggerAxisHandler.installOn(this, gamepadGate)
+        }
     }
 
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (gamepadGate.shouldBlockGamepad()) return false
-        return gamepadKeyRouter.dispatch(GamepadOwner.Primary, event) { remappedOrRaw ->
-            handleGamepadKey(this, remappedOrRaw) { super.dispatchKeyEvent(it) } ||
-                super.dispatchKeyEvent(remappedOrRaw)
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemStatusBar()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        dispatchLauncherKeyEvent(
+            owner = GamepadOwner.Primary,
+            event = event,
+            gamepadGate = gamepadGate,
+            gamepadKeyRouter = gamepadKeyRouter
+        ) { super.dispatchKeyEvent(it) }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        // Always inspect first — Compose / window may otherwise swallow joystick MOVE.
+        if (!gamepadGate.shouldBlockGamepad() && triggerAxisHandler.onGenericMotion(event)) {
+            return true
         }
+        return super.dispatchGenericMotionEvent(event)
+    }
+
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (!gamepadGate.shouldBlockGamepad() && triggerAxisHandler.onGenericMotion(event)) {
+            return true
+        }
+        return super.onGenericMotionEvent(event)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -125,6 +152,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        hideSystemStatusBar()
         // Returning from an external game: close the session, restore browsing
         sessionTracker.onLauncherResumed(dualScreenStore.hasActiveSessions())
         foregroundAppMonitor.onLauncherForegrounded()
@@ -152,10 +180,4 @@ class MainActivity : ComponentActivity() {
         gamepadKeyRouter.detach(GamepadOwner.Primary, this)
         super.onDestroy()
     }
-}
-
-@Preview
-@Composable
-fun AppAndroidPreview() {
-    App()
 }

@@ -184,6 +184,9 @@ interface GameMediaDao {
     @Query("SELECT * FROM game_media WHERE gameId = :gameId")
     suspend fun forGame(gameId: Long): List<GameMediaEntity>
 
+    @Query("SELECT * FROM game_media WHERE gameId IN (:gameIds)")
+    suspend fun forGames(gameIds: List<Long>): List<GameMediaEntity>
+
     @Query("SELECT * FROM game_media WHERE gameId = :gameId AND type = :type LIMIT 1")
     suspend fun forGameAndType(gameId: Long, type: String): GameMediaEntity?
 
@@ -222,6 +225,15 @@ interface PlaySessionDao {
 
     @Query("SELECT * FROM play_sessions WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
     suspend fun latestOpen(): PlaySessionEntity?
+
+    @Query(
+        "SELECT * FROM play_sessions WHERE endedAt IS NULL AND packageName = :packageName " +
+            "ORDER BY startedAt DESC LIMIT 1"
+    )
+    suspend fun latestOpenForPackage(packageName: String): PlaySessionEntity?
+
+    @Query("SELECT * FROM play_sessions WHERE endedAt IS NULL ORDER BY startedAt DESC")
+    suspend fun allOpen(): List<PlaySessionEntity>
 
     @Query("UPDATE play_sessions SET gameId = :gameId WHERE id = :id")
     suspend fun updateGameId(id: Long, gameId: Long?)

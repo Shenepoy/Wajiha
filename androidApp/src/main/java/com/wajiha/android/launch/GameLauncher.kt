@@ -16,7 +16,7 @@ import com.wajiha.domain.repository.PlatformRepository
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingState
-import kotlinx.serialization.json.Json
+import com.wajiha.data.WajihaJson
 
 /**
  * Resolves a game to a [LaunchSpec] (per-game emulator override → platform
@@ -35,7 +35,7 @@ class GameLauncher(
     private val foregroundAppMonitor: ForegroundAppMonitor,
     private val displayCoordinator: DisplayCoordinator
 ) {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = WajihaJson.Default
 
     suspend fun launchGame(gameId: Long): LaunchResult {
         val game = gameRepository.byId(gameId)
@@ -73,12 +73,14 @@ class GameLauncher(
         // Session must exist before startActivity — SecondaryHomeActivity's
         // onUserLeaveHint/onPause fire synchronously and used to reclaim the
         // bottom task before hasActiveSessions(), starving the top-display launch.
+        val now = System.currentTimeMillis()
         val session = NowPlayingState(
             packageName = packageName,
             gameId = game.id,
             gameName = game.displayName,
             platformId = game.platformId,
-            sessionStartedAt = System.currentTimeMillis(),
+            sessionStartedAt = now,
+            sessionResumedAt = now,
             launchedByWajiha = true
         )
         dualScreenStore.beginGameSession(session)

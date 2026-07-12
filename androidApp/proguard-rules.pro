@@ -26,3 +26,4 @@
 # AccessibilityService / BroadcastReceiver entry points
 -keep class com.wajiha.android.monitor.GameDetectAccessibilityService { *; }
 -keep class com.wajiha.android.system.BootReceiver { *; }
+-keep class com.wajiha.android.monitor.EmulatorPackageReceiver { *; }

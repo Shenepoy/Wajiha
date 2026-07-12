@@ -9,13 +9,14 @@ import com.wajiha.data.ra.RaRepository
 import com.wajiha.data.scraper.BatchScrapeProgress
 import com.wajiha.data.scraper.BatchScraper
 import com.wajiha.data.scraper.CredentialTestResult
-import com.wajiha.data.scraper.MediaCandidate
 import com.wajiha.data.scraper.PlatformScraperOverride
 import com.wajiha.data.scraper.ScrapeCandidate
 import com.wajiha.data.scraper.ScrapeEngine
+import com.wajiha.data.scraper.ScrapeRunPolicy
 import com.wajiha.data.scraper.ScraperCredentialValidator
 import com.wajiha.data.scraper.ScraperSettings
 import com.wajiha.data.scraper.ScraperSettingsRepository
+import com.wajiha.data.scraper.needsGapFill
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.PlatformRepository
 import com.wajiha.platform.LibraryActions
@@ -26,8 +27,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 /** State for the manual-match flow of one selected game. */
 data class ManualMatchState(
@@ -36,7 +35,9 @@ data class ManualMatchState(
     val searching: Boolean = false,
     val candidates: List<ScrapeCandidate> = emptyList(),
     val applying: Boolean = false,
-    val message: String? = null
+    val message: String? = null,
+    /** null = neutral, true = success, false = error */
+    val messageSuccess: Boolean? = null
 )
 
 /** Result of a credential test probe for one scraper source. */
@@ -85,6 +86,14 @@ class ScraperViewModel(
 
     private val _sourceTests = MutableStateFlow<Map<String, SourceTestState>>(emptyMap())
     val sourceTests: StateFlow<Map<String, SourceTestState>> = _sourceTests
+
+    private val _batchFeedback = MutableStateFlow<String?>(null)
+    /** One-shot banner for preflight / already-running / enqueue feedback. */
+    val batchFeedback: StateFlow<String?> = _batchFeedback
+
+    fun dismissBatchFeedback() {
+        _batchFeedback.value = null
+    }
 
     // ---- settings updates ----
 
@@ -217,10 +226,47 @@ class ScraperViewModel(
         apply(current ?: PlatformScraperOverride(), normalized)
     }
 
-    fun setPlatformGridStyles(platformId: String, styles: List<String>) = update { s ->
-        val normalized = styles.takeIf { it != s.steamGridDbGridStyles }
+    fun setPlatformGridStyles(platformId: String, styles: List<String>) =
+        setPlatformStyleList(
+            platformId,
+            styles,
+            global = { it.steamGridDbGridStyles },
+            apply = { o, v -> o.copy(steamGridDbGridStyles = v) }
+        )
+
+    fun setPlatformHeroStyles(platformId: String, styles: List<String>) =
+        setPlatformStyleList(
+            platformId,
+            styles,
+            global = { it.steamGridDbHeroStyles },
+            apply = { o, v -> o.copy(steamGridDbHeroStyles = v) }
+        )
+
+    fun setPlatformLogoStyles(platformId: String, styles: List<String>) =
+        setPlatformStyleList(
+            platformId,
+            styles,
+            global = { it.steamGridDbLogoStyles },
+            apply = { o, v -> o.copy(steamGridDbLogoStyles = v) }
+        )
+
+    fun setPlatformIconStyles(platformId: String, styles: List<String>) =
+        setPlatformStyleList(
+            platformId,
+            styles,
+            global = { it.steamGridDbIconStyles },
+            apply = { o, v -> o.copy(steamGridDbIconStyles = v) }
+        )
+
+    private fun setPlatformStyleList(
+        platformId: String,
+        styles: List<String>,
+        global: (ScraperSettings) -> List<String>,
+        apply: (PlatformScraperOverride, List<String>?) -> PlatformScraperOverride
+    ) = update { s ->
+        val normalized = styles.takeIf { it != global(s) }
         val current = s.platformOverrides[platformId] ?: PlatformScraperOverride()
-        val next = current.copy(steamGridDbGridStyles = normalized)
+        val next = apply(current, normalized)
         val overrides = if (next.isEmpty) {
             s.platformOverrides - platformId
         } else {
@@ -231,10 +277,65 @@ class ScraperViewModel(
 
     // ---- batch ----
 
-    fun startBatch(platformId: String? = null) = libraryActions.startScrape(platformId)
+    fun startBatch(
+        platformId: String? = null,
+        policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps
+    ) {
+        viewModelScope.launch {
+            _batchFeedback.value = null
+            val reason = libraryActions.startScrape(platformId, policy.wireName())
+            if (reason != null) {
+                _batchFeedback.value = reason
+            }
+        }
+    }
+
+    /** Games that would be processed for Fill gaps / Force on a platform. */
+    suspend fun estimateBatchCount(
+        platformId: String?,
+        policy: ScrapeRunPolicy
+    ): Int {
+        val all = gameRepository.observeAll().first()
+        val scoped = if (platformId == null) all else all.filter { it.platformId == platformId }
+        return when (policy.mode) {
+            com.wajiha.data.scraper.ScrapeRunMode.Force -> scoped.size
+            com.wajiha.data.scraper.ScrapeRunMode.FillGaps -> scoped.count { game ->
+                game.needsGapFill(gameRepository.media(game.id))
+            }
+        }
+    }
+
+    suspend fun reviewQueueGames(
+        platformId: String,
+        includeScraped: Boolean
+    ): List<GameEntity> {
+        val all = gameRepository.observeAll().first().filter { it.platformId == platformId }
+        if (includeScraped) return all
+        return all.filter { game -> game.needsGapFill(gameRepository.media(game.id)) }
+    }
+
+    fun retryFailedBatch(platformId: String? = null) {
+        viewModelScope.launch {
+            _batchFeedback.value = null
+            val reason = libraryActions.retryFailedScrape(platformId)
+            if (reason != null) {
+                _batchFeedback.value = reason
+            }
+        }
+    }
+
+    fun canRetryFailed(platformId: String? = null): Boolean =
+        batchScraper.hasRetryableIssues(platformId)
+
     fun cancelBatch() = libraryActions.cancelScrape()
     fun pauseBatch() = batchScraper.pause()
     fun resumeBatch() = batchScraper.resume()
+
+    fun hasConfiguredSources(platformId: String? = null): Boolean {
+        val s = settings.value
+        val effective = if (platformId != null) s.forPlatform(platformId) else s
+        return engine.hasConfiguredSources(effective)
+    }
 
     // ---- manual match ----
 
@@ -261,51 +362,54 @@ class ScraperViewModel(
 
     fun searchSources(name: String) {
         val game = _manual.value.game ?: return
-        _manual.value = _manual.value.copy(searching = true, candidates = emptyList(), message = null)
+        _manual.value = _manual.value.copy(
+            searching = true,
+            candidates = emptyList(),
+            message = null,
+            messageSuccess = null
+        )
         viewModelScope.launch {
-            val candidates = engine.searchAll(name, game, settingsRepository.current())
-            _manual.value = _manual.value.copy(
-                searching = false,
-                candidates = candidates,
-                message = if (candidates.isEmpty()) "No matches found" else null
-            )
+            try {
+                val candidates = engine.searchAll(name, game, settingsRepository.current())
+                _manual.value = _manual.value.copy(
+                    searching = false,
+                    candidates = candidates,
+                    message = if (candidates.isEmpty()) "No matches found" else null,
+                    messageSuccess = if (candidates.isEmpty()) false else null
+                )
+            } catch (e: Exception) {
+                _manual.value = _manual.value.copy(
+                    searching = false,
+                    candidates = emptyList(),
+                    message = e.message ?: "Search failed",
+                    messageSuccess = false
+                )
+            }
         }
     }
 
     fun applyCandidate(candidate: ScrapeCandidate) {
         val game = _manual.value.game ?: return
-        _manual.value = _manual.value.copy(applying = true, message = null)
+        _manual.value = _manual.value.copy(applying = true, message = null, messageSuccess = null)
         viewModelScope.launch {
-            val result = engine.applyManualMatch(game, candidate, settingsRepository.current())
-            val refreshedGame = gameRepository.byId(game.id)
-            _manual.value = _manual.value.copy(
-                game = refreshedGame ?: game,
-                media = gameRepository.media(game.id),
-                applying = false,
-                message = "Applied: ${result.mediaSaved} media saved"
-            )
-        }
-    }
-
-    @OptIn(ExperimentalTime::class)
-    fun replaceMedia(mediaType: String, candidate: MediaCandidate) {
-        val game = _manual.value.game ?: return
-        viewModelScope.launch {
-            val path = engine.download(game.id, candidate, settingsRepository.current()) ?: run {
-                _manual.value = _manual.value.copy(message = "Download failed")
-                return@launch
-            }
-            gameRepository.saveMedia(
-                GameMediaEntity(
-                    gameId = game.id,
-                    type = mediaType,
-                    source = "manual",
-                    localPath = path,
-                    remoteUrl = candidate.url,
-                    updatedAt = Clock.System.now().toEpochMilliseconds()
+            try {
+                val result = engine.applyManualMatch(game, candidate, settingsRepository.current())
+                val refreshedGame = gameRepository.byId(game.id)
+                val (msg, ok) = result.userMessage(verb = "Applied")
+                _manual.value = _manual.value.copy(
+                    game = refreshedGame ?: game,
+                    media = gameRepository.media(game.id),
+                    applying = false,
+                    message = msg,
+                    messageSuccess = ok
                 )
-            )
-            _manual.value = _manual.value.copy(media = gameRepository.media(game.id))
+            } catch (e: Exception) {
+                _manual.value = _manual.value.copy(
+                    applying = false,
+                    message = e.message ?: "Apply failed",
+                    messageSuccess = false
+                )
+            }
         }
     }
 
@@ -320,19 +424,25 @@ class ScraperViewModel(
 
     fun rescrapeSelected() {
         val game = _manual.value.game ?: return
-        _manual.value = _manual.value.copy(applying = true, message = null)
+        _manual.value = _manual.value.copy(applying = true, message = null, messageSuccess = null)
         viewModelScope.launch {
-            val result = engine.scrapeGame(game, settingsRepository.current())
-            _manual.value = _manual.value.copy(
-                game = gameRepository.byId(game.id) ?: game,
-                media = gameRepository.media(game.id),
-                applying = false,
-                message = if (result.matched) {
-                    "Scraped from ${result.metadataSource ?: "sources"}: ${result.mediaSaved} media"
-                } else {
-                    "No match found"
-                }
-            )
+            try {
+                val result = engine.scrapeGame(game, settingsRepository.current())
+                val (msg, ok) = result.userMessage(verb = "Scraped")
+                _manual.value = _manual.value.copy(
+                    game = gameRepository.byId(game.id) ?: game,
+                    media = gameRepository.media(game.id),
+                    applying = false,
+                    message = msg,
+                    messageSuccess = ok
+                )
+            } catch (e: Exception) {
+                _manual.value = _manual.value.copy(
+                    applying = false,
+                    message = e.message ?: "Scrape failed",
+                    messageSuccess = false
+                )
+            }
         }
     }
 }

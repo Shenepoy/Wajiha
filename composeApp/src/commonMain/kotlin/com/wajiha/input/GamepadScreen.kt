@@ -15,6 +15,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.gamepad.FocusRingOverlayHost
 import com.wajiha.ui.components.gamepad.LocalFocusRingOverlay
@@ -28,6 +30,9 @@ import com.wajiha.ui.theme.rememberInputModeController
  * Touch down claims gamepad for [owner] when [onClaimGamepad] is provided.
  * Tracks touch vs gamepad input mode for chrome visibility app-wide.
  *
+ * Text edit defaults: A enters edit on [GamepadSafeTextField], B / system back
+ * dismisses the keyboard, tap outside hides the keyboard.
+ *
  * [onPreviewKey] is registered on [GamepadLayers] for focus-independent dispatch
  * (Android activity bridge) and mirrored on [onPreviewKeyEvent] when the focus
  * tree tunnels through this root — no root focus target (that would steal indicators).
@@ -40,9 +45,13 @@ fun GamepadScreen(
     owner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     onPreviewKey: ((KeyEvent) -> Boolean)? = null,
+    /** Called when [owner] gains gamepad ownership — restore content focus. */
+    onOwnerGainedFocus: (suspend () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     val processor = remember { GamepadInputProcessor() }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
 
     DisposableEffect(layerId, onPreviewKey) {
         GamepadLayers.stack.push(layerId)
@@ -55,12 +64,16 @@ fun GamepadScreen(
         }
     }
 
+    if (onOwnerGainedFocus != null) {
+        RememberGamepadOwnerFocus(owner = owner, onGained = onOwnerGainedFocus)
+    }
+
     val inputModeController = rememberInputModeController()
     val focusRingOverlay = rememberFocusRingOverlayState()
     val textFieldEditing = GamepadTextEditRegistry.isEditing
 
     BackHandler(enabled = textFieldEditing) {
-        GamepadTextEditRegistry.dismissIfEditing()
+        dismissTextEdit(focusManager, keyboard)
     }
 
     CompositionLocalProvider(
@@ -72,11 +85,16 @@ fun GamepadScreen(
             state = focusRingOverlay,
             modifier = modifier
                 .fillMaxSize()
-                .pointerInput(inputModeController) {
+                .pointerInput(inputModeController, focusManager, keyboard) {
                     detectTapGestures(
                         onPress = {
                             inputModeController.onTouch()
                             tryAwaitRelease()
+                        },
+                        onTap = {
+                            if (GamepadTextEditRegistry.isEditing) {
+                                dismissTextEdit(focusManager, keyboard)
+                            }
                         }
                     )
                 }
@@ -86,7 +104,7 @@ fun GamepadScreen(
                     }
                     if (
                         GamepadKeys.isBack(event.type, event.key) &&
-                        GamepadTextEditRegistry.dismissIfEditing()
+                        dismissTextEdit(focusManager, keyboard)
                     ) {
                         return@onPreviewKeyEvent true
                     }
@@ -118,5 +136,6 @@ private fun isGamepadClaimKey(key: androidx.compose.ui.input.key.Key): Boolean =
         key == androidx.compose.ui.input.key.Key.ButtonX ||
         key == androidx.compose.ui.input.key.Key.ButtonL1 ||
         key == androidx.compose.ui.input.key.Key.ButtonR1 ||
+        // L2/R2 are global (owner toggle / notifications) — never claim via Compose.
         key == androidx.compose.ui.input.key.Key.DirectionCenter ||
         key == androidx.compose.ui.input.key.Key.Enter

@@ -11,9 +11,6 @@ import androidx.work.workDataOf
 import com.wajiha.domain.repository.PlatformRepository
 import com.wajiha.domain.scan.LibraryScanner
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -44,7 +41,21 @@ class LibraryScanWorker(
             )
         )
 
-        val notifJob = startNotificationUpdates(platformLabel)
+        val notifJob = launchProgressNotifications(
+            progress = scanner.progress,
+            shouldUpdate = { it.running },
+            foregroundInfo = { p ->
+                OperationNotificationHelper.scanForegroundInfo(
+                    context = applicationContext,
+                    platformLabel = platformLabel,
+                    foldersDone = p.foldersDone,
+                    foldersTotal = p.foldersTotal,
+                    gamesAdded = p.gamesAdded,
+                    gamesRemoved = p.gamesRemoved,
+                    detail = p.currentFolder?.let(OperationNotificationHelper::shortenFolderUri)
+                )
+            }
+        )
         return try {
             val result = if (platformId != null) {
                 scanner.scanPlatform(platformId)
@@ -89,28 +100,6 @@ class LibraryScanWorker(
             }
         } finally {
             notifJob.cancel()
-        }
-    }
-
-    private suspend fun startNotificationUpdates(platformLabel: String?): Job {
-        val scope = CoroutineScope(kotlin.coroutines.coroutineContext + Job())
-        return scope.launch {
-            scanner.progress.collect { p ->
-                if (!p.running) return@collect
-                runCatching {
-                    setForeground(
-                        OperationNotificationHelper.scanForegroundInfo(
-                            context = applicationContext,
-                            platformLabel = platformLabel,
-                            foldersDone = p.foldersDone,
-                            foldersTotal = p.foldersTotal,
-                            gamesAdded = p.gamesAdded,
-                            gamesRemoved = p.gamesRemoved,
-                            detail = p.currentFolder?.let(OperationNotificationHelper::shortenFolderUri)
-                        )
-                    )
-                }
-            }
         }
     }
 

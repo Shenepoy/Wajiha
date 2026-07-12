@@ -9,16 +9,19 @@ import android.os.Process
 import android.provider.Settings
 import com.wajiha.android.detect.ExternalGameResolver
 import com.wajiha.android.detect.ResolvedGame
+import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.launch.PlaySessionTracker
 import com.wajiha.android.service.KeepAliveService
+import com.wajiha.android.util.PackageKiller
 import com.wajiha.domain.GamingAppCatalog
 import com.wajiha.domain.repository.PlatformRepository
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
-import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingState
 import com.wajiha.state.RunningApp
+import com.wajiha.state.sessionDisplayLabel
+import android.os.Debug
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,6 +29,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Detects externally launched games and verifies when a session ends.
@@ -36,18 +41,19 @@ import kotlinx.coroutines.launch
  * - **UI**: [DualScreenStore.nowPlaying] is the single source of truth; [DualScreenStore.secondaryMode]
  *   is independent navigation (grid + chip vs full Now Playing screen).
  * - **End**: only after [GameSessionController.END_CONFIRM_POLLS] consecutive polls find
- *   an explicit UsageStats ACTIVITY_STOPPED — process/task APIs miss top-display emulators
+ *   no process/task/usage alive signals — process/task APIs miss top-display emulators
  *   on Thor; Wajiha foreground on the bottom display is never a session end.
  *
  * Polls every [POLL_INTERVAL_MS] with `UsageStatsManager.queryEvents` for external
- * detection; near-zero cost when a session is already active.
+ * detection; active sessions use a shorter interval but still throttle UsageStats lists.
  */
 class ForegroundAppMonitor(
     private val context: Context,
     private val store: DualScreenStore,
     private val platformRepository: PlatformRepository,
     private val sessionTracker: PlaySessionTracker,
-    private val externalGameResolver: ExternalGameResolver
+    private val externalGameResolver: ExternalGameResolver,
+    private val displayCoordinator: DisplayCoordinator
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
@@ -56,6 +62,9 @@ class ForegroundAppMonitor(
     private var knownEmulatorPackages: Set<String> = emptySet()
     private var lastForeground: String? = null
 
+    /** Latest window-state / usage-stats sighting per package (accessibility + poll). */
+    private val lastSeenForegroundAt = mutableMapOf<String, Long>()
+
     /** Debounce alt-tab away from game before hiding Now Playing chip. */
     private var pendingTopHidePackage: String? = null
     private var pendingTopHideSince: Long = 0L
@@ -63,6 +72,21 @@ class ForegroundAppMonitor(
     /** Mirrored from settings (detectManualLaunches). */
     @Volatile
     var detectionEnabled: Boolean = true
+
+    /** Mirrored from settings (memoryGuardEnabled). Default on. */
+    @Volatile
+    var memoryGuardEnabled: Boolean = true
+
+    /**
+     * Packages the user explicitly closed — block [discoverAdditionalGamingSessions]
+     * while the emulator process survives [killBackgroundProcesses].
+     */
+    private val suppressRediscoveryUntil = mutableMapOf<String, Long>()
+
+    private val lastMemoryGuardAtMs = AtomicLong(0L)
+    private var lastRssProbeAtMs: Long = 0L
+    private var cachedMemTotalBytes: Long = 0L
+    private var loggedRssBlind: Boolean = false
 
     private val ownPackage = context.packageName
 
@@ -79,12 +103,56 @@ class ForegroundAppMonitor(
     fun usageAccessSettingsIntent() =
         android.content.Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
 
+    /** Task-switcher: feature session, pause background timers, keep all processes alive. */
+    fun switchToSession(packageName: String) {
+        store.activeSessions().map { it.packageName }.forEach { pkg ->
+            sessionController.markSiblingLaunchGrace(pkg)
+        }
+        sessionController.onSessionStarted(packageName)
+        if (store.getSession(packageName) != null) {
+            store.switchToSession(packageName)
+        } else {
+            WajihaLog.w(
+                WajihaTags.NOW_PLAYING,
+                "switchToSession: no cache for $packageName (task switch only)"
+            )
+        }
+        store.setTopDisplayForeground(packageName)
+        lastForeground = packageName
+        pendingTopHidePackage = null
+        lastSeenForegroundAt[packageName] = System.currentTimeMillis()
+        SessionTaskRegistry.captureTaskId(context, packageName)
+        WajihaLog.i(WajihaTags.NOW_PLAYING, "switchToSession: $packageName")
+    }
+
+    /** After task switch, refresh top-display foreground so verify poll keeps siblings alive. */
+    fun scheduleTopDisplayRefresh() {
+        scope.launch {
+            delay(600)
+            refreshTopDisplayForeground()
+            store.activeSessions().forEach { session ->
+                if (sessionProcessAlive(session)) {
+                    sessionController.onSessionStarted(session.packageName)
+                }
+            }
+        }
+    }
+
     /** Call from [com.wajiha.android.launch.GameLauncher] right after [DualScreenStore.beginGameSession]. */
     fun onSessionStarted(packageName: String) {
+        val siblings = store.activeSessions()
+            .map { it.packageName }
+            .filter { it != packageName }
+        if (siblings.isNotEmpty()) {
+            sessionController.markSiblingLaunchGrace(*siblings.toTypedArray())
+        }
+        clearRediscoverySuppression(packageName)
         sessionController.onSessionStarted(packageName)
         lastForeground = packageName
         pendingTopHidePackage = null
         store.setTopDisplayForeground(packageName)
+        lastSeenForegroundAt[packageName] = System.currentTimeMillis()
+        SessionTaskRegistry.captureTaskId(context, packageName)
         WajihaLog.i(WajihaTags.NOW_PLAYING, "onSessionStarted: $packageName")
     }
 
@@ -100,8 +168,11 @@ class ForegroundAppMonitor(
                 }
                 if (hasUsageAccess()) {
                     poll()
-                    refreshRunningApps(force = false)
-                    store.nowPlaying.value?.let { maybeReprobeActiveSession(it) }
+                    // Idle path: poll skips running-apps refresh; keep the 10s throttle.
+                    if (!store.hasActiveSessions()) {
+                        refreshRunningApps(force = false)
+                    }
+                    store.nowPlaying.value?.let { maybeResolveExternalSession(it) }
                 }
                 val interval = if (store.hasActiveSessions()) {
                     ACTIVE_POLL_INTERVAL_MS
@@ -124,20 +195,32 @@ class ForegroundAppMonitor(
 
     /** Also called by the accessibility service for instant external detection. */
     fun onForegroundPackage(packageName: String) {
-        if (packageName == lastForeground) return
-        lastForeground = packageName
+        lastSeenForegroundAt[packageName] = System.currentTimeMillis()
+
+        // Cached multi-session: accessibility / usage resume on display 0 updates top chip.
+        if (store.getSession(packageName) != null && isGamingPackage(packageName)) {
+            sessionController.onSessionStarted(packageName)
+            applyTopDisplayForeground(packageName, reason = "foreground-event")
+        }
+
+        val missingSession = isGamingPackage(packageName) && store.getSession(packageName) == null
+        // After Y-close the same package may still be lastForeground from poll; recents
+        // re-focus must still create a session even when the package name is unchanged.
+        if (packageName == lastForeground && !missingSession) return
+        if (packageName != lastForeground) lastForeground = packageName
         if (!detectionEnabled) return
         if (packageName == ownPackage) return
         if (isSystemUi(packageName)) return
 
         if (isGamingPackage(packageName)) {
-            beginOrUpdateExternalSession(packageName)
+            if (missingSession) clearRediscoverySuppression(packageName)
+            beginOrUpdateExternalSession(packageName, allowSuppressed = false)
         }
     }
 
     /**
      * Called when MainActivity or SecondaryHomeActivity resumes.
-     * Dual-display: bottom launcher foreground is expected — keep session, show grid + chip.
+     * Dual-display: bottom launcher foreground is expected — keep sessions alive.
      */
     fun onLauncherForegrounded() {
         scope.launch {
@@ -152,9 +235,20 @@ class ForegroundAppMonitor(
 
     private fun poll() {
         try {
+            queryLatestForegroundPackage()?.let { pkg ->
+                if (pkg != ownPackage && !isSystemUi(pkg)) {
+                    lastSeenForegroundAt[pkg] = System.currentTimeMillis()
+                }
+            }
             refreshTopDisplayForeground()
             if (store.hasActiveSessions()) {
+                // Throttle UsageStats refresh (10s) even while active — force only on resume.
+                refreshRunningApps(force = false)
+                enforceMemoryGuard(trigger = "poll")
                 verifyActiveSessions(trigger = "poll")
+                if (detectionEnabled) {
+                    discoverAdditionalGamingSessions(trigger = "poll")
+                }
                 return
             }
 
@@ -167,7 +261,8 @@ class ForegroundAppMonitor(
                 isSystemUi(foreground) -> Unit
                 else -> onForegroundPackage(foreground)
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            WajihaLog.w(WajihaTags.NOW_PLAYING, "poll failed — ${e.message}")
         }
     }
 
@@ -177,13 +272,14 @@ class ForegroundAppMonitor(
 
         when {
             resolved == ownPackage -> {
-                val session = store.nowPlaying.value
-                if (session != null && isGamingPackage(session.packageName)) {
+                // Use the task on display 0, not the grid-featured session (nowPlaying).
+                val topSession = topDisplaySession()
+                if (topSession != null && isGamingPackage(topSession.packageName)) {
                     val overlay = queryLatestNonLauncherForeground()
-                    val gameResume = queryLatestResumeTime(session.packageName)
+                    val gameResume = queryLatestResumeTime(topSession.packageName)
                     val overlayResume = overlay?.let { queryLatestResumeTime(it) } ?: 0L
                     if (overlay != null && overlay != ownPackage &&
-                        overlay != session.packageName && !isSystemUi(overlay) &&
+                        overlay != topSession.packageName && !isSystemUi(overlay) &&
                         overlayResume > gameResume
                     ) {
                         applyTopDisplayForeground(
@@ -192,9 +288,9 @@ class ForegroundAppMonitor(
                         )
                         return
                     }
-                    if (gamingProcessLikelyAlive(session)) {
+                    if (sessionProcessAlive(topSession)) {
                         applyTopDisplayForeground(
-                            session.packageName,
+                            topSession.packageName,
                             reason = "dual-play (resolver=$ownPackage)"
                         )
                         return
@@ -212,8 +308,9 @@ class ForegroundAppMonitor(
                 if (!isGamingPackage(resolved)) return
                 if (store.getSession(resolved) != null) return
                 if (detectionEnabled) {
+                    clearRediscoverySuppression(resolved)
                     WajihaLog.i(WajihaTags.NOW_PLAYING, "topDisplay: detect $resolved")
-                    beginOrUpdateExternalSession(resolved)
+                    beginOrUpdateExternalSession(resolved, allowSuppressed = false)
                 }
             }
             else -> {
@@ -233,22 +330,23 @@ class ForegroundAppMonitor(
      * - Launcher resolved under an alive game: keep the gaming package, never publish wajiha.
      */
     private fun applyTopDisplayForeground(desired: String, reason: String) {
-        val session = store.nowPlaying.value
+        val topSession = topDisplaySession()
         val previous = store.topDisplayForegroundPackage.value
         val normalized = when {
-            desired == ownPackage && session != null && isGamingPackage(session.packageName) &&
-                gamingProcessLikelyAlive(session) -> session.packageName
+            desired == ownPackage && topSession != null &&
+                isGamingPackage(topSession.packageName) &&
+                sessionProcessAlive(topSession) -> topSession.packageName
             else -> desired
         }
 
-        if (session != null && normalized == session.packageName) {
+        if (topSession != null && normalized == topSession.packageName) {
             pendingTopHidePackage = null
             commitTopDisplayForeground(normalized, previous, reason)
             return
         }
 
-        if (session != null && previous == session.packageName &&
-            normalized != session.packageName && normalized != ownPackage
+        if (topSession != null && previous == topSession.packageName &&
+            normalized != topSession.packageName && normalized != ownPackage
         ) {
             val now = System.currentTimeMillis()
             if (pendingTopHidePackage != normalized) {
@@ -277,25 +375,38 @@ class ForegroundAppMonitor(
         )
     }
 
-    private fun gamingProcessLikelyAlive(session: NowPlayingState): Boolean =
-        sessionController.isWithinLaunchGrace(session.sessionStartedAt) ||
-            hasRunningProcess(session.packageName) ||
-            hasRunningTask(session.packageName) ||
-            isUsageTimelineActive(session.packageName, session.sessionStartedAt)
+    /** Session actually on display 0 — distinct from grid-featured [DualScreenStore.nowPlaying]. */
+    private fun topDisplaySession(): NowPlayingState? =
+        store.topDisplayForegroundPackage.value?.let { store.getSession(it) }
+            ?: store.activeSessions().firstOrNull { session ->
+                isGamingPackage(session.packageName) && sessionProcessAlive(session)
+            }
 
     /** Infer top-display gaming package when resolver is blocked during an active session. */
     private fun inferTopDisplayGamingPackage(): String? {
-        val session = store.nowPlaying.value ?: return null
-        if (!isGamingPackage(session.packageName)) return null
-        return if (isSessionStillActive(session)) session.packageName else null
+        val active = store.activeSessions()
+            .filter { isGamingPackage(it.packageName) && isSessionStillActive(it) }
+        if (active.isEmpty()) return null
+        val topPkg = store.topDisplayForegroundPackage.value
+        return active.firstOrNull { it.packageName == topPkg }?.packageName
+            ?: active.maxByOrNull { it.sessionStartedAt }?.packageName
     }
 
     private fun onLauncherHasFocus(trigger: String) {
         refreshTopDisplayForeground()
         val sessions = store.activeSessions()
         if (sessions.isNotEmpty()) {
+            val multiSession = sessions.size > 1
             sessions.forEach { session ->
-                if (sessionController.isWithinLaunchGrace(session.sessionStartedAt)) {
+                if (sessionProcessAlive(session)) {
+                    sessionController.onSessionStarted(session.packageName)
+                    return@forEach
+                }
+                if (sessionController.isWithinLaunchGrace(
+                        session.sessionStartedAt,
+                        session.packageName
+                    )
+                ) {
                     WajihaLog.d(
                         WajihaTags.NOW_PLAYING,
                         "launcherFocus($trigger): keep ${session.packageName} (launch grace)"
@@ -303,7 +414,21 @@ class ForegroundAppMonitor(
                     return@forEach
                 }
                 if (!isSessionStillActive(session)) {
-                    if (sessionController.recordAliveCheck(session.packageName, processAlive = false)) {
+                    if (sessionController.recordAliveCheck(
+                            session.packageName,
+                            processAlive = false,
+                            multiSession = multiSession
+                        )
+                    ) {
+                        if (sessionProcessAlive(session)) {
+                            sessionController.onSessionStarted(session.packageName)
+                            WajihaLog.d(
+                                WajihaTags.NOW_PLAYING,
+                                "launcherFocus($trigger): keep ${session.packageName} " +
+                                    "(alive recheck)"
+                            )
+                            return@forEach
+                        }
                         endSession(session.packageName, trigger = "$trigger/confirmed-end")
                     } else {
                         WajihaLog.d(
@@ -314,28 +439,44 @@ class ForegroundAppMonitor(
                     }
                     return@forEach
                 }
-                sessionController.recordAliveCheck(session.packageName, processAlive = true)
+                sessionController.recordAliveCheck(
+                    session.packageName,
+                    processAlive = true,
+                    multiSession = multiSession
+                )
                 WajihaLog.d(
                     WajihaTags.NOW_PLAYING,
-                    "launcherFocus($trigger): keep ${session.packageName} " +
-                        sessionAliveReason(session)
+                    "launcherFocus($trigger): keep ${session.packageName}"
                 )
                 maybeResolveExternalSession(session)
             }
-            store.showGridDuringSession()
+            if (detectionEnabled) {
+                discoverAdditionalGamingSessions(trigger)
+            }
             return
         }
 
         if (!detectionEnabled) return
         findExternalGamingPackage()?.let { pkg ->
+            if (isRediscoverySuppressed(pkg)) return
             WajihaLog.i(WajihaTags.NOW_PLAYING, "launcherFocus($trigger): detect $pkg")
             beginOrUpdateExternalSession(pkg)
         }
     }
 
     private fun verifyActiveSessions(trigger: String) {
-        store.activeSessions().forEach { session ->
-            if (sessionController.isWithinLaunchGrace(session.sessionStartedAt)) {
+        val sessions = store.activeSessions().toList()
+        val multiSession = sessions.size > 1
+        sessions.forEach { session ->
+            if (sessionProcessAlive(session)) {
+                sessionController.onSessionStarted(session.packageName)
+                return@forEach
+            }
+            if (sessionController.isWithinLaunchGrace(
+                    session.sessionStartedAt,
+                    session.packageName
+                )
+            ) {
                 WajihaLog.d(
                     WajihaTags.NOW_PLAYING,
                     "verify($trigger): keep ${session.packageName} (launch grace)"
@@ -344,7 +485,11 @@ class ForegroundAppMonitor(
             }
             val overlay = overlayCoveringGame(session)
             if (overlay != null) {
-                sessionController.recordAliveCheck(session.packageName, processAlive = true)
+                sessionController.recordAliveCheck(
+                    session.packageName,
+                    processAlive = true,
+                    multiSession = multiSession
+                )
                 WajihaLog.d(
                     WajihaTags.NOW_PLAYING,
                     "verify($trigger): keep ${session.packageName} (overlay=$overlay)"
@@ -352,11 +497,28 @@ class ForegroundAppMonitor(
                 return@forEach
             }
             if (isSessionStillActive(session)) {
-                sessionController.recordAliveCheck(session.packageName, processAlive = true)
-                maybeReprobeActiveSession(session)
+                sessionController.recordAliveCheck(
+                    session.packageName,
+                    processAlive = true,
+                    multiSession = multiSession
+                )
+                maybeResolveExternalSession(session)
                 return@forEach
             }
-            if (sessionController.recordAliveCheck(session.packageName, processAlive = false)) {
+            if (sessionController.recordAliveCheck(
+                    session.packageName,
+                    processAlive = false,
+                    multiSession = multiSession
+                )
+            ) {
+                if (sessionProcessAlive(session)) {
+                    sessionController.onSessionStarted(session.packageName)
+                    WajihaLog.d(
+                        WajihaTags.NOW_PLAYING,
+                        "verify($trigger): keep ${session.packageName} (alive recheck)"
+                    )
+                    return@forEach
+                }
                 endSession(session.packageName, trigger = "$trigger/confirmed-end")
             } else {
                 WajihaLog.d(
@@ -375,18 +537,65 @@ class ForegroundAppMonitor(
     }
 
     /**
-     * Session is active while the game has foreground importance or a visible top-display
-     * task. Cached-only processes after ACTIVITY_STOPPED / MOVE_TO_BACKGROUND count as ended.
+     * Session is active while the game process/task survives, even when another emulator
+     * owns the top display (multi-session on Thor).
      */
     private fun isSessionStillActive(session: NowPlayingState): Boolean {
         val pkg = session.packageName
         val since = session.sessionStartedAt
-        if (sessionController.isWithinLaunchGrace(since)) return true
+        if (sessionProcessAlive(session)) return true
         if (overlayCoveringGame(session) != null) return true
-        // Process/task outlive usage STOPPED during alt-tab — never end on timeline alone.
-        if (hasRunningProcess(pkg) || hasRunningTask(pkg)) return true
-        if (isUsageTimelineActive(pkg, since)) return true
-        return isPackageOnTopDisplay(pkg)
+        if (isPackageOnTopDisplay(pkg)) return true
+        return false
+    }
+
+    /**
+     * Session alive while usage stats, accessibility, launch grace, or a cached task say so.
+     * Prefer [store.runningApps] + UsageStats over getRunningTasks (blocked for other packages on Thor).
+     */
+    private fun sessionProcessAlive(session: NowPlayingState): Boolean =
+        sessionProcessAlive(session.packageName, session.sessionStartedAt)
+
+    private fun sessionProcessAlive(packageName: String, sessionStartedAt: Long = 0L): Boolean {
+        if (sessionController.isWithinLaunchGrace(sessionStartedAt, packageName)) return true
+        if (isPackageRecentlyUsed(packageName)) return true
+        if (sessionStartedAt > 0L && isUsageTimelineActive(packageName, sessionStartedAt)) return true
+        if (wasRecentlySeenForeground(packageName)) return true
+        if (hasRunningProcess(packageName)) return true
+        if (SessionTaskRegistry.hasTask(packageName)) return true
+        if (TopDisplayTaskResolver.taskIdForPackage(context, packageName) != null) return true
+        return false
+    }
+
+    /** [RunningAppsPanel] source — UsageStats lastTimeUsed within [SESSION_RECENT_USAGE_MS]. */
+    private fun isPackageRecentlyUsed(packageName: String): Boolean {
+        val now = System.currentTimeMillis()
+        store.runningApps.value.firstOrNull { it.packageName == packageName }?.let { app ->
+            if (app.lastUsedAt > now - SESSION_RECENT_USAGE_MS) return true
+        }
+        val lastUsed = queryUsageLastTimeUsed(packageName) ?: return false
+        return lastUsed > now - SESSION_RECENT_USAGE_MS
+    }
+
+    private fun queryUsageLastTimeUsed(packageName: String): Long? {
+        if (!hasUsageAccess()) return null
+        try {
+            val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+            val now = System.currentTimeMillis()
+            val stats = usm.queryUsageStats(
+                UsageStatsManager.INTERVAL_BEST,
+                now - SESSION_RECENT_USAGE_MS,
+                now
+            )
+            return stats.find { it.packageName == packageName }?.lastTimeUsed?.takeIf { it > 0L }
+        } catch (_: Exception) {
+            return null
+        }
+    }
+
+    private fun wasRecentlySeenForeground(packageName: String): Boolean {
+        val seenAt = lastSeenForegroundAt[packageName] ?: return false
+        return System.currentTimeMillis() - seenAt < RECENT_FOREGROUND_MS
     }
 
     /** True when the latest usage event for [packageName] is a resume, not a stop. */
@@ -417,16 +626,6 @@ class ForegroundAppMonitor(
         return false
     }
 
-    private fun sessionAliveReason(session: NowPlayingState): String = when {
-        sessionController.isWithinLaunchGrace(session.sessionStartedAt) -> "(launch grace)"
-        isUsageTimelineActive(session.packageName, session.sessionStartedAt) -> "(usage timeline active)"
-        isProcessForeground(session.packageName) -> "(foreground process)"
-        isPackageOnTopDisplay(session.packageName) -> "(top-display task)"
-        hasRunningProcess(session.packageName) -> "(process listed)"
-        hasRunningTask(session.packageName) -> "(background task)"
-        else -> "(gone)"
-    }
-
     private fun isPackageOnTopDisplay(packageName: String): Boolean {
         val resolved = TopDisplayForegroundResolver.foregroundPackage(context)
         if (resolved == packageName) return true
@@ -435,55 +634,21 @@ class ForegroundAppMonitor(
         return false
     }
 
-    private fun isProcessForeground(packageName: String): Boolean {
-        try {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            return am.runningAppProcesses?.any { proc ->
-                proc.pkgList?.contains(packageName) == true &&
-                    proc.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
-            } ?: false
-        } catch (_: Exception) {
-            return false
+    private fun beginOrUpdateExternalSession(
+        packageName: String,
+        allowSuppressed: Boolean = true
+    ) {
+        if (allowSuppressed && isRediscoverySuppressed(packageName)) {
+            WajihaLog.d(
+                WajihaTags.NOW_PLAYING,
+                "discover: skip $packageName (user closed)"
+            )
+            return
         }
-    }
-
-    private fun hasUsageSessionEndEvent(packageName: String, since: Long): Boolean =
-        hasActivityStoppedEvent(packageName, since)
-
-    private fun hasActivityStoppedEvent(packageName: String, since: Long): Boolean {
-        if (!hasUsageAccess()) return false
-        val now = System.currentTimeMillis()
-        if (now - since < STOP_EVENT_MIN_AGE_MS) return false
-        try {
-            val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-            val events = usm.queryEvents(since, System.currentTimeMillis())
-            val event = UsageEvents.Event()
-            var lastResume = 0L
-            var lastStop = 0L
-            while (events.hasNextEvent()) {
-                events.getNextEvent(event)
-                if (event.packageName != packageName) continue
-                when (event.eventType) {
-                    UsageEvents.Event.ACTIVITY_RESUMED,
-                    UsageEvents.Event.MOVE_TO_FOREGROUND -> {
-                        if (event.timeStamp >= lastResume) lastResume = event.timeStamp
-                    }
-                    UsageEvents.Event.ACTIVITY_STOPPED -> {
-                        if (event.timeStamp >= lastStop) lastStop = event.timeStamp
-                    }
-                }
-            }
-            return lastStop > 0L && lastStop > lastResume
-        } catch (_: Exception) {
-        }
-        return false
-    }
-
-    private fun beginOrUpdateExternalSession(packageName: String) {
         val existing = store.getSession(packageName)
         if (existing?.packageName == packageName &&
             existing.appLabel == labelOf(packageName) &&
-            sessionTracker.active.value?.packageName == packageName
+            sessionTracker.isTracking(packageName)
         ) {
             return
         }
@@ -498,6 +663,8 @@ class ForegroundAppMonitor(
             boxartPath = preserve?.boxartPath,
             heroPath = preserve?.heroPath,
             sessionStartedAt = preserve?.sessionStartedAt ?: System.currentTimeMillis(),
+            sessionElapsedMs = preserve?.sessionElapsedMs ?: 0L,
+            sessionResumedAt = preserve?.sessionResumedAt ?: 0L,
             launchedByWajiha = preserve?.launchedByWajiha ?: false
         )
 
@@ -528,23 +695,18 @@ class ForegroundAppMonitor(
         }
     }
 
-    private fun maybeReprobeActiveSession(session: NowPlayingState) {
-        if (session.launchedByWajiha || session.gameId != null) return
-        maybeResolveExternalSession(session)
-    }
-
     private fun enrichNowPlaying(session: NowPlayingState, resolved: ResolvedGame) {
-        val current = store.nowPlaying.value ?: return
-        if (current.packageName != session.packageName) return
-        if (current.gameId != null && resolved.gameId == null) return
+        val cached = store.getSession(session.packageName) ?: return
+        if (cached.gameId != null && resolved.gameId == null) return
 
-        val enriched = current.copy(
-            gameId = resolved.gameId ?: current.gameId,
-            gameName = resolved.displayName,
-            platformId = resolved.platformId ?: current.platformId,
-            boxartPath = resolved.boxartPath ?: current.boxartPath,
-            heroPath = resolved.heroPath ?: current.heroPath
+        val enriched = cached.copy(
+            gameId = resolved.gameId ?: cached.gameId,
+            gameName = resolved.displayName.takeIf { it.isNotBlank() } ?: cached.gameName,
+            platformId = resolved.platformId ?: cached.platformId,
+            boxartPath = resolved.boxartPath ?: cached.boxartPath,
+            heroPath = resolved.heroPath ?: cached.heroPath
         )
+        if (enriched == cached) return
         store.updateGameSession(enriched)
         resolved.gameId?.let { gameId ->
             sessionTracker.updateGameId(gameId, session.packageName)
@@ -553,6 +715,8 @@ class ForegroundAppMonitor(
 
     private fun endSession(packageName: String, trigger: String) {
         WajihaLog.i(WajihaTags.NOW_PLAYING, "endSession: $packageName ($trigger)")
+        SessionTaskRegistry.clear(packageName)
+        lastSeenForegroundAt.remove(packageName)
         externalGameResolver.clearSession(packageName)
         sessionController.onSessionEnded(packageName)
         sessionTracker.onGameEnded(packageName)
@@ -560,13 +724,36 @@ class ForegroundAppMonitor(
         if (lastForeground == packageName) {
             lastForeground = null
         }
+        if (!store.hasActiveSessions()) {
+            displayCoordinator.restorePrimaryHero()
+        }
     }
 
     private fun findExternalGamingPackage(): String? {
-        val alive = findAliveGamingPackages()
+        val alive = findAliveGamingPackages().filter { hasEmulatorProcessOrTask(it) }
         if (alive.isEmpty()) return null
         return alive.maxByOrNull { pkg ->
             store.runningApps.value.find { it.packageName == pkg }?.lastUsedAt ?: 0L
+        }?.takeUnless { isRediscoverySuppressed(it) }
+    }
+
+    /** Register any live emulator not yet in [DualScreenStore.sessionCache]. */
+    private fun discoverAdditionalGamingSessions(trigger: String) {
+        findAliveGamingPackages().forEach { pkg ->
+            if (store.getSession(pkg) != null) return@forEach
+            if (!hasEmulatorProcessOrTask(pkg)) return@forEach
+            if (isRediscoverySuppressed(pkg)) {
+                WajihaLog.d(
+                    WajihaTags.NOW_PLAYING,
+                    "discover($trigger): skip $pkg (user closed)"
+                )
+                return@forEach
+            }
+            WajihaLog.i(
+                WajihaTags.NOW_PLAYING,
+                "discover($trigger): additional session $pkg"
+            )
+            beginOrUpdateExternalSession(pkg)
         }
     }
 
@@ -574,8 +761,12 @@ class ForegroundAppMonitor(
         val packages = mutableSetOf<String>()
         packages.addAll(findGamingPackagesFromProcesses())
         packages.addAll(findGamingPackagesFromTasks())
+        packages.addAll(store.runningApps.value.filter { it.isGame }.map { it.packageName })
         return packages.filter { pkg ->
-            pkg != ownPackage && !isSystemUi(pkg) && isGamingPackage(pkg) && isProcessAlive(pkg)
+            pkg != ownPackage && !isSystemUi(pkg) && isGamingPackage(pkg) &&
+                !isRediscoverySuppressed(pkg) &&
+                (isPackageRecentlyUsed(pkg) || hasRunningProcess(pkg) ||
+                    SessionTaskRegistry.hasTask(pkg))
         }.toSet()
     }
 
@@ -595,32 +786,16 @@ class ForegroundAppMonitor(
         return packages
     }
 
-    @Suppress("DEPRECATION")
     private fun findGamingPackagesFromTasks(): Set<String> {
-        val packages = mutableSetOf<String>()
-        try {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            am.getRunningTasks(25).forEach { task ->
-                val pkg = task.baseActivity?.packageName ?: task.topActivity?.packageName ?: return@forEach
-                if (pkg != ownPackage && !isSystemUi(pkg) && isGamingPackage(pkg)) {
-                    packages.add(pkg)
-                }
-            }
-        } catch (_: Exception) {
-        }
-        return packages
+        return TopDisplayTaskResolver.packagesWithTasks(context).filter { pkg ->
+            pkg != ownPackage && !isSystemUi(pkg) && isGamingPackage(pkg)
+        }.toSet()
     }
 
     /**
      * True when [packageName] has any running process, including IMPORTANCE_CACHED.
      * Thor demotes top-display emulators to cached while Wajiha owns the bottom launcher.
      */
-    private fun isProcessAlive(packageName: String): Boolean {
-        if (packageName == ownPackage) return true
-        if (hasRunningProcess(packageName)) return true
-        return hasRunningTask(packageName)
-    }
-
     private fun hasRunningProcess(packageName: String): Boolean {
         try {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -630,32 +805,20 @@ class ForegroundAppMonitor(
             if (listed) return true
         } catch (_: Exception) {
         }
-        return isProcessListedByPidof(packageName)
+        return pidOf(packageName) != null
     }
 
-    private fun isProcessListedByPidof(packageName: String): Boolean {
-        return try {
-            val process = Runtime.getRuntime().exec(arrayOf("/system/bin/pidof", packageName))
-            val output = process.inputStream.bufferedReader().readText().trim()
-            process.waitFor()
-            output.split(Regex("\\s+")).any { it.isNotEmpty() }
-        } catch (_: Exception) {
-            false
-        }
-    }
+    private fun hasRunningTask(packageName: String): Boolean =
+        TopDisplayTaskResolver.taskIdForPackage(context, packageName) != null
 
-    @Suppress("DEPRECATION")
-    private fun hasRunningTask(packageName: String): Boolean {
-        try {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            return am.getRunningTasks(25).any { task ->
-                val pkg = task.baseActivity?.packageName ?: task.topActivity?.packageName
-                pkg == packageName
-            }
-        } catch (_: Exception) {
-            return false
-        }
-    }
+    /**
+     * Process or top-display task — excludes usage-stats-only hits after force-stop
+     * that otherwise recreate ghost tiles on a clean launcher resume.
+     */
+    private fun hasEmulatorProcessOrTask(packageName: String): Boolean =
+        hasRunningProcess(packageName) ||
+            SessionTaskRegistry.hasTask(packageName) ||
+            hasRunningTask(packageName)
 
     private fun queryLatestForegroundPackage(): String? {
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
@@ -760,16 +923,350 @@ class ForegroundAppMonitor(
         }
     }
 
+    /** Debug adb: log active sessions, top display, and rediscovery suppression. */
+    fun debugDumpState() {
+        val now = System.currentTimeMillis()
+        val top = store.topDisplayForegroundPackage.value
+        val featured = store.nowPlaying.value
+        val sessions = store.activeSessions.value
+        WajihaLog.i(WajihaTags.DEBUG, "=== session dump ===")
+        WajihaLog.i(WajihaTags.DEBUG, "topDisplay: ${top ?: "none"}")
+        WajihaLog.i(
+            WajihaTags.DEBUG,
+            "featured(nowPlaying): ${featured?.packageName ?: "none"}"
+        )
+        WajihaLog.i(
+            WajihaTags.DEBUG,
+            "detectionEnabled=$detectionEnabled lastForeground=${lastForeground ?: "none"}"
+        )
+        WajihaLog.i(WajihaTags.DEBUG, "usageAccess=${hasUsageAccess()}")
+        if (sessions.isEmpty()) {
+            WajihaLog.i(WajihaTags.DEBUG, "activeSessions: (none)")
+        } else {
+            sessions.forEachIndexed { index, session ->
+                WajihaLog.i(
+                    WajihaTags.DEBUG,
+                    "session[$index]: pkg=${session.packageName} " +
+                        "game=${session.gameName ?: session.appLabel ?: "?"} " +
+                        "onTop=${session.packageName == top} " +
+                        "wajihaLaunch=${session.launchedByWajiha} " +
+                        "elapsedMs=${session.activeElapsedMs(now)}"
+                )
+            }
+        }
+        val suppress = suppressRediscoveryUntil.entries
+            .map { (pkg, until) ->
+                val remaining = (until - now).coerceAtLeast(0)
+                "$pkg(${remaining}ms)"
+            }
+            .sorted()
+        WajihaLog.i(
+            WajihaTags.DEBUG,
+            "suppressRediscovery: ${if (suppress.isEmpty()) "(none)" else suppress.joinToString()}"
+        )
+        WajihaLog.i(WajihaTags.DEBUG, "=== end dump ===")
+    }
+
+    /** Debug adb: run the same refresh path as launcher resume / active poll. */
+    fun debugForceRefresh() {
+        scope.launch {
+            refreshKnownPackages()
+            if (hasUsageAccess()) {
+                refreshRunningApps(force = true)
+            }
+            refreshTopDisplayForeground()
+            if (store.hasActiveSessions()) {
+                verifyActiveSessions(trigger = "debug-refresh")
+                if (detectionEnabled) {
+                    discoverAdditionalGamingSessions(trigger = "debug-refresh")
+                }
+            } else if (detectionEnabled && hasUsageAccess()) {
+                queryLatestForegroundPackage()?.let { onForegroundPackage(it) }
+            }
+            WajihaLog.i(WajihaTags.DEBUG, "debugForceRefresh: complete")
+        }
+    }
+
+    /** Debug adb: clear all Y-close rediscovery suppression entries. */
+    fun debugClearSuppressList() {
+        val cleared = suppressRediscoveryUntil.keys.sorted()
+        suppressRediscoveryUntil.clear()
+        WajihaLog.i(
+            WajihaTags.DEBUG,
+            "debugClearSuppressList: cleared ${if (cleared.isEmpty()) "(none)" else cleared}"
+        )
+    }
+
     fun killApp(packageName: String) {
+        WajihaLog.i(WajihaTags.NOW_PLAYING, "killApp: $packageName")
+        suppressRediscovery(packageName)
         try {
+            PackageKiller.forceStopPackageBestEffort(context, packageName)
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             am.killBackgroundProcesses(packageName)
             store.setRunningApps(store.runningApps.value.filterNot { it.packageName == packageName })
+            SessionTaskRegistry.clear(packageName)
+            lastSeenForegroundAt.remove(packageName)
             if (store.getSession(packageName) != null) {
                 endSession(packageName, trigger = "killApp")
             }
+        } catch (e: Exception) {
+            WajihaLog.w(WajihaTags.NOW_PLAYING, "killApp: failed $packageName — ${e.message}")
+        }
+    }
+
+    /**
+     * Force-stop runaway emulator sessions under memory pressure.
+     *
+     * Primary signal is system-wide [ActivityManager.MemoryInfo] (documented for
+     * third-party apps). Per-session RSS is best-effort only: since Android Q,
+     * [ActivityManager.getProcessMemoryInfo] returns zeros for other UIDs and is
+     * rate-limited (~5 min); `/proc/<pid>/status` is typically SELinux-blocked.
+     */
+    fun enforceMemoryGuard(trigger: String = "trim") {
+        if (!memoryGuardEnabled) return
+        if (!store.hasActiveSessions()) return
+        val now = System.currentTimeMillis()
+        if (now - lastMemoryGuardAtMs.get() < MEMORY_GUARD_DEBOUNCE_MS) return
+
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memTotal = memTotalBytes()
+
+        // Best-effort RSS probe (infrequent — API is throttled + usually zeros for others).
+        if (now - lastRssProbeAtMs >= RSS_PROBE_INTERVAL_MS) {
+            lastRssProbeAtMs = now
+            val rssCap = minOf(SESSION_RSS_CAP_BYTES, (memTotal * SESSION_RSS_CAP_FRACTION).toLong())
+                .coerceAtLeast(1L)
+            val fatOffenders = findOversizedSessions(am, rssCap)
+            if (fatOffenders.isNotEmpty()) {
+                lastMemoryGuardAtMs.set(now)
+                val labels = fatOffenders.map { (pkg, rss) ->
+                    val label = sessionLabel(pkg)
+                    killApp(pkg)
+                    WajihaLog.w(
+                        WajihaTags.NOW_PLAYING,
+                        "memoryGuard[$trigger]: RSS kill $pkg rss=${formatBytes(rss)} " +
+                            "cap=${formatBytes(rssCap)}"
+                    )
+                    label to rss
+                }
+                val reason = labels.joinToString("; ") { (label, rss) ->
+                    "$label RSS ${formatBytes(rss)}"
+                }
+                finishMemoryGuard(
+                    killedLabels = labels.map { it.first },
+                    reason = reason
+                )
+                return
+            }
+        }
+
+        val memInfo = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(memInfo)
+        val availCritical = maxOf(memInfo.threshold * 3, memTotal / 10)
+        val systemCritical = memInfo.lowMemory || memInfo.availMem < availCritical
+        if (!systemCritical) return
+
+        lastMemoryGuardAtMs.set(now)
+
+        val topPkg = store.topDisplayForegroundPackage.value
+        val background = store.activeSessions()
+            .map { it.packageName }
+            .filter { it != topPkg }
+            .distinct()
+        val killedLabels = mutableListOf<String>()
+        background.forEach { pkg ->
+            killedLabels += sessionLabel(pkg)
+            killApp(pkg)
+            WajihaLog.w(
+                WajihaTags.NOW_PLAYING,
+                "memoryGuard[$trigger]: system kill background $pkg " +
+                    "avail=${formatBytes(memInfo.availMem)} low=${memInfo.lowMemory}"
+            )
+        }
+
+        am.getMemoryInfo(memInfo)
+        val stillCritical = memInfo.lowMemory || memInfo.availMem < availCritical
+        if (stillCritical) {
+            store.activeSessions().map { it.packageName }.distinct().forEach { pkg ->
+                killedLabels += sessionLabel(pkg)
+                killApp(pkg)
+                WajihaLog.w(
+                    WajihaTags.NOW_PLAYING,
+                    "memoryGuard[$trigger]: system kill top/remaining $pkg " +
+                        "avail=${formatBytes(memInfo.availMem)}"
+                )
+            }
+        }
+
+        if (killedLabels.isEmpty()) return
+        finishMemoryGuard(
+            killedLabels = killedLabels.distinct(),
+            reason = "low system memory (avail ${formatBytes(memInfo.availMem)})"
+        )
+    }
+
+    private fun finishMemoryGuard(killedLabels: List<String>, reason: String) {
+        displayCoordinator.deferReclaimForMemoryGuard()
+        MemoryGuardNotifier.notifyClosed(context, killedLabels, reason)
+    }
+
+    private fun sessionLabel(packageName: String): String {
+        val session = store.getSession(packageName)
+        return sessionDisplayLabel(session)
+            ?: labelOf(packageName)
+            ?: packageName
+    }
+
+    private fun findOversizedSessions(
+        am: ActivityManager,
+        rssCapBytes: Long
+    ): List<Pair<String, Long>> {
+        val sessions = store.activeSessions().map { it.packageName }.distinct()
+        if (sessions.isEmpty()) return emptyList()
+        val pidByPackage = mutableMapOf<String, Int>()
+        try {
+            am.runningAppProcesses?.forEach { proc ->
+                proc.pkgList?.forEach { pkg ->
+                    if (pkg in sessions && proc.pid > 0) {
+                        pidByPackage.putIfAbsent(pkg, proc.pid)
+                    }
+                }
+            }
         } catch (_: Exception) {
         }
+        sessions.forEach { pkg ->
+            if (pkg !in pidByPackage) {
+                pidOf(pkg)?.let { pidByPackage[pkg] = it }
+            }
+        }
+        if (pidByPackage.isEmpty()) return emptyList()
+
+        val packages = pidByPackage.keys.toList()
+        val pids = IntArray(packages.size) { pidByPackage.getValue(packages[it]) }
+        val memInfos = try {
+            am.getProcessMemoryInfo(pids)
+        } catch (_: Exception) {
+            return emptyList()
+        }
+        val offenders = mutableListOf<Pair<String, Long>>()
+        packages.forEachIndexed { index, pkg ->
+            val info = memInfos.getOrNull(index) ?: return@forEachIndexed
+            val pid = pids[index]
+            val rssKb = processRssKb(info, pid)
+            val rssBytes = rssKb * 1024L
+            if (rssBytes >= rssCapBytes) {
+                offenders += pkg to rssBytes
+            }
+        }
+        if (offenders.isEmpty() && !loggedRssBlind) {
+            val anyReadable = packages.indices.any { index ->
+                processRssKb(memInfos.getOrNull(index) ?: return@any false, pids[index]) > 0
+            }
+            if (!anyReadable) {
+                loggedRssBlind = true
+                WajihaLog.i(
+                    WajihaTags.NOW_PLAYING,
+                    "memoryGuard: per-app RSS unavailable " +
+                        "(Android Q+ zeros /proc blocked) — using system MemoryInfo only"
+                )
+            }
+        }
+        return offenders
+    }
+
+    private fun processRssKb(info: Debug.MemoryInfo, pid: Int): Int {
+        // Prefer /proc VmRSS — matches LMK's view of native emulator balloons
+        // better than summary.total-rss / PSS (which under-count EE guest RAM).
+        val fromProc = readProcRssKb(pid)
+        if (fromProc > 0) return fromProc
+        val fromStat = info.getMemoryStat("summary.total-rss")?.toIntOrNull()
+        if (fromStat != null && fromStat > 0) return fromStat
+        return info.totalPss
+    }
+
+    private fun readProcRssKb(pid: Int): Int {
+        if (pid <= 0) return 0
+        return try {
+            File("/proc/$pid/status").useLines { lines ->
+                val line = lines.firstOrNull { it.startsWith("VmRSS:") } ?: return@useLines 0
+                line.split(Regex("\\s+")).getOrNull(1)?.toIntOrNull() ?: 0
+            }
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    private fun pidOf(packageName: String): Int? {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("/system/bin/pidof", packageName))
+            val output = process.inputStream.bufferedReader().readText().trim()
+            process.waitFor()
+            output.split(Regex("\\s+"))
+                .firstOrNull { it.isNotEmpty() }
+                ?.toIntOrNull()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun memTotalBytes(): Long {
+        if (cachedMemTotalBytes > 0L) return cachedMemTotalBytes
+        val fromAm = try {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val info = ActivityManager.MemoryInfo()
+            am.getMemoryInfo(info)
+            info.totalMem
+        } catch (_: Exception) {
+            0L
+        }
+        if (fromAm > 0L) {
+            cachedMemTotalBytes = fromAm
+            return fromAm
+        }
+        val fromProc = try {
+            File("/proc/meminfo").useLines { lines ->
+                val line = lines.firstOrNull { it.startsWith("MemTotal:") } ?: return@useLines 0L
+                val kb = line.split(Regex("\\s+")).getOrNull(1)?.toLongOrNull() ?: return@useLines 0L
+                kb * 1024L
+            }
+        } catch (_: Exception) {
+            0L
+        }
+        cachedMemTotalBytes = fromProc.coerceAtLeast(8L * 1024 * 1024 * 1024)
+        return cachedMemTotalBytes
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        val gb = bytes / (1024.0 * 1024.0 * 1024.0)
+        return if (gb >= 1.0) {
+            String.format("%.1fGB", gb)
+        } else {
+            String.format("%.0fMB", bytes / (1024.0 * 1024.0))
+        }
+    }
+
+    /** User closed a session — suppress rediscovery until process dies or timeout. */
+    private fun suppressRediscovery(packageName: String) {
+        suppressRediscoveryUntil[packageName] =
+            System.currentTimeMillis() + SUPPRESS_REDISCOVERY_MS
+        WajihaLog.i(
+            WajihaTags.NOW_PLAYING,
+            "suppressRediscovery: $packageName for ${SUPPRESS_REDISCOVERY_MS}ms"
+        )
+    }
+
+    private fun clearRediscoverySuppression(packageName: String) {
+        if (suppressRediscoveryUntil.remove(packageName) != null) {
+            WajihaLog.d(WajihaTags.NOW_PLAYING, "clearRediscoverySuppression: $packageName")
+        }
+    }
+
+    private fun isRediscoverySuppressed(packageName: String): Boolean {
+        val until = suppressRediscoveryUntil[packageName] ?: return false
+        if (System.currentTimeMillis() < until) return true
+        suppressRediscoveryUntil.remove(packageName)
+        return false
     }
 
     private fun labelOf(packageName: String): String? = try {
@@ -802,13 +1299,28 @@ class ForegroundAppMonitor(
         const val POLL_INTERVAL_MS = 2_000L
         /** Faster verification while a session is active. */
         const val ACTIVE_POLL_INTERVAL_MS = 750L
-        /** Ignore splash/transition STOPPED events right after launch. */
-        const val STOP_EVENT_MIN_AGE_MS = 12_000L
         const val EVENT_WINDOW_MS = 10_000L
         const val RUNNING_APPS_REFRESH_MS = 10_000L
         const val RUNNING_APPS_WINDOW_MS = 6 * 60 * 60 * 1000L
+        /** Matches [refreshRunningApps] — cached emulators stay in session grid while recently used. */
+        const val SESSION_RECENT_USAGE_MS = RUNNING_APPS_WINDOW_MS
+        /** Accessibility / poll RESUMED events — sibling background sessions stay alive. */
+        const val RECENT_FOREGROUND_MS = 30 * 60 * 1000L
         const val PACKAGES_REFRESH_MS = 60_000L
         /** Ignore brief resolver flips when alt-tabbing away from the game. */
         const val TOP_GAME_HIDE_DEBOUNCE_MS = 400L
+        /** After explicit Y-close, block rediscovery while emulator process lingers. */
+        const val SUPPRESS_REDISCOVERY_MS = 60_000L
+        /** At most one memory-guard escalation pass this often. */
+        const val MEMORY_GUARD_DEBOUNCE_MS = 5_000L
+        /**
+         * How often to attempt per-session RSS probes. [getProcessMemoryInfo] is
+         * throttled (~5 min) and returns zeros for other UIDs on Android Q+.
+         */
+        const val RSS_PROBE_INTERVAL_MS = 30_000L
+        /** Absolute per-session RSS cap (~4 GB) — only if readings are non-zero. */
+        const val SESSION_RSS_CAP_BYTES = 4L * 1024 * 1024 * 1024
+        /** Relative per-session RSS cap vs device MemTotal. */
+        const val SESSION_RSS_CAP_FRACTION = 0.35
     }
 }

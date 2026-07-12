@@ -21,6 +21,7 @@ import com.wajiha.input.GamepadNavHost
 import com.wajiha.input.GamepadNavItem
 import com.wajiha.input.GamepadNavMode
 import com.wajiha.input.rememberGamepadNavController
+import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadList
@@ -37,7 +38,9 @@ fun PlatformPickerScreen(
     settingsViewModel: SettingsViewModel,
     onBack: () -> Unit,
     onPick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    gamepadOwner: GamepadOwner? = null,
+    onClaimGamepad: ((GamepadOwner) -> Unit)? = null
 ) {
     val allPlatforms by settingsViewModel.allPlatforms.collectAsState()
     val folders by settingsViewModel.folders.collectAsState()
@@ -75,8 +78,14 @@ fun PlatformPickerScreen(
         gamepadHints = listOf(
             "A" to "Add/Open",
             "B" to "Back",
+            "L2" to "Focus screen",
             "Search" to "A to edit"
-        )
+        ),
+        gamepadOwner = gamepadOwner,
+        onClaimGamepad = onClaimGamepad,
+        onOwnerGainedFocus = {
+            navController.focusState.focusedIndex = 0
+        }
     ) {
         GamepadNavHost(controller = navController) {
             Column(modifier = Modifier.fillMaxSize()) {

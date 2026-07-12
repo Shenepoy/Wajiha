@@ -148,6 +148,7 @@ fun GamepadSafeTextField(
                     if (!focused && editing) {
                         editing = false
                         controller.focusState.editing = false
+                        keyboard?.hide()
                     }
                 },
                 modifier = Modifier
@@ -254,6 +255,7 @@ private fun LegacyGamepadSafeTextField(
         if (!editing) return false
         editing = false
         keyboard?.hide()
+        focusManager.clearFocus(force = true)
         return true
     }
 
@@ -322,8 +324,9 @@ private fun LegacyGamepadSafeTextField(
                 if (state.isFocused && !editing) {
                     keyboard?.hide()
                 }
-                if (!state.isFocused) {
+                if (!state.isFocused && editing) {
                     editing = false
+                    keyboard?.hide()
                 }
             }
             .pointerInput(Unit) {

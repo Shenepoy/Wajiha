@@ -9,6 +9,7 @@ import com.wajiha.platform.UiSound
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
+import com.wajiha.state.SystemNotificationStore
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 import java.lang.ref.WeakReference
@@ -36,8 +37,10 @@ class GamepadKeyRouter(
     private val store: DualScreenStore,
     private val settingsRepository: SettingsRepository,
     private val appActions: AppActions,
+    private val notifications: SystemNotificationStore,
     private val scope: CoroutineScope
 ) {
+    private val triggers = LauncherTriggerActions(store, notifications, appActions)
     private var primaryRef: WeakReference<ComponentActivity>? = null
     private var secondaryRef: WeakReference<ComponentActivity>? = null
 
@@ -69,6 +72,22 @@ class GamepadKeyRouter(
         event: KeyEvent,
         localDispatch: (KeyEvent) -> Boolean
     ): Boolean {
+        if (
+            event.action == KeyEvent.ACTION_DOWN &&
+            event.repeatCount == 0 &&
+            (
+                event.keyCode == KeyEvent.KEYCODE_BUTTON_L1 ||
+                    event.keyCode == KeyEvent.KEYCODE_BUTTON_R1 ||
+                    event.keyCode == KeyEvent.KEYCODE_BUTTON_L2 ||
+                    event.keyCode == KeyEvent.KEYCODE_BUTTON_R2
+            )
+        ) {
+            WajihaLog.i(
+                WajihaTags.GAMEPAD,
+                "key: ${KeyEvent.keyCodeToString(event.keyCode)} from=$from " +
+                    "scan=${event.scanCode} device=${event.deviceId}"
+            )
+        }
         if (isSwapScreenKey(event.keyCode) && event.action == KeyEvent.ACTION_UP) {
             scope.launch {
                 val swapped = settingsRepository.toggleSwapScreenRoles()
@@ -79,6 +98,24 @@ class GamepadKeyRouter(
                 appActions.playSound(UiSound.Navigate)
             }
             return true
+        }
+        if (event.keyCode == KeyEvent.KEYCODE_BUTTON_L2) {
+            // Fire on DOWN — some injectors / OEMs never deliver ACTION_UP for L2.
+            // DualScreenStore debounce absorbs digital+analog double-fire.
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                return triggers.onL2("key")
+            }
+            val dualState = store.state.value
+            return dualState != DualScreenState.SingleDisplay &&
+                dualState != DualScreenState.BlackoutSecondary
+        }
+        if (event.keyCode == KeyEvent.KEYCODE_BUTTON_R2) {
+            if (event.action == KeyEvent.ACTION_UP) {
+                return triggers.onR2("key")
+            }
+            val dualState = store.state.value
+            return dualState != DualScreenState.GameRunning &&
+                dualState != DualScreenState.BlackoutSecondary
         }
         val owner = effectiveOwner()
         if (from == owner) {
@@ -126,6 +163,8 @@ private fun isMappedGamepadKey(keyCode: Int): Boolean =
         keyCode == KeyEvent.KEYCODE_BUTTON_X ||
         keyCode == KeyEvent.KEYCODE_BUTTON_L1 ||
         keyCode == KeyEvent.KEYCODE_BUTTON_R1 ||
+        keyCode == KeyEvent.KEYCODE_BUTTON_L2 ||
+        keyCode == KeyEvent.KEYCODE_BUTTON_R2 ||
         keyCode == KeyEvent.KEYCODE_PAGE_UP ||
         keyCode == KeyEvent.KEYCODE_PAGE_DOWN ||
         isSwapScreenKey(keyCode)

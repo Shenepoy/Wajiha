@@ -77,6 +77,14 @@ class GameRepository(
     fun observeAllLogos(): Flow<List<GameMediaEntity>> = mediaDao.observeAllOfType("logo")
     fun observeAllIcons(): Flow<List<GameMediaEntity>> = mediaDao.observeAllOfType("icon")
     suspend fun media(gameId: Long): List<GameMediaEntity> = mediaDao.forGame(gameId)
+
+    suspend fun mediaForGames(gameIds: List<Long>): Map<Long, List<GameMediaEntity>> {
+        if (gameIds.isEmpty()) return emptyMap()
+        return gameIds.chunked(500).flatMap { chunk ->
+            mediaDao.forGames(chunk)
+        }.groupBy { it.gameId }
+    }
+
     suspend fun mediaOfType(gameId: Long, type: String): GameMediaEntity? =
         mediaDao.forGameAndType(gameId, type)
 

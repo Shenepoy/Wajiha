@@ -30,6 +30,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -40,12 +42,14 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.SettingsRepository
+import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.SystemControls
 import com.wajiha.state.HeroContext
 import com.wajiha.ui.gamedetail.GameDetailMetadataPanel
 import com.wajiha.ui.gamedetail.GameDetailViewModel
 import com.wajiha.ui.gamedetail.MetadataPanelStyle
 import com.wajiha.ui.gamedetail.MetadataPanelVisibility
+import com.wajiha.ui.scraper.review.ScrapeReviewSlotHero
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaMotion
 import org.koin.compose.koinInject
@@ -59,6 +63,7 @@ fun TopScreen(
     focused: GameTile?,
     platformName: String?,
     heroContext: HeroContext = HeroContext.GameLibrary,
+    contentFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -84,13 +89,26 @@ fun TopScreen(
             label = "hero-context"
         ) { context ->
             when (context) {
-                is HeroContext.GameLibrary -> GameLibraryHero(focused, platformName, settings)
-                is HeroContext.Settings -> SettingsHero(context)
-                is HeroContext.Apps -> AppsHero(context)
-                is HeroContext.System -> SystemHero(context)
-                is HeroContext.GameDetail -> GameDetailHero(context.gameId, settings)
+                is HeroContext.GameLibrary -> GameLibraryHero(
+                    focused,
+                    platformName,
+                    settings,
+                    contentFocusRequester
+                )
+                is HeroContext.Settings -> SettingsHero(context, contentFocusRequester)
+                is HeroContext.Apps -> AppsHero(context, contentFocusRequester)
+                is HeroContext.System -> SystemHero(context, contentFocusRequester)
+                is HeroContext.GameDetail -> GameDetailHero(
+                    context.gameId,
+                    settings,
+                    contentFocusRequester
+                )
+                is HeroContext.ScrapeReview -> ScrapeReviewSlotHero(
+                    contentFocusRequester = contentFocusRequester
+                )
             }
         }
+        TopStatusBar()
     }
 }
 
@@ -98,19 +116,34 @@ fun TopScreen(
 private fun GameLibraryHero(
     focused: GameTile?,
     platformName: String?,
-    settings: AppSettings
+    settings: AppSettings,
+    contentFocusRequester: FocusRequester? = null
 ) {
-    AnimatedContent(
-        targetState = focused != null,
-        transitionSpec = {
-            fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
-        },
-        label = "hero-mode"
-    ) { hasFocus ->
-        if (!hasFocus) {
-            IdleHero()
-        } else {
-            GameHero(requireNotNull(focused), platformName, settings)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(
+                if (contentFocusRequester != null) {
+                    Modifier
+                        .focusRequester(contentFocusRequester)
+                        .wajihaGamepadFocus()
+                } else {
+                    Modifier
+                }
+            )
+    ) {
+        AnimatedContent(
+            targetState = focused != null,
+            transitionSpec = {
+                fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
+            },
+            label = "hero-mode"
+        ) { hasFocus ->
+            if (!hasFocus) {
+                IdleHero()
+            } else {
+                GameHero(requireNotNull(focused), platformName, settings)
+            }
         }
     }
 }
@@ -141,11 +174,24 @@ private fun ContextHeroFrame(
     title: String,
     subtitle: String? = null,
     hint: String? = null,
-    accent: Color? = null
+    accent: Color? = null,
+    contentFocusRequester: FocusRequester? = null
 ) {
     val scheme = MaterialTheme.colorScheme
     val accentColor = accent ?: scheme.primary
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(
+                if (contentFocusRequester != null) {
+                    Modifier
+                        .focusRequester(contentFocusRequester)
+                        .wajihaGamepadFocus()
+                } else {
+                    Modifier
+                }
+            )
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -192,16 +238,24 @@ private fun ContextHeroFrame(
 }
 
 @Composable
-private fun SettingsHero(context: HeroContext.Settings) {
+private fun SettingsHero(
+    context: HeroContext.Settings,
+    contentFocusRequester: FocusRequester? = null
+) {
     ContextHeroFrame(
         title = "Wajiha Settings",
         subtitle = context.sectionLabel,
-        hint = "Settings open on the bottom screen  ·  L1 / R1 switch sections"
+        hint = "Settings open on the bottom screen  ·  L1 / R1 switch sections",
+        contentFocusRequester = contentFocusRequester
     )
 }
 
 @Composable
-private fun GameDetailHero(gameId: Long, settings: AppSettings) {
+private fun GameDetailHero(
+    gameId: Long,
+    settings: AppSettings,
+    contentFocusRequester: FocusRequester? = null
+) {
     val viewModel = koinInject<GameDetailViewModel>()
     LaunchedEffect(gameId) { viewModel.open(gameId) }
     val state by viewModel.uiState.collectAsState()
@@ -211,7 +265,20 @@ private fun GameDetailHero(gameId: Long, settings: AppSettings) {
     val heroPath = state.media.firstOrNull { it.type == "hero" }?.localPath
 
     if (game == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (contentFocusRequester != null) {
+                        Modifier
+                            .focusRequester(contentFocusRequester)
+                            .wajihaGamepadFocus()
+                    } else {
+                        Modifier
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
             Text(
                 text = "Loading…",
                 style = MaterialTheme.typography.bodyLarge,
@@ -221,7 +288,19 @@ private fun GameDetailHero(gameId: Long, settings: AppSettings) {
         return
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(
+                if (contentFocusRequester != null) {
+                    Modifier
+                        .focusRequester(contentFocusRequester)
+                        .wajihaGamepadFocus()
+                } else {
+                    Modifier
+                }
+            )
+    ) {
         if (settings.topHeroBackdrop) {
             heroPath?.let { backdrop ->
                 AsyncImage(
@@ -354,7 +433,10 @@ private fun GameDetailHero(gameId: Long, settings: AppSettings) {
 }
 
 @Composable
-private fun AppsHero(context: HeroContext.Apps) {
+private fun AppsHero(
+    context: HeroContext.Apps,
+    contentFocusRequester: FocusRequester? = null
+) {
     val countLine = when (context.appCount) {
         0 -> "No apps found"
         1 -> "1 app installed"
@@ -364,12 +446,16 @@ private fun AppsHero(context: HeroContext.Apps) {
         title = "Apps",
         subtitle = context.focusedLabel ?: countLine,
         hint = context.focusedLabel?.let { countLine }
-            ?: "A to launch  ·  B back to games"
+            ?: "A to launch  ·  B back to games",
+        contentFocusRequester = contentFocusRequester
     )
 }
 
 @Composable
-private fun SystemHero(context: HeroContext.System) {
+private fun SystemHero(
+    context: HeroContext.System,
+    contentFocusRequester: FocusRequester? = null
+) {
     val controls = koinInject<SystemControls>()
     val liveStatus by controls.status.collectAsState()
     val battery = if (liveStatus.batteryPercent >= 0) {
@@ -394,7 +480,8 @@ private fun SystemHero(context: HeroContext.System) {
         title = "System",
         subtitle = statusLine.ifBlank { "Quick settings" },
         hint = "Brightness, volume, and device controls below",
-        accent = MaterialTheme.colorScheme.tertiary
+        accent = MaterialTheme.colorScheme.tertiary,
+        contentFocusRequester = contentFocusRequester
     )
 }
 

@@ -1,6 +1,5 @@
 package com.wajiha.android.launch
 
-import android.app.ActivityManager
 import android.app.ActivityOptions
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -14,6 +13,9 @@ import android.os.StrictMode
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
+import com.wajiha.android.monitor.SessionTaskRegistry
+import com.wajiha.android.util.PackageKiller
+import com.wajiha.domain.EmulatorPackages
 import java.io.File
 
 /**
@@ -35,15 +37,12 @@ object EmulatorLauncher {
 
     private val multiFileExtensions = setOf("cue", "gdi", "m3u")
 
-    /** Emulators that resolve sibling tracks via real filesystem paths. */
-    private val needsRealPathPackages = setOf(
-        "com.github.stenzek.duckstation"
-    )
+    private val needsRealPathPackages = EmulatorPackages.needsRealPath
 
     fun launch(context: Context, spec: LaunchSpec): LaunchResult {
         try {
             if (spec.killBeforeLaunch) {
-                killBackgroundProcesses(context, spec.packageName)
+                PackageKiller.forceStopPackageBestEffort(context, spec.packageName)
             }
 
             val intent = Intent()
@@ -106,7 +105,7 @@ object EmulatorLauncher {
                 val value = extra.value
 
                 // RetroArch: expand bare core names to the variant's cores dir
-                if (spec.packageName.startsWith("com.retroarch") &&
+                if (EmulatorPackages.isRetroArch(spec.packageName) &&
                     extra.key == "LIBRETRO" && !value.startsWith("/")
                 ) {
                     val libretroDir = getDefaultLibretroDirectory(context, spec.packageName)
@@ -136,7 +135,7 @@ object EmulatorLauncher {
             }
 
             // RetroArch: CONFIGFILE default per variant package
-            if (spec.packageName.startsWith("com.retroarch") && !intent.hasExtra("CONFIGFILE")) {
+            if (EmulatorPackages.isRetroArch(spec.packageName) && !intent.hasExtra("CONFIGFILE")) {
                 intent.putExtra(
                     "CONFIGFILE",
                     "/storage/emulated/0/Android/data/${spec.packageName}/files/retroarch.cfg"
@@ -183,6 +182,7 @@ object EmulatorLauncher {
             } else {
                 context.startActivity(intent)
             }
+            SessionTaskRegistry.recordLaunch(context, spec.packageName, spec.activityName)
             return LaunchResult.Success
         } catch (e: ActivityNotFoundException) {
             return if (!isPackageInstalled(context, spec.packageName)) {
@@ -202,14 +202,6 @@ object EmulatorLauncher {
         true
     } catch (_: Exception) {
         false
-    }
-
-    private fun killBackgroundProcesses(context: Context, packageName: String) {
-        try {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            am.killBackgroundProcesses(packageName)
-        } catch (_: Exception) {
-        }
     }
 
     private fun grantPrimary(context: Context, packageName: String, intent: Intent, uri: Uri) {

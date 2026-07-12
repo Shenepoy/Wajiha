@@ -3,7 +3,7 @@ package com.wajiha.data.config
 import com.wajiha.data.db.EmulatorEntity
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.domain.repository.PlatformRepository
-import kotlinx.serialization.json.Json
+import com.wajiha.data.WajihaJson
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import wajiha.composeapp.generated.resources.Res
 
@@ -17,7 +17,7 @@ import wajiha.composeapp.generated.resources.Res
  */
 class ConfigInstaller(private val platformRepository: PlatformRepository) {
 
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = WajihaJson.Default
 
     @OptIn(ExperimentalResourceApi::class)
     suspend fun installBundledDefaults() {

@@ -37,11 +37,13 @@ internal fun shouldDimGameplay(
     nowPlaying: NowPlayingState?,
     mode: SecondaryMode,
     dualState: DualScreenState,
-    gameDimEnabled: Boolean
+    gameDimEnabled: Boolean,
+    gameDimOnlyOnNowPlaying: Boolean
 ): Boolean = nowPlaying != null &&
     mode != SecondaryMode.Off &&
     dualState == DualScreenState.GameRunning &&
-    gameDimEnabled
+    gameDimEnabled &&
+    (!gameDimOnlyOnNowPlaying || mode == SecondaryMode.NowPlaying)
 
 /**
  * Semi-transparent black scrim over secondary content while a game runs on the
@@ -64,7 +66,8 @@ internal fun rememberGameplayDimAlpha(
         nowPlaying = nowPlaying,
         mode = mode,
         dualState = dualState,
-        gameDimEnabled = store.gameDimEnabled
+        gameDimEnabled = store.gameDimEnabled,
+        gameDimOnlyOnNowPlaying = store.gameDimOnlyOnNowPlaying
     )
 
     var delayElapsed by remember { mutableStateOf(false) }
@@ -141,7 +144,8 @@ fun SecondarySurface(
         nowPlaying = nowPlaying,
         mode = mode,
         dualState = dualState,
-        gameDimEnabled = store.gameDimEnabled
+        gameDimEnabled = store.gameDimEnabled,
+        gameDimOnlyOnNowPlaying = store.gameDimOnlyOnNowPlaying
     )
 
     var dimLiftedByInteraction by remember { mutableStateOf(false) }

@@ -11,8 +11,12 @@ interface ScraperSource {
     /** True when the source has the credentials it needs (or needs none). */
     fun isConfigured(settings: ScraperSettings): Boolean
 
-    /** Best automatic match for a query, or null. Hash-first when supported. */
-    suspend fun lookup(query: ScrapeQuery, settings: ScraperSettings): ScrapeCandidate?
+    /** Best automatic match for a query (hit / miss / failed). */
+    suspend fun lookupResult(query: ScrapeQuery, settings: ScraperSettings): SourceLookupOutcome
+
+    /** Convenience unwrap of [lookupResult] for callers that only need a candidate. */
+    suspend fun lookup(query: ScrapeQuery, settings: ScraperSettings): ScrapeCandidate? =
+        (lookupResult(query, settings) as? SourceLookupOutcome.Hit)?.candidate
 
     /** Manual search by name for the match UI. */
     suspend fun search(

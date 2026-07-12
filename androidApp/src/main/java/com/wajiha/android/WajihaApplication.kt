@@ -1,6 +1,8 @@
 package com.wajiha.android
 
 import android.app.Application
+import android.content.ComponentCallbacks2
+import android.content.res.Configuration
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.datastore.core.DataStore
 import coil3.ImageLoader
@@ -30,8 +32,7 @@ import com.wajiha.android.system.SystemController
 import com.wajiha.data.config.ConfigInstaller
 import com.wajiha.data.db.WajihaDatabase
 import com.wajiha.data.prefs.SettingsRepository
-import com.wajiha.data.db.buildWajihaDatabase
-import com.wajiha.data.db.databaseBuilder
+import com.wajiha.data.db.createWajihaDatabase
 import com.wajiha.data.scraper.ImageProcessor
 import com.wajiha.data.scraper.LocalMediaFiles
 import com.wajiha.data.scraper.MediaStorage
@@ -63,6 +64,29 @@ class WajihaApplication : Application(), SingletonImageLoader.Factory {
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    private val memoryTrimCallbacks = object : ComponentCallbacks2 {
+        override fun onTrimMemory(level: Int) {
+            if (level != TRIM_MEMORY_RUNNING_CRITICAL &&
+                level != TRIM_MEMORY_COMPLETE
+            ) {
+                return
+            }
+            runCatching {
+                GlobalContext.get().get<ForegroundAppMonitor>()
+                    .enforceMemoryGuard(trigger = "trim:$level")
+            }
+        }
+
+        override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+        override fun onLowMemory() {
+            runCatching {
+                GlobalContext.get().get<ForegroundAppMonitor>()
+                    .enforceMemoryGuard(trigger = "onLowMemory")
+            }
+        }
+    }
+
     /** Tuned Coil pipeline: bounded memory cache + persistent disk cache. */
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
@@ -82,7 +106,7 @@ class WajihaApplication : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         val androidModule = module {
             single<WajihaDatabase> {
-                buildWajihaDatabase(databaseBuilder(this@WajihaApplication))
+                createWajihaDatabase(this@WajihaApplication)
             }
             single<DataStore<Preferences>> {
                 PreferenceDataStoreFactory.create {
@@ -101,7 +125,15 @@ class WajihaApplication : Application(), SingletonImageLoader.Factory {
                     store = get(),
                     settingsRepository = get(),
                     appActions = get(),
+                    notifications = get(),
                     scope = get(named("applicationScope"))
+                )
+            }
+            single {
+                com.wajiha.android.input.TriggerAxisHandler(
+                    store = get(),
+                    notifications = get(),
+                    appActions = get()
                 )
             }
             single { com.wajiha.android.input.GamepadGate(get()) }
@@ -123,13 +155,14 @@ class WajihaApplication : Application(), SingletonImageLoader.Factory {
                     get(),
                     get(),
                     get(),
+                    get(),
                     get()
                 )
             }
             single { RomFileDeleter(this@WajihaApplication) }
             single { AndroidAppActions(this@WajihaApplication, get(), get(), get(), get(), get()) } binds
                 arrayOf(AppActions::class)
-            single { AndroidLibraryActions(this@WajihaApplication, get()) } binds
+            single { AndroidLibraryActions(this@WajihaApplication, get(), get()) } binds
                 arrayOf(LibraryActions::class)
             single<MediaStorage> { AndroidMediaStorage(this@WajihaApplication) }
             single<LocalMediaFiles> { EsDeLocalMediaFiles() }
@@ -150,6 +183,7 @@ class WajihaApplication : Application(), SingletonImageLoader.Factory {
 
         seedDefaultsIfNeeded()
         mirrorSettings()
+        registerComponentCallbacks(memoryTrimCallbacks)
     }
 
     /** Keeps host-side flags (sounds, detection, night mode) in sync with persisted settings. */
@@ -161,6 +195,7 @@ class WajihaApplication : Application(), SingletonImageLoader.Factory {
             koin.get<SettingsRepository>().settings.collect { settings ->
                 appActions.soundsEnabled = settings.soundsEnabled
                 monitor.detectionEnabled = settings.detectManualLaunches
+                monitor.memoryGuardEnabled = settings.memoryGuardEnabled
                 // Force the same night mode on both Thor displays so Compose
                 // "system" and any residual platform chrome stay in lockstep.
                 val nightMode = when (settings.theme) {

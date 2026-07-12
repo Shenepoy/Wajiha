@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
@@ -69,7 +68,3 @@ fun GamepadNavHost(
         }
     }
 }
-
-@Composable
-fun rememberGamepadNavCoordinator(): GamepadNavCoordinator =
-    remember { GamepadNavCoordinator() }

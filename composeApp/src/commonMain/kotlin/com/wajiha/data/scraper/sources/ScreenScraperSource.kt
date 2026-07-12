@@ -1,20 +1,25 @@
 package com.wajiha.data.scraper.sources
 
+import com.wajiha.data.scraper.HttpJsonResult
 import com.wajiha.data.scraper.MediaCandidate
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeCandidate
+import com.wajiha.data.scraper.ScrapeFailure
+import com.wajiha.data.scraper.ScrapeFailureKind
 import com.wajiha.data.scraper.ScrapeQuery
 import com.wajiha.data.scraper.ScrapedMetadata
 import com.wajiha.data.scraper.ScraperSettings
 import com.wajiha.data.scraper.ScraperSource
+import com.wajiha.data.scraper.SourceLookupOutcome
+import com.wajiha.data.scraper.classifyHttpStatus
+import com.wajiha.data.scraper.getStringResult
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.request.get
 import io.ktor.client.request.parameter
+import com.wajiha.data.WajihaJson
+import com.wajiha.data.scraper.screenScraperParams
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 /**
  * ScreenScraper.fr (api2). Hash-first lookup (crc/md5), name search fallback.
@@ -30,26 +35,26 @@ class ScreenScraperSource(
     override val id = "screenscraper"
     override val displayName = "ScreenScraper"
 
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
-
     override fun isConfigured(settings: ScraperSettings): Boolean =
         settings.screenScraperUser.isNotBlank() && settings.screenScraperPassword.isNotBlank()
 
-    override suspend fun lookup(query: ScrapeQuery, settings: ScraperSettings): ScrapeCandidate? {
-        val response = try {
-            http.get("https://api.screenscraper.fr/api2/jeuInfos.php") {
-                commonParams(settings)
-                parameter("romtype", "rom")
-                parameter("romnom", query.fileName)
-                if (query.fileSize > 0) parameter("romtaille", query.fileSize)
-                query.crc32?.let { parameter("crc", it) }
-                query.md5?.let { parameter("md5", it) }
-                query.screenScraperId?.let { parameter("systemeid", it) }
-            }.body<String>()
-        } catch (_: Exception) {
-            return null
+    override suspend fun lookupResult(
+        query: ScrapeQuery,
+        settings: ScraperSettings
+    ): SourceLookupOutcome {
+        val result = http.getStringResult("https://api.screenscraper.fr/api2/jeuInfos.php") {
+            screenScraperParams(settings, devId, devPassword)
+            parameter("romtype", "rom")
+            parameter("romnom", query.fileName)
+            if (query.fileSize > 0) parameter("romtaille", query.fileSize)
+            query.crc32?.let { parameter("crc", it) }
+            query.md5?.let { parameter("md5", it) }
+            query.screenScraperId?.let { parameter("systemeid", it) }
         }
-        return parseJeu(response, settings)
+        return when (result) {
+            is HttpJsonResult.Failed -> SourceLookupOutcome.Failed(result.failure)
+            is HttpJsonResult.Ok -> parseJeuOutcome(result.value, settings)
+        }
     }
 
     override suspend fun search(
@@ -57,36 +62,49 @@ class ScreenScraperSource(
         query: ScrapeQuery,
         settings: ScraperSettings
     ): List<ScrapeCandidate> {
-        val response = try {
-            http.get("https://api.screenscraper.fr/api2/jeuRecherche.php") {
-                commonParams(settings)
-                parameter("recherche", name)
-                query.screenScraperId?.let { parameter("systemeid", it) }
-            }.body<String>()
-        } catch (_: Exception) {
-            return emptyList()
+        val result = http.getStringResult("https://api.screenscraper.fr/api2/jeuRecherche.php") {
+            screenScraperParams(settings, devId, devPassword)
+            parameter("recherche", name)
+            query.screenScraperId?.let { parameter("systemeid", it) }
         }
+        val response = when (result) {
+            is HttpJsonResult.Failed -> return emptyList()
+            is HttpJsonResult.Ok -> result.value
+        }
+        if (response.contains("\"error\"", ignoreCase = true)) return emptyList()
         return try {
-            val parsed = json.decodeFromString<SsSearchEnvelope>(response)
+            val parsed = WajihaJson.Lenient.decodeFromString<SsSearchEnvelope>(response)
             parsed.response?.jeux.orEmpty().mapNotNull { it.toCandidate(settings) }
         } catch (_: Exception) {
             emptyList()
         }
     }
 
-    private fun io.ktor.client.request.HttpRequestBuilder.commonParams(settings: ScraperSettings) {
-        parameter("devid", devId)
-        parameter("devpassword", devPassword)
-        parameter("softname", "wajiha")
-        parameter("output", "json")
-        parameter("ssid", settings.screenScraperUser)
-        parameter("sspassword", settings.screenScraperPassword)
-    }
-
-    private fun parseJeu(response: String, settings: ScraperSettings): ScrapeCandidate? = try {
-        json.decodeFromString<SsGameEnvelope>(response).response?.jeu?.toCandidate(settings)
-    } catch (_: Exception) {
-        null
+    private fun parseJeuOutcome(response: String, settings: ScraperSettings): SourceLookupOutcome {
+        if (response.contains("\"error\"", ignoreCase = true)) {
+            val lower = response.lowercase()
+            val failure = when {
+                "quota" in lower || "rate" in lower ->
+                    ScrapeFailure(ScrapeFailureKind.RateLimited, "ScreenScraper quota exceeded")
+                "login" in lower || "password" in lower || "user" in lower ->
+                    ScrapeFailure(ScrapeFailureKind.Auth, "ScreenScraper auth failed")
+                else -> classifyHttpStatus(200, response).copy(
+                    kind = ScrapeFailureKind.Unknown,
+                    message = "ScreenScraper API error"
+                )
+            }
+            return SourceLookupOutcome.Failed(failure)
+        }
+        return try {
+            val candidate = WajihaJson.Lenient
+                .decodeFromString<SsGameEnvelope>(response)
+                .response?.jeu?.toCandidate(settings)
+            if (candidate != null) SourceLookupOutcome.Hit(candidate) else SourceLookupOutcome.Miss
+        } catch (e: Exception) {
+            SourceLookupOutcome.Failed(
+                ScrapeFailure(ScrapeFailureKind.Parse, e.message ?: "Parse failed")
+            )
+        }
     }
 
     // --- ScreenScraper JSON model (subset) ---

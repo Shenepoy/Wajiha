@@ -8,6 +8,7 @@ import com.wajiha.data.db.GameMediaEntity
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeEngine
+import com.wajiha.data.scraper.ScrapeRunPolicy
 import com.wajiha.data.scraper.ScraperSettingsRepository
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.PlatformRepository
@@ -32,6 +33,8 @@ data class GameDetailUiState(
     val scraperSources: List<String> = emptyList(),
     val scraping: Boolean = false,
     val scrapeMessage: String? = null,
+    /** null = neutral, true = success, false = error/partial */
+    val scrapeMessageSuccess: Boolean? = null,
     val actionError: String? = null
 )
 
@@ -48,6 +51,7 @@ class GameDetailViewModel(
     private val gameId = MutableStateFlow<Long?>(null)
     private val scraping = MutableStateFlow(false)
     private val scrapeMessage = MutableStateFlow<String?>(null)
+    private val scrapeMessageSuccess = MutableStateFlow<Boolean?>(null)
     private val actionError = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<GameDetailUiState> = gameId
@@ -68,13 +72,19 @@ class GameDetailViewModel(
                         ) { g, platform, emulators, media, playtime ->
                             CoreDetail(g, platform, emulators, media, playtime)
                         }
+                        val scrapeUi = combine(
+                            scraping,
+                            scrapeMessage,
+                            scrapeMessageSuccess,
+                            actionError
+                        ) { isScraping, message, messageOk, error ->
+                            ScrapeUi(isScraping, message, messageOk, error)
+                        }
                         combine(
                             core,
                             scraperSettings.settings,
-                            scraping,
-                            scrapeMessage,
-                            actionError
-                        ) { base, scraperCfg, isScraping, message, error ->
+                            scrapeUi
+                        ) { base, scraperCfg, scrape ->
                             val sources = scrapeEngine.configuredSources(
                                 scraperCfg.forPlatform(base.game.platformId)
                             ).map { it.id }
@@ -85,9 +95,10 @@ class GameDetailViewModel(
                                 media = base.media,
                                 totalPlaytimeSec = base.playtime,
                                 scraperSources = sources,
-                                scraping = isScraping,
-                                scrapeMessage = message,
-                                actionError = error
+                                scraping = scrape.scraping,
+                                scrapeMessage = scrape.message,
+                                scrapeMessageSuccess = scrape.messageSuccess,
+                                actionError = scrape.error
                             )
                         }
                     }
@@ -99,6 +110,7 @@ class GameDetailViewModel(
     fun open(id: Long) {
         gameId.value = id
         scrapeMessage.value = null
+        scrapeMessageSuccess.value = null
         actionError.value = null
     }
 
@@ -117,33 +129,42 @@ class GameDetailViewModel(
         viewModelScope.launch { gameRepository.setLaunchOnDisplay(id, displayId) }
     }
 
-    fun rescrape(sourceId: String? = null) {
+    fun rescrape(
+        sourceId: String? = null,
+        policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps
+    ) {
         val game = uiState.value.game ?: return
         viewModelScope.launch {
             scraping.value = true
             scrapeMessage.value = null
+            scrapeMessageSuccess.value = null
             actionError.value = null
-            val settings = scraperSettings.current().forPlatform(game.platformId)
-            val result = if (sourceId == null) {
-                scrapeEngine.scrapeGame(game, settings)
-            } else {
-                val candidates = scrapeEngine.searchAll(game.displayName, game, settings)
-                val pick = candidates.firstOrNull { it.sourceId == sourceId }
-                if (pick != null) {
-                    scrapeEngine.applyManualMatch(game, pick, settings)
+            try {
+                val settings = scraperSettings.current().forPlatform(game.platformId)
+                val result = if (sourceId == null) {
+                    scrapeEngine.scrapeGame(game, settings, policy)
                 } else {
-                    com.wajiha.data.scraper.GameScrapeResult(
-                        game.id,
-                        matched = false,
-                        error = "No match from $sourceId"
-                    )
+                    val candidates = scrapeEngine.searchAll(game.displayName, game, settings)
+                    val pick = candidates.firstOrNull { it.sourceId == sourceId }
+                    if (pick != null) {
+                        scrapeEngine.applyManualMatch(game, pick, settings)
+                    } else {
+                        com.wajiha.data.scraper.GameScrapeResult(
+                            gameId = game.id,
+                            outcome = com.wajiha.data.scraper.GameScrapeOutcome.NoMatch,
+                            failureKind = com.wajiha.data.scraper.ScrapeFailureKind.NoMatch,
+                            message = "No match from $sourceId"
+                        )
+                    }
                 }
-            }
-            scraping.value = false
-            scrapeMessage.value = when {
-                result.matched -> "Scraped: ${result.mediaSaved} media from " +
-                    "${result.metadataSource ?: sourceId ?: "sources"}"
-                else -> result.error ?: "No match found"
+                val (msg, ok) = result.userMessage(verb = "Scraped", sourceId = sourceId)
+                scrapeMessage.value = msg
+                scrapeMessageSuccess.value = ok
+            } catch (e: Exception) {
+                scrapeMessage.value = e.message ?: "Scrape failed"
+                scrapeMessageSuccess.value = false
+            } finally {
+                scraping.value = false
             }
         }
     }
@@ -153,37 +174,55 @@ class GameDetailViewModel(
         viewModelScope.launch {
             scraping.value = true
             scrapeMessage.value = null
-            val settings = scraperSettings.current().forPlatform(game.platformId)
-            val candidates = scrapeEngine.searchAll(game.displayName, game, settings)
-            val pick = candidates.firstOrNull { it.sourceId == sourceId }
-            if (pick == null) {
-                scraping.value = false
-                scrapeMessage.value = "No match from $sourceId"
-                return@launch
-            }
-            val media = pick.media.firstOrNull { it.type == mediaType }
-            if (media == null) {
-                scraping.value = false
-                scrapeMessage.value = "No ${mediaType.dbName} from $sourceId"
-                return@launch
-            }
-            val path = scrapeEngine.download(game.id, media, settings)
-            if (path == null) {
-                scraping.value = false
-                scrapeMessage.value = "Download failed"
-                return@launch
-            }
-            gameRepository.saveMedia(
-                GameMediaEntity(
-                    gameId = game.id,
-                    type = mediaType.dbName,
-                    source = sourceId,
-                    localPath = path,
-                    remoteUrl = media.url
+            scrapeMessageSuccess.value = null
+            try {
+                val settings = scraperSettings.current().forPlatform(game.platformId)
+                val candidates = scrapeEngine.searchAll(game.displayName, game, settings)
+                val pick = candidates.firstOrNull { it.sourceId == sourceId }
+                if (pick == null) {
+                    scrapeMessage.value = "No match from $sourceId"
+                    scrapeMessageSuccess.value = false
+                    return@launch
+                }
+                val media = pick.media.firstOrNull { it.type == mediaType }
+                if (media == null) {
+                    scrapeMessage.value = "No ${mediaType.dbName} from $sourceId"
+                    scrapeMessageSuccess.value = false
+                    return@launch
+                }
+                val path = scrapeEngine.download(game.id, media, settings)
+                if (path == null) {
+                    scrapeMessage.value = "Download failed"
+                    scrapeMessageSuccess.value = false
+                    return@launch
+                }
+                gameRepository.saveMedia(
+                    GameMediaEntity(
+                        gameId = game.id,
+                        type = mediaType.dbName,
+                        source = sourceId,
+                        localPath = path,
+                        remoteUrl = media.url
+                    )
                 )
-            )
-            scraping.value = false
-            scrapeMessage.value = "Saved ${mediaType.dbName} from $sourceId"
+                scrapeMessage.value = "Saved ${mediaType.dbName} from $sourceId"
+                scrapeMessageSuccess.value = true
+            } catch (e: Exception) {
+                scrapeMessage.value = e.message ?: "Scrape failed"
+                scrapeMessageSuccess.value = false
+            } finally {
+                scraping.value = false
+            }
+        }
+    }
+
+    fun deleteMedia(type: MediaType) {
+        val game = uiState.value.game ?: return
+        viewModelScope.launch {
+            val existing = gameRepository.mediaOfType(game.id, type.dbName) ?: return@launch
+            gameRepository.deleteMedia(existing.id)
+            scrapeMessage.value = "Removed ${type.dbName}"
+            scrapeMessageSuccess.value = true
         }
     }
 
@@ -200,6 +239,7 @@ class GameDetailViewModel(
 
     fun clearScrapeMessage() {
         scrapeMessage.value = null
+        scrapeMessageSuccess.value = null
     }
 }
 
@@ -209,4 +249,11 @@ private data class CoreDetail(
     val emulators: List<EmulatorEntity>,
     val media: List<GameMediaEntity>,
     val playtime: Long
+)
+
+private data class ScrapeUi(
+    val scraping: Boolean,
+    val message: String?,
+    val messageSuccess: Boolean?,
+    val error: String?
 )

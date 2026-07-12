@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Display
 import android.view.KeyEvent
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
@@ -11,8 +12,10 @@ import androidx.activity.enableEdgeToEdge
 import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.input.GamepadGate
 import com.wajiha.android.input.GamepadKeyRouter
-import com.wajiha.android.input.handleGamepadKey
+import com.wajiha.android.input.TriggerAxisHandler
+import com.wajiha.android.input.dispatchLauncherKeyEvent
 import com.wajiha.android.monitor.ForegroundAppMonitor
+import com.wajiha.android.ui.hideSystemStatusBar
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 import com.wajiha.state.GamepadOwner
@@ -34,6 +37,7 @@ class SecondaryHomeActivity : ComponentActivity() {
 
     private val displayCoordinator: DisplayCoordinator by inject()
     private val gamepadKeyRouter: GamepadKeyRouter by inject()
+    private val triggerAxisHandler: TriggerAxisHandler by inject()
     private val gamepadGate: GamepadGate by inject()
     private val foregroundAppMonitor: ForegroundAppMonitor by inject()
 
@@ -66,8 +70,12 @@ class SecondaryHomeActivity : ComponentActivity() {
         // Home surface: BACK must never dismiss it (in-app screens register
         // their own Compose BackHandlers on top of this).
         onBackPressedDispatcher.addCallback(this) { }
+        hideSystemStatusBar()
         setContent {
             SecondaryApp()
+        }
+        window.decorView.post {
+            triggerAxisHandler.installOn(this, gamepadGate)
         }
     }
 
@@ -83,11 +91,26 @@ class SecondaryHomeActivity : ComponentActivity() {
             }
             return true
         }
-        if (gamepadGate.shouldBlockGamepad()) return false
-        return gamepadKeyRouter.dispatch(GamepadOwner.Secondary, event) { remappedOrRaw ->
-            handleGamepadKey(this, remappedOrRaw) { super.dispatchKeyEvent(it) } ||
-                super.dispatchKeyEvent(remappedOrRaw)
+        return dispatchLauncherKeyEvent(
+            owner = GamepadOwner.Secondary,
+            event = event,
+            gamepadGate = gamepadGate,
+            gamepadKeyRouter = gamepadKeyRouter
+        ) { super.dispatchKeyEvent(it) }
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (!gamepadGate.shouldBlockGamepad() && triggerAxisHandler.onGenericMotion(event)) {
+            return true
         }
+        return super.dispatchGenericMotionEvent(event)
+    }
+
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (!gamepadGate.shouldBlockGamepad() && triggerAxisHandler.onGenericMotion(event)) {
+            return true
+        }
+        return super.onGenericMotionEvent(event)
     }
 
     override fun onDestroy() {
@@ -125,7 +148,9 @@ class SecondaryHomeActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         val displayId = display?.displayId
-        if (!hasFocus && displayId != null && displayId != Display.DEFAULT_DISPLAY) {
+        if (hasFocus) {
+            hideSystemStatusBar()
+        } else if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
                 "onWindowFocusChanged: lost focus displayId=$displayId — fast reclaim"
@@ -136,6 +161,7 @@ class SecondaryHomeActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        hideSystemStatusBar()
         isResumed = true
         gamepadGate.onLauncherForegrounded()
         foregroundAppMonitor.onLauncherForegrounded()

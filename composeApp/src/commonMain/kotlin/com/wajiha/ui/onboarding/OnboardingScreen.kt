@@ -39,7 +39,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
+import com.wajiha.input.requestContentFocus
+import com.wajiha.input.wajihaGamepadFocus
+import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadForm
@@ -70,12 +75,15 @@ fun OnboardingScreen(
     settingsViewModel: SettingsViewModel,
     onFinished: () -> Unit,
     onOpenPlatformPicker: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    gamepadOwner: GamepadOwner? = null,
+    onClaimGamepad: ((GamepadOwner) -> Unit)? = null
 ) {
     val controls = koinInject<SystemControls>()
     var step by remember { mutableStateOf(SetupStep.Welcome) }
     var perms by remember { mutableStateOf(PermissionStates()) }
     val folders by settingsViewModel.folders.collectAsState()
+    val contentFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -90,8 +98,12 @@ fun OnboardingScreen(
         showActionBar = true,
         gamepadHints = listOf(
             "A" to "Continue",
-            "B" to "Back / Skip"
-        )
+            "B" to "Back / Skip",
+            "L2" to "Focus screen"
+        ),
+        gamepadOwner = gamepadOwner,
+        onClaimGamepad = onClaimGamepad,
+        onOwnerGainedFocus = { contentFocus.requestContentFocus() }
     ) {
         Box(
             modifier = Modifier
@@ -113,45 +125,51 @@ fun OnboardingScreen(
                 },
                 label = "setup"
             ) { current ->
-                GamepadForm(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .widthIn(max = 560.dp)
+                        .focusRequester(contentFocus)
+                        .wajihaGamepadFocus()
                 ) {
-                    when (current) {
-                        SetupStep.Welcome -> WelcomeBeat(
-                            onContinue = { step = SetupStep.Theme },
-                            onSkip = onFinished
-                        )
-                        SetupStep.Theme -> ThemeBeat(
-                            onPick = { theme ->
-                                settingsViewModel.setTheme(theme)
-                                step = SetupStep.GrantAccess
-                            },
-                            onBack = { step = SetupStep.Welcome }
-                        )
-                        SetupStep.GrantAccess -> GrantAccessBeat(
-                            perms = perms,
-                            controls = controls,
-                            onBack = { step = SetupStep.Theme },
-                            onContinue = { step = SetupStep.DefaultHome }
-                        )
-                        SetupStep.DefaultHome -> HomeBeat(
-                            isDefault = perms.isDefaultLauncher,
-                            onOpenHome = controls::openHomeSettings,
-                            onBack = { step = SetupStep.GrantAccess },
-                            onContinue = { step = SetupStep.AddGames }
-                        )
-                        SetupStep.AddGames -> AddGamesBeat(
-                            folderCount = folders.size,
-                            onAddPlatform = {
-                                onOpenPlatformPicker?.invoke() ?: onFinished()
-                            },
-                            onBack = { step = SetupStep.DefaultHome },
-                            onContinue = { step = SetupStep.Done },
-                            onSkip = { step = SetupStep.Done }
-                        )
-                        SetupStep.Done -> DoneBeat(onFinished = onFinished)
+                    GamepadForm(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        when (current) {
+                            SetupStep.Welcome -> WelcomeBeat(
+                                onContinue = { step = SetupStep.Theme },
+                                onSkip = onFinished
+                            )
+                            SetupStep.Theme -> ThemeBeat(
+                                onPick = { theme ->
+                                    settingsViewModel.setTheme(theme)
+                                    step = SetupStep.GrantAccess
+                                },
+                                onBack = { step = SetupStep.Welcome }
+                            )
+                            SetupStep.GrantAccess -> GrantAccessBeat(
+                                perms = perms,
+                                controls = controls,
+                                onBack = { step = SetupStep.Theme },
+                                onContinue = { step = SetupStep.DefaultHome }
+                            )
+                            SetupStep.DefaultHome -> HomeBeat(
+                                isDefault = perms.isDefaultLauncher,
+                                onOpenHome = controls::openHomeSettings,
+                                onBack = { step = SetupStep.GrantAccess },
+                                onContinue = { step = SetupStep.AddGames }
+                            )
+                            SetupStep.AddGames -> AddGamesBeat(
+                                folderCount = folders.size,
+                                onAddPlatform = {
+                                    onOpenPlatformPicker?.invoke() ?: onFinished()
+                                },
+                                onBack = { step = SetupStep.DefaultHome },
+                                onContinue = { step = SetupStep.Done },
+                                onSkip = { step = SetupStep.Done }
+                            )
+                            SetupStep.Done -> DoneBeat(onFinished = onFinished)
+                        }
                     }
                 }
             }

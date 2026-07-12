@@ -18,4 +18,6 @@ object WajihaTags {
     const val SCRAPE = "Wajiha/Scrape"
     const val LIBRARY = "Wajiha/Library"
     const val EXTERNAL_RESOLVE = "Wajiha/ExternalResolve"
+    /** Debug-only session dumps and adb broadcast responses (filter: `adb logcat -s Wajiha/Debug`) */
+    const val DEBUG = "Wajiha/Debug"
 }

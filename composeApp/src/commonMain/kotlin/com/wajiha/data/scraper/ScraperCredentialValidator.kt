@@ -1,14 +1,12 @@
 package com.wajiha.data.scraper
 
+import com.wajiha.data.WajihaJson
 import com.wajiha.di.ScreenScraperDevCredentials
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.parameter
-import io.ktor.util.encodeBase64
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 sealed class CredentialTestResult {
     data class Success(val message: String) : CredentialTestResult()
@@ -20,26 +18,19 @@ class ScraperCredentialValidator(
     private val http: HttpClient,
     private val devCreds: ScreenScraperDevCredentials
 ) {
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
-
     suspend fun testScreenScraper(settings: ScraperSettings): CredentialTestResult {
         if (settings.screenScraperUser.isBlank() || settings.screenScraperPassword.isBlank()) {
             return CredentialTestResult.Failure("Username and password required")
         }
         return try {
             val body = http.get("https://api.screenscraper.fr/api2/ssuserInfos.php") {
-                parameter("devid", devCreds.devId)
-                parameter("devpassword", devCreds.devPassword)
-                parameter("softname", "wajiha")
-                parameter("output", "json")
-                parameter("ssid", settings.screenScraperUser)
-                parameter("sspassword", settings.screenScraperPassword)
+                screenScraperParams(settings, devCreds)
             }.body<String>()
             if (body.contains("\"error\"", ignoreCase = true)) {
                 CredentialTestResult.Failure("Invalid credentials or API error")
             } else {
                 val pseudo = runCatching {
-                    json.decodeFromString<SsUserEnvelope>(body).response?.ssuser?.pseudo
+                    WajihaJson.Lenient.decodeFromString<SsUserEnvelope>(body).response?.ssuser?.pseudo
                 }.getOrNull()
                 val label = pseudo?.takeIf { it.isNotBlank() } ?: settings.screenScraperUser
                 CredentialTestResult.Success("Logged in as $label")
@@ -55,10 +46,10 @@ class ScraperCredentialValidator(
         }
         return try {
             val body = http.get("https://www.steamgriddb.com/api/v2/user") {
-                header("Authorization", "Bearer ${settings.steamGridDbApiKey}")
+                steamGridDbAuth(settings)
             }.body<String>()
             val username = runCatching {
-                json.decodeFromString<SgdbUserEnvelope>(body).data?.username
+                WajihaJson.Lenient.decodeFromString<SgdbUserEnvelope>(body).data?.username
             }.getOrNull()
             if (username.isNullOrBlank()) {
                 CredentialTestResult.Failure("Invalid API key")
@@ -77,10 +68,7 @@ class ScraperCredentialValidator(
         }
         return try {
             http.get("$base/api/roms") {
-                if (settings.rommUsername.isNotBlank()) {
-                    val token = "${settings.rommUsername}:${settings.rommPassword}".encodeBase64()
-                    header("Authorization", "Basic $token")
-                }
+                rommAuth(settings)
                 parameter("limit", 1)
             }.body<String>()
             CredentialTestResult.Success("Connected to RomM server")

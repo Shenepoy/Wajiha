@@ -6,11 +6,14 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
 import androidx.work.ForegroundInfo
+import com.wajiha.state.SystemNotificationKind
+import com.wajiha.state.SystemNotificationStore
+import org.koin.core.context.GlobalContext
 
 /**
  * Shared notification builder for library scan and batch scrape workers.
  * Progress uses a low-importance ongoing foreground notification; completion
- * posts a separate summary notification.
+ * posts a separate summary notification and mirrors into the in-app status bar.
  */
 object OperationNotificationHelper {
 
@@ -24,10 +27,15 @@ object OperationNotificationHelper {
 
     private const val MAX_FAILURE_LINES = 3
 
-    fun ensureChannel(context: Context, channelId: String, name: String) {
+    fun ensureChannel(
+        context: Context,
+        channelId: String,
+        name: String,
+        importance: Int = NotificationManager.IMPORTANCE_LOW
+    ) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
-            NotificationChannel(channelId, name, NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(channelId, name, importance)
         )
     }
 
@@ -93,15 +101,20 @@ object OperationNotificationHelper {
         platformLabel: String?,
         done: Int,
         total: Int,
-        matched: Int,
-        failed: Int,
-        currentGameName: String?
+        summary: String,
+        currentGameName: String?,
+        paused: Boolean = false
     ): ForegroundInfo {
         ensureChannel(context, CHANNEL_SCRAPE, "Scraping")
-        val title = if (platformLabel != null) "Scraping $platformLabel" else "Scraping library"
+        val title = when {
+            paused && platformLabel != null -> "Paused — $platformLabel"
+            paused -> "Scrape paused"
+            platformLabel != null -> "Scraping $platformLabel"
+            else -> "Scraping library"
+        }
         val detail = currentGameName?.let { shorten(it, 48) }
         val progressText = when {
-            total > 0 -> "$done / $total — $matched matched, $failed failed"
+            total > 0 -> "$done / $total — $summary"
             else -> "Preparing scrape…"
         }
         val notification = Notification.Builder(context, CHANNEL_SCRAPE)
@@ -145,19 +158,22 @@ object OperationNotificationHelper {
             .build()
         context.getSystemService(NotificationManager::class.java)
             .notify(NOTIF_ID_SCAN_COMPLETE, notification)
+        postInApp(
+            title = if (platformLabel != null) "$title · $platformLabel" else title,
+            body = summary.lineSequence().first(),
+            kind = if (success) SystemNotificationKind.Success else SystemNotificationKind.Error
+        )
     }
 
     fun postScrapeComplete(
         context: Context,
         platformLabel: String?,
-        matched: Int,
-        failed: Int,
-        errors: Map<Long, String>
+        progress: com.wajiha.data.scraper.BatchScrapeProgress
     ) {
         ensureChannel(context, CHANNEL_SCRAPE, "Scraping")
-        val success = failed == 0
-        val title = if (success) "Scrape complete" else "Scrape finished with errors"
-        val summary = buildScrapeSummary(matched, failed, errors)
+        val success = progress.problemCount == 0
+        val title = if (success) "Scrape complete" else "Scrape finished with issues"
+        val summary = buildScrapeSummary(progress)
         val notification = Notification.Builder(context, CHANNEL_SCRAPE)
             .setSmallIcon(
                 if (success) android.R.drawable.stat_sys_download_done
@@ -170,11 +186,22 @@ object OperationNotificationHelper {
             .build()
         context.getSystemService(NotificationManager::class.java)
             .notify(NOTIF_ID_SCRAPE_COMPLETE, notification)
+        postInApp(
+            title = if (platformLabel != null) "$title · $platformLabel" else title,
+            body = summary.lineSequence().first(),
+            kind = if (success) SystemNotificationKind.Success else SystemNotificationKind.Warning
+        )
     }
 
     fun shortenFolderUri(uri: String): String {
         val decoded = runCatching { android.net.Uri.parse(uri).lastPathSegment }.getOrNull()
         return shorten(decoded ?: uri, 40)
+    }
+
+    fun postInApp(title: String, body: String, kind: SystemNotificationKind) {
+        runCatching {
+            GlobalContext.get().get<SystemNotificationStore>().post(title, body, kind)
+        }
     }
 
     private fun buildScanSummary(
@@ -198,18 +225,21 @@ object OperationNotificationHelper {
     }
 
     private fun buildScrapeSummary(
-        matched: Int,
-        failed: Int,
-        errors: Map<Long, String>
+        progress: com.wajiha.data.scraper.BatchScrapeProgress
     ): String = buildString {
-        appendLine("$matched updated · $failed failed")
-        if (failed > 0) {
-            errors.values.take(MAX_FAILURE_LINES).forEach { appendLine("• ${shorten(it, 80)}") }
-            if (errors.size > MAX_FAILURE_LINES) {
-                appendLine("• …and ${errors.size - MAX_FAILURE_LINES} more")
+        appendLine(progress.summaryLine())
+        val issues = progress.issues
+        if (issues.isNotEmpty()) {
+            issues.take(MAX_FAILURE_LINES).forEach { issue ->
+                appendLine("• ${shorten("${issue.gameName}: ${issue.message}", 80)}")
+            }
+            if (issues.size > MAX_FAILURE_LINES) {
+                appendLine("• …and ${issues.size - MAX_FAILURE_LINES} more")
             }
         }
-        append(if (failed == 0) "Success" else "Completed with errors")
+        append(
+            if (progress.problemCount == 0) "Success" else "Completed with issues"
+        )
     }
 
     private fun shorten(text: String, max: Int): String =

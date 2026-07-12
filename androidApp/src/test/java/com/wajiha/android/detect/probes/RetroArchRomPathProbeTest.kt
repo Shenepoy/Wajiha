@@ -15,7 +15,7 @@ class RetroArchRomPathProbeTest {
         """.trimIndent()
         assertEquals(
             "/storage/emulated/0/RetroArch/playlists/builtin/content_history.lpl",
-            RetroArchRomPathProbe.parseCfgValue(cfg, "content_history_path")
+            IniKeyParser.cfgValue(cfg, "content_history_path")
         )
     }
 

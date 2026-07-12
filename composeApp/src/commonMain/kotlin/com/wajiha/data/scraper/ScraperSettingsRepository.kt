@@ -7,12 +7,12 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.serialization.json.Json
+import com.wajiha.data.WajihaJson
 
 /** Persists the whole [ScraperSettings] blob as JSON in DataStore. */
 class ScraperSettingsRepository(private val dataStore: DataStore<Preferences>) {
 
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val json = WajihaJson.Settings
 
     val settings: Flow<ScraperSettings> = dataStore.data.map { prefs ->
         prefs[KEY]?.let {

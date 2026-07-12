@@ -29,7 +29,7 @@ fun NowPlayingPanel(
     state: NowPlayingState?,
     modifier: Modifier = Modifier
 ) {
-    val label = state?.gameName ?: state?.appLabel ?: state?.packageName
+    val label = sessionDisplayLabel(state)
     Column(
         modifier = modifier
             .fillMaxSize()

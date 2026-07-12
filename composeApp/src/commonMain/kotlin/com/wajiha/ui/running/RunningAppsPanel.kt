@@ -2,7 +2,6 @@ package com.wajiha.ui.running
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,9 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.wajiha.platform.AppActions
 import com.wajiha.state.DualScreenStore
+import com.wajiha.ui.components.SecondaryPanelScaffold
 import com.wajiha.ui.components.WajihaEmptyState
-import com.wajiha.ui.components.WajihaPanel
-import com.wajiha.ui.components.gamepad.GamepadActionBar
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadList
 import com.wajiha.ui.components.gamepad.runningAppsGamepadHints
@@ -42,9 +40,12 @@ fun RunningAppsPanel(
     val apps by store.runningApps.collectAsState()
     val secondaryDisplayId by store.secondaryDisplayId.collectAsState()
 
-    Column(modifier = modifier.fillMaxSize()) {
-        WajihaPanel(modifier = Modifier.weight(1f)) {
-            Text(
+    SecondaryPanelScaffold(
+        modifier = modifier,
+        showGamepadHints = showGamepadHints,
+        hints = runningAppsGamepadHints
+    ) {
+        Text(
             text = "Running apps",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
@@ -109,10 +110,6 @@ fun RunningAppsPanel(
                     )
                 }
             }
-        }
-        }
-        if (showGamepadHints) {
-            GamepadActionBar(hints = runningAppsGamepadHints)
         }
     }
 }

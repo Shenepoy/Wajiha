@@ -1,7 +1,7 @@
 package com.wajiha.data.config
 
+import com.wajiha.data.WajihaJson
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 /**
  * Importer for iiSU `emuladores_default.json`
@@ -9,10 +9,7 @@ import kotlinx.serialization.json.Json
  */
 object IisuImporter {
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+    private val json = WajihaJson.Lenient
 
     @Serializable
     private data class IisuFile(val consoles: List<IisuConsole> = emptyList())

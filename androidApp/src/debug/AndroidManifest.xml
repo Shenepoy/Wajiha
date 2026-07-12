@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Debug-only: adb shell am broadcast -a com.wajiha.DEBUG_* -p com.wajiha -->
+        <receiver
+            android:name=".debug.DebugBroadcastReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.wajiha.DEBUG_DUMP_SESSIONS" />
+                <action android:name="com.wajiha.DEBUG_REFRESH_SESSIONS" />
+                <action android:name="com.wajiha.DEBUG_CLEAR_SUPPRESS" />
+                <action android:name="com.wajiha.DEBUG_SIMULATE_FOREGROUND" />
+                <action android:name="com.wajiha.DEBUG_TOGGLE_GAMEPAD_OWNER" />
+                <action android:name="com.wajiha.DEBUG_DUMP_GAMEPAD" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

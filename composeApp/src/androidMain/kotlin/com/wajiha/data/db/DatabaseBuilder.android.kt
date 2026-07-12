@@ -12,3 +12,6 @@ fun databaseBuilder(context: Context): RoomDatabase.Builder<WajihaDatabase> {
         name = dbFile.absolutePath
     )
 }
+
+fun createWajihaDatabase(context: Context): WajihaDatabase =
+    buildWajihaDatabase(databaseBuilder(context))

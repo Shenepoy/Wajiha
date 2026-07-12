@@ -18,7 +18,7 @@ Koin. Shared modules in `com.wajiha.di`:
 - `dataModule` — DAOs, repositories, `ConfigInstaller`, `SettingsRepository`, `LibraryScanner`
 - `scraperModule` — `HttpClient` (Ktor), `ScraperSettingsRepository`, the six `ScraperSource`s, `ScrapeEngine` (with the host's `ImageProcessor` when bound), `BatchProgressStore`, `BatchScraper`, `RaClient`, `RaRepository`
 - `stateModule` — `DualScreenStore`
-- `uiModule` — `HomeViewModel`, `SettingsViewModel`, `ScraperViewModel`, `RaViewModel`
+- `uiModule` — `HomeViewModel`, `SettingsViewModel`, `ScraperViewModel`, `RaViewModel`, `GameDetailViewModel`, `PlatformSettingsViewModel`
 
 The Android host adds `androidModule` (in `WajihaApplication`) providing the database builder, DataStore, SAF scanner/hasher, launcher stack, display coordinator, foreground monitor, system controller, media storage, and the `ScreenScraperDevCredentials` from BuildConfig.
 
@@ -34,7 +34,7 @@ Room KMP (`com.wajiha.data.db`), bundled SQLite driver. Tables:
 | `rom_folders` | SAF tree URIs per platform with scan settings. |
 | `game_media` | One row per (game, media type): source, local path, remote url. |
 | `play_sessions` | Start/end/duration; `origin` distinguishes launcher vs detected sessions. |
-| `collections` + `collection_games` | User collections. |
+| `collections` + `collection_games` | User collections (**schema + repository exist; UI pending**). |
 
 Indices: `games(uri)` unique, `games(platformId, displayName)`, hash columns, `game_media(gameId, type)`, session times.
 
@@ -46,7 +46,7 @@ Settings are two DataStore blobs: `SettingsRepository` (typed keys for app/dual-
 
 - `UnifiedConfig.kt` — Wajiha's internal `PlatformConfig`/`EmulatorConfig` schema.
 - `DaijishouImporter` — parses Daijishō platform JSON (119 bundled fixtures under `composeResources/files/platforms/daijishou/`), extracting extensions from player regexes, RA console ids, libretro names from `LIBRETRO:` scraper sources, and am-start arguments.
-- `IisuImporter` — parses iiSU's 173-console `emuladores_default.json` (bundled).
+- `IisuImporter` — parses iiSU's 173-console `iisu_consoles.json` (bundled under `composeResources/files/platforms/`).
 - `ConfigMerger` — merges both, Daijishō as canonical, iiSU filling gaps.
 - `AmStartArgumentsParser` — maps `-n/-a/-e/--es/--ez/-d/--activity-*` strings to structured intents.
 - `ConfigInstaller` — installs the bundled starter set on first run (`WajihaApplication.seedDefaultsIfNeeded`) and imports user-provided files.
@@ -64,7 +64,15 @@ Settings are two DataStore blobs: `SettingsRepository` (typed keys for app/dual-
 3. Applies RetroArch defaults (LIBRETRO core path + CONFIGFILE per variant package)
 4. Optionally kills emulator background processes first
 
-`PlaySessionTracker` opens a session on launch and closes it when `MainActivity.onResume` fires (returning from the game), updating play counts.
+`PlaySessionTracker` opens one Room row per active emulator package (multi-session). Rows close when `ForegroundAppMonitor` confirms a game ended, or when `MainActivity.onResume` runs with no active sessions in `DualScreenStore` (dual-display: bottom launcher stays foreground while gaming, so sessions are not closed on resume). See [sessions.md](sessions.md).
+
+## Gamepad input
+
+Full gamepad navigation lives in `composeApp/src/commonMain/kotlin/com/wajiha/input/` and `ui/components/gamepad/`. Android key routing is in `androidApp/.../input/GamepadKeyRouter.kt`. See [gamepad.md](gamepad.md).
+
+## ROM reconciliation (Tier 3)
+
+When **Settings → detect external games** is enabled, `ExternalGameResolver` probes emulator data (RetroArch `content_history.lpl`, AetherSX2 `playtime.dat` / `settings.ini`) to match manually launched ROMs to library games. Probes live in `androidApp/.../detect/probes/`.
 
 ## Dual-screen engine
 
@@ -72,7 +80,7 @@ Settings are two DataStore blobs: `SettingsRepository` (typed keys for app/dual-
 
 - `DisplayCoordinator` listens to `DisplayManager` and feeds `onDisplaysChanged` — this is what collapses to the single-display combined layout.
 - `SecondaryHomeActivity` (`SECONDARY_HOME` intent category) renders `SecondaryApp()`, which switches on the current mode. Android launches it on the second display automatically when Wajiha is the default home.
-- `ForegroundAppMonitor` polls `UsageStatsManager.queryEvents` every 2 s (or gets instant events from the opt-in `GameDetectAccessibilityService`), matches packages against known emulator lists + `CATEGORY_GAME` apps, and pushes `NowPlayingState` — this is how manually launched games appear on the bottom screen. It also maintains the Running Apps list (kill / move-to-display).
+- `ForegroundAppMonitor` polls `UsageStatsManager.queryEvents` every **2 s idle / 750 ms when sessions are active** (or gets instant events from the opt-in `GameDetectAccessibilityService`), matches packages against known emulator lists + `CATEGORY_GAME` apps, and maintains multi-session state in `DualScreenStore.sessionCache`. See [sessions.md](sessions.md) and [debug.md](debug.md).
 - `KeepAliveService` (foreground, `specialUse`) keeps the process alive while an external game is up.
 - Options mirrored into the store synchronously (blackout-on-launch, preferred game mode) so state transitions don't need async reads.
 
@@ -80,12 +88,12 @@ Settings are two DataStore blobs: `SettingsRepository` (typed keys for app/dual-
 
 `com.wajiha.data.scraper`:
 
-- `ScraperSource` — the plugin interface: `isConfigured`, `lookup` (hash-first auto match), `search` (manual, by name). Implementations are side-effect free; they return `ScrapeCandidate`s (metadata + `MediaCandidate` URLs).
-- `ScrapeEngine` — does the side effects. For one game: resolve effective settings via `ScraperSettings.forPlatform` (per-platform overrides of sources / priorities / regions; unset fields inherit globals), query every configured source once, apply metadata from the first source in `metadataPriority` that matched (merge, don't overwrite, unless it's a forced manual match), then for each media type walk `mediaPriority[type]`, pick the best-region candidate, download through a 4-permit semaphore, store via `MediaStorage`, upsert `game_media`. RA game ids are captured even when RA isn't the metadata source. Downloads run through `ImageProcessor` (Android: `AndroidImageProcessor`, BitmapFactory sample-decode) which enforces `maxImageResolution` — oversized images are downscaled and re-encoded (PNG when alpha matters, JPEG q88 otherwise).
-- `BatchScraper` — sequential driver with `StateFlow` progress, pause (suspends between games), and error report; honors `skipAlreadyScraped`. Progress is checkpointed to `BatchProgressStore` (DataStore JSON) after every game: a snapshot still marked `running` means the process died mid-run, so the next worker run carries the counts forward (already-scraped games are excluded by the filter). User cancels clear the resumable flag (`BatchScraper.requestCancel` before `WorkManager.cancel`); `restoreIfIdle()` seeds the UI with the last snapshot after an app restart.
-- `ScrapeWorker` (androidApp) — hosts the batch as a `dataSync` foreground WorkManager job with a progress notification; wifi-only maps to a network constraint at enqueue.
+- `ScraperSource` — the plugin interface: `isConfigured`, `lookupResult` (typed `SourceLookupOutcome`: Hit / Miss / Failed), legacy `lookup`, and `search` (manual, by name). Implementations classify auth / network / rate-limit / HTTP failures instead of swallowing them to null.
+- `ScrapeEngine` — does the side effects. For one game: resolve effective settings via `ScraperSettings.forPlatform`, query every configured source once via `lookupResult`, return a typed `GameScrapeResult` (`Matched` / `Partial` / `NoMatch` / `Error`) with per-source summaries. Metadata comes from the first source in `metadataPriority` that matched; media downloads that all fail yield `Partial` rather than a silent success. Downloads run through `ImageProcessor` (Android: `AndroidImageProcessor`) which enforces `maxImageResolution`.
+- `BatchScraper` — sequential driver with `StateFlow` progress (matched / partial / noMatch / errorCount + capped `issues` list), pause (status “Paused”), cancel, preflight (`preflightMessage`), and `prepareRetryFailed` for Error+Partial games. Progress is checkpointed to `BatchProgressStore` after every game; user cancels clear the resumable flag; `restoreIfIdle()` seeds the UI after restart.
+- `ScrapeWorker` (androidApp) — hosts the batch as a `dataSync` foreground WorkManager job; notifications mirror split counts and issue lines. Enqueue is blocked when work is already active or preflight fails (`LibraryActions.startScrape` / `retryFailedScrape` return a reason string).
 
-Sources and their quirks:
+Sources and their quirks (see also [external-apis.md](external-apis.md)):
 
 | Source | Auth | Match | Notes |
 |---|---|---|---|

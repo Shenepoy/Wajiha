@@ -23,6 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
@@ -32,11 +34,15 @@ import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.quickSettingsGamepadHints
 import com.wajiha.ui.components.gamepad.runningAppsGamepadHints
 import com.wajiha.ui.components.gamepad.secondaryModeTabGamepadHints
+import com.wajiha.ui.navigation.LauncherHeroPane
+import com.wajiha.ui.navigation.heroOnSecondary
+import com.wajiha.ui.navigation.menuOnSecondary
 import com.wajiha.ui.theme.WajihaTheme
 import com.wajiha.ui.theme.WajihaSpacing
 import com.wajiha.ui.theme.themeIsDark
 import com.wajiha.ui.theme.toFocusIndicatorStyle
 import kotlinx.coroutines.delay
+import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.LauncherPanel
@@ -45,7 +51,6 @@ import com.wajiha.ui.apps.AppDrawerScreen
 import com.wajiha.ui.gamedetail.GameDetailScreen
 import com.wajiha.ui.home.BottomScreen
 import com.wajiha.ui.home.HomeViewModel
-import com.wajiha.ui.home.TopScreen
 import com.wajiha.ui.ra.AchievementsPanel
 import com.wajiha.ui.running.RunningAppsPanel
 import com.wajiha.ui.scraper.ScraperScreen
@@ -61,6 +66,9 @@ import androidx.compose.material3.Button
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.requestContentFocus
+import com.wajiha.input.wajihaGamepadFocus
+import com.wajiha.platform.AppActions
 import com.wajiha.platform.UiSound
 import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.platform.SystemControls
@@ -110,9 +118,17 @@ fun SecondaryApp() {
         val store = koinInject<DualScreenStore>()
         val viewModel = koinInject<HomeViewModel>()
         val systemControls = koinInject<SystemControls>()
+        val screenState by store.state.collectAsState()
+        val isDual = screenState != DualScreenState.SingleDisplay
+        val swapped = settings.swapScreenRoles
+        val secondaryShowsHero = heroOnSecondary(isDual, swapped)
+        val secondaryShowsMenu = menuOnSecondary(isDual, swapped)
         val mode by store.secondaryMode.collectAsState()
         val heroContext by store.heroContext.collectAsState()
-        val nowPlayingUi by store.nowPlayingUiState.collectAsState()
+        val focusedGameId by store.focusedGameId.collectAsState()
+        val nowPlaying by store.nowPlaying.collectAsState()
+        val activeSessions by store.activeSessions.collectAsState()
+        val sessionActive = activeSessions.isNotEmpty()
         val state by viewModel.uiState.collectAsState()
         val apps by viewModel.apps.collectAsState()
         val backToGrid = { store.setSecondaryMode(SecondaryMode.GameGrid) }
@@ -129,39 +145,54 @@ fun SecondaryApp() {
             route = SecondaryRoute.GameDetail
         }
 
+        // Swapped roles: menu lives on primary — keep secondary as hero-only.
+        LaunchedEffect(secondaryShowsHero) {
+            if (secondaryShowsHero && route != SecondaryRoute.Modes) {
+                route = SecondaryRoute.Modes
+            }
+        }
+
         // Dual-display: secondary owns gamepad while on settings/apps modes
         // (Games grid ownership comes from gamesMenuOnPrimary default).
-        LaunchedEffect(route, mode) {
-            store.setSecondaryHoldsGamepad(
-                route != SecondaryRoute.Modes || mode != SecondaryMode.GameGrid
-            )
-            val panel = when {
-                route == SecondaryRoute.Settings ||
-                    route == SecondaryRoute.PlatformPicker ||
-                    route == SecondaryRoute.PlatformDetail ||
-                    route == SecondaryRoute.Scraper -> LauncherPanel.Settings
-                route == SecondaryRoute.GameDetail -> LauncherPanel.GameDetail
-                mode == SecondaryMode.AppDock -> LauncherPanel.Apps
-                mode == SecondaryMode.QuickSettings -> LauncherPanel.System
-                else -> LauncherPanel.GameLibrary
-            }
-            store.setSecondaryLauncherPanel(panel)
-            if (route != SecondaryRoute.GameDetail) {
-                store.setGameDetailGameId(null)
-            }
-            if (panel == LauncherPanel.System) {
-                systemControls.refreshStatus()
-                val status = systemControls.status.value
-                store.setSystemHeroSnapshot(
-                    batteryPercent = status.batteryPercent,
-                    charging = status.charging,
-                    wifiEnabled = status.wifiEnabled
+        LaunchedEffect(route, mode, secondaryShowsMenu) {
+            if (secondaryShowsMenu) {
+                store.setSecondaryHoldsGamepad(
+                    route != SecondaryRoute.Modes || mode != SecondaryMode.GameGrid
                 )
+                val panel = when {
+                    route == SecondaryRoute.Settings ||
+                        route == SecondaryRoute.PlatformPicker ||
+                        route == SecondaryRoute.PlatformDetail ||
+                        route == SecondaryRoute.Scraper -> LauncherPanel.Settings
+                    route == SecondaryRoute.GameDetail -> LauncherPanel.GameDetail
+                    mode == SecondaryMode.AppDock -> LauncherPanel.Apps
+                    mode == SecondaryMode.QuickSettings -> LauncherPanel.System
+                    else -> LauncherPanel.GameLibrary
+                }
+                store.setSecondaryLauncherPanel(panel)
+                if (route != SecondaryRoute.GameDetail) {
+                    store.setGameDetailGameId(null)
+                }
+                if (panel == LauncherPanel.System) {
+                    systemControls.refreshStatus()
+                    val status = systemControls.status.value
+                    store.setSystemHeroSnapshot(
+                        batteryPercent = status.batteryPercent,
+                        charging = status.charging,
+                        wifiEnabled = status.wifiEnabled
+                    )
+                }
+            } else {
+                store.setSecondaryHoldsGamepad(false)
+                store.setSecondaryLauncherPanel(LauncherPanel.GameLibrary)
             }
         }
 
         // Gamepad B / system back: scraper/platform → settings → modes → game grid
-        BackHandler(enabled = route != SecondaryRoute.Modes || mode != SecondaryMode.GameGrid) {
+        BackHandler(
+            enabled = secondaryShowsMenu &&
+                (route != SecondaryRoute.Modes || mode != SecondaryMode.GameGrid)
+        ) {
             viewModel.playBack()
             when (route) {
                 SecondaryRoute.GameDetail -> {
@@ -181,7 +212,7 @@ fun SecondaryApp() {
             }
         }
 
-        when (route) {
+        if (secondaryShowsMenu) when (route) {
             SecondaryRoute.Settings -> {
                 SecondarySurface(store = store) {
                     SettingsScreen(
@@ -199,7 +230,9 @@ fun SecondaryApp() {
                             viewModel.playOpen()
                             route = SecondaryRoute.PlatformDetail
                         },
-                        onSectionChange = store::setSettingsSectionLabel
+                        onSectionChange = store::setSettingsSectionLabel,
+                        gamepadOwner = GamepadOwner.Secondary,
+                        onClaimGamepad = store::claimGamepad
                     )
                 }
                 return@WajihaTheme
@@ -216,7 +249,9 @@ fun SecondaryApp() {
                             platformDetailId = id
                             viewModel.playOpen()
                             route = SecondaryRoute.PlatformDetail
-                        }
+                        },
+                        gamepadOwner = GamepadOwner.Secondary,
+                        onClaimGamepad = store::claimGamepad
                     )
                 }
                 LaunchedEffect(Unit) {
@@ -235,7 +270,9 @@ fun SecondaryApp() {
                             onBack = {
                                 viewModel.playBack()
                                 route = SecondaryRoute.Settings
-                            }
+                            },
+                            gamepadOwner = GamepadOwner.Secondary,
+                            onClaimGamepad = store::claimGamepad
                         )
                     }
                     LaunchedEffect(Unit) {
@@ -255,7 +292,9 @@ fun SecondaryApp() {
                             } else {
                                 SecondaryRoute.Settings
                             }
-                        }
+                        },
+                        gamepadOwner = GamepadOwner.Secondary,
+                        onClaimGamepad = store::claimGamepad
                     )
                 }
                 LaunchedEffect(Unit) {
@@ -273,6 +312,8 @@ fun SecondaryApp() {
                             gameId = id,
                             secondaryDisplayId = secondaryDisplayId,
                             dualDisplay = true,
+                            gamepadOwner = GamepadOwner.Secondary,
+                            onClaimGamepad = store::claimGamepad,
                             onBack = {
                                 viewModel.playBack()
                                 store.setGameDetailGameId(null)
@@ -289,8 +330,8 @@ fun SecondaryApp() {
             SecondaryRoute.Modes -> Unit
         }
 
-        LaunchedEffect(nowPlayingUi, mode) {
-            if (nowPlayingUi == null && mode == SecondaryMode.NowPlaying) {
+        LaunchedEffect(nowPlaying, mode) {
+            if (nowPlaying == null && mode == SecondaryMode.NowPlaying) {
                 store.setSecondaryMode(SecondaryMode.GameGrid)
             }
         }
@@ -305,29 +346,29 @@ fun SecondaryApp() {
                 )
             }
         ) {
-            when (mode) {
+            if (secondaryShowsHero) {
+                LauncherHeroPane(
+                    state = state,
+                    focusedGameId = focusedGameId,
+                    heroContext = heroContext,
+                    gamepadOwner = GamepadOwner.Secondary,
+                    onClaimGamepad = store::claimGamepad
+                )
+            } else when (mode) {
             // Tap the blacked-out screen to restore the grid
             SecondaryMode.Off -> BlackoutScreen(onTap = backToGrid)
             SecondaryMode.NowPlaying -> SecondaryModeFrame(
                 current = mode,
                 store = store,
-                sessionActive = nowPlayingUi != null
+                sessionActive = sessionActive
             ) {
-                NowPlayingPanel(state = nowPlayingUi)
+                NowPlayingPanel(state = nowPlaying)
             }
-            SecondaryMode.GameGrid -> if (settings.swapScreenRoles) {
-                // Swapped roles: this (bottom) display shows the hero instead
-                val focusedGameId by store.focusedGameId.collectAsState()
-                val focusedTile = state.tiles.firstOrNull { it.game.id == focusedGameId }
-                    ?: state.recent.firstOrNull()
-                TopScreen(
-                    focused = focusedTile,
-                    platformName = focusedTile?.let { tile ->
-                        state.platforms.firstOrNull { it.id == tile.game.platformId }?.name
-                    },
-                    heroContext = heroContext
-                )
-            } else {
+            SecondaryMode.GameGrid -> {
+                val featured by store.nowPlaying.collectAsState()
+                val topPackage by store.topDisplayForegroundPackage.collectAsState()
+                val appActions = koinInject<AppActions>()
+                val openSession = rememberOpenSession(store, appActions, topPackage)
                 BottomScreen(
                     state = state,
                     gridRows = settings.gridRows,
@@ -350,7 +391,15 @@ fun SecondaryApp() {
                         route = SecondaryRoute.PlatformPicker
                     },
                     gamepadOwner = GamepadOwner.Secondary,
-                    onClaimGamepad = store::claimGamepad
+                    onClaimGamepad = store::claimGamepad,
+                    sessions = activeSessions,
+                    featuredSessionPackage = featured?.packageName,
+                    topDisplayPackage = topPackage,
+                    onFocusSession = store::featureSession,
+                    onOpenSession = openSession,
+                    onCloseSession = { appActions.killApp(it) },
+                    showSessionGrid = store.nowPlayingDisplay.showsGridTiles,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
             SecondaryMode.AppDock -> AppDrawerScreen(
@@ -370,42 +419,49 @@ fun SecondaryApp() {
             SecondaryMode.RunningApps -> SecondaryModeFrame(
                 current = mode,
                 store = store,
-                sessionActive = nowPlayingUi != null
+                sessionActive = sessionActive
             ) {
                 RunningAppsPanel(showGamepadHints = false)
             }
             SecondaryMode.QuickSettings -> SecondaryModeFrame(
                 current = mode,
                 store = store,
-                sessionActive = nowPlayingUi != null
+                sessionActive = sessionActive
             ) {
                 QuickSettingsPanel(showGamepadHints = false)
             }
             SecondaryMode.Achievements -> SecondaryModeFrame(
                 current = mode,
                 store = store,
-                sessionActive = nowPlayingUi != null
+                sessionActive = sessionActive
             ) {
                 AchievementsPanel(showGamepadHints = false)
             }
-            SecondaryMode.Clock -> WajihaScreen(
-                layerId = "secondary_clock",
-                showActionBar = true,
-                gamepadHints = listOf("B" to "Games")
-            ) {
-                Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = WajihaSpacing.xs),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        GamepadChip(
-                            label = "< Games",
-                            selected = false,
-                            onClick = { store.setSecondaryMode(SecondaryMode.GameGrid) },
-                            sound = UiSound.Back
-                        )
+            SecondaryMode.Clock -> {
+                val clockFocus = remember { FocusRequester() }
+                WajihaScreen(
+                    layerId = "secondary_clock",
+                    showActionBar = true,
+                    gamepadHints = listOf("B" to "Games", "L2" to "Focus screen"),
+                    gamepadOwner = GamepadOwner.Secondary,
+                    onClaimGamepad = store::claimGamepad,
+                    onOwnerGainedFocus = { clockFocus.requestContentFocus() }
+                ) {
+                    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = WajihaSpacing.xs),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            GamepadChip(
+                                label = "< Games",
+                                selected = false,
+                                onClick = { store.setSecondaryMode(SecondaryMode.GameGrid) },
+                                sound = UiSound.Back,
+                                focusRequester = clockFocus
+                            )
+                        }
+                        ClockScreen()
                     }
-                    ClockScreen()
                 }
             }
             }
@@ -445,10 +501,14 @@ private fun SecondaryModeFrame(
         SecondaryMode.Achievements -> listOf("B" to "Games", "L1/R1" to "Tab")
         else -> secondaryModeTabGamepadHints
     }
+    val contentFocus = remember { FocusRequester() }
     WajihaScreen(
         layerId = "secondary_mode_${current.name}",
         showActionBar = true,
-        gamepadHints = modeHints,
+        gamepadHints = modeHints + ("L2" to "Focus screen"),
+        gamepadOwner = GamepadOwner.Secondary,
+        onClaimGamepad = store::claimGamepad,
+        onOwnerGainedFocus = { contentFocus.requestContentFocus() },
         onPreviewKey = { event ->
             when {
                 GamepadKeys.isL1(event.type, event.key) && currentIndex > 0 -> {
@@ -473,7 +533,8 @@ private fun SecondaryModeFrame(
                 label = "< Games",
                 selected = false,
                 onClick = { store.setSecondaryMode(SecondaryMode.GameGrid) },
-                sound = UiSound.Back
+                sound = UiSound.Back,
+                gamepadFocusable = false
             )
             tabs.forEachIndexed { index, (mode, label) ->
                 GamepadChip(
@@ -481,11 +542,17 @@ private fun SecondaryModeFrame(
                     selected = mode == current,
                     onClick = { selectTab(index) },
                     sound = UiSound.Navigate,
-                    soundWhenUnselected = true
+                    soundWhenUnselected = true,
+                    gamepadFocusable = false
                 )
             }
         }
-        Box(modifier = Modifier.weight(1f)) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(contentFocus)
+                .wajihaGamepadFocus()
+        ) {
             content()
         }
         }

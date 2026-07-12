@@ -12,6 +12,8 @@ import android.content.ComponentName
 import android.view.Display
 import com.wajiha.android.MainActivity
 import com.wajiha.android.SecondaryHomeActivity
+import com.wajiha.android.monitor.TopDisplayTaskResolver
+import com.wajiha.android.monitor.SessionTaskRegistry
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 import com.wajiha.state.DualScreenState
@@ -44,6 +46,12 @@ class DisplayCoordinator(
     /** True while a display-0 [MainActivity] instance is in the resumed lifecycle. */
     @Volatile
     private var primaryMainOnDisplay0 = false
+
+    /** Skip secondary reclaim briefly after OOM-guard kills. */
+    @Volatile
+    private var memoryGuardReclaimDeferUntil: Long = 0L
+    private var lastFocusGameAt = 0L
+    private var lastFocusGamePkg: String? = null
 
     fun start() {
         if (!listenerRegistered) {
@@ -142,43 +150,72 @@ class DisplayCoordinator(
 
     /**
      * After the bottom screen is alive, pull the primary HOME task back to the
-     * top of the multi-display stack so drawer launches land on the top panel.
+     * top of display 0 so Launcher3 Recents does not cover the hero panel.
+     *
+     * Do **not** use [ActivityManager.MOVE_TASK_WITH_HOME] — on QuickStep that
+     * surfaces RecentsActivity; Wajiha is excludeFromRecents so the user sees
+     * "No recent items" instead of the hero.
      */
     fun focusPrimaryMain(main: Activity) {
         if (main !is MainActivity) return
         if (main.display?.displayId != Display.DEFAULT_DISPLAY) return
-        mainHandler.postDelayed({
-            try {
-                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                WajihaLog.i(
-                    WajihaTags.DISPLAY,
-                    "focusPrimaryMain: moveTaskToFront taskId=${main.taskId}"
-                )
-                am.moveTaskToFront(main.taskId, ActivityManager.MOVE_TASK_WITH_HOME)
-            } catch (e: Exception) {
-                WajihaLog.w(
-                    WajihaTags.DISPLAY,
-                    "focusPrimaryMain: moveTaskToFront failed — ${e.message}; " +
-                        "falling back to REORDER_TO_FRONT on display 0"
-                )
-                val intent = Intent(main, MainActivity::class.java).addFlags(
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                )
-                val options = ActivityOptions.makeBasic()
-                    .setLaunchDisplayId(Display.DEFAULT_DISPLAY)
-                main.startActivity(intent, options.toBundle())
+        restorePrimaryHero(main)
+    }
+
+    /** Bring [MainActivity] above Recents on display 0 (browsing / hero mode). */
+    fun restorePrimaryHero(main: MainActivity? = null) {
+        if (store.hasActiveSessions()) {
+            val topGame = store.topDisplayForegroundPackage.value
+            if (topGame != null && topGame != context.packageName && store.getSession(topGame) != null) {
+                focusGameOnPrimary(topGame)
+                return
             }
-        }, 150)
+        }
+        mainHandler.postDelayed({
+            val taskId = main?.taskId
+                ?: TopDisplayTaskResolver.taskIdForActivityClass(context, MainActivity::class.java)
+            if (taskId != null) {
+                try {
+                    val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                    WajihaLog.i(
+                        WajihaTags.DISPLAY,
+                        "restorePrimaryHero: moveTaskToFront taskId=$taskId"
+                    )
+                    am.moveTaskToFront(taskId, 0)
+                } catch (e: Exception) {
+                    WajihaLog.w(
+                        WajihaTags.DISPLAY,
+                        "restorePrimaryHero: moveTaskToFront failed — ${e.message}"
+                    )
+                    launchPrimaryMainReorder(main)
+                }
+            } else {
+                launchPrimaryMainReorder(main)
+            }
+        }, 50)
+    }
+
+    private fun launchPrimaryMainReorder(main: MainActivity?) {
+        WajihaLog.i(WajihaTags.DISPLAY, "restorePrimaryHero: REORDER_TO_FRONT fallback")
+        val intent = Intent(context, MainActivity::class.java).addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+        )
+        val options = ActivityOptions.makeBasic().setLaunchDisplayId(Display.DEFAULT_DISPLAY)
+        if (main != null) {
+            main.startActivity(intent, options.toBundle())
+        } else {
+            context.startActivity(intent, options.toBundle())
+        }
     }
 
     /** Delay secondary launch until primary has claimed display-0 focus. */
     fun scheduleSecondaryHome(main: MainActivity) {
-        focusPrimaryMain(main)
+        restorePrimaryHero(main)
         mainHandler.postDelayed({
             ensureSecondaryHome()
-            // Secondary onCreate resumes on display 4 and can steal
-            // topDisplayFocusedRootTask — reclaim display 0 afterwards.
-            focusPrimaryMain(main)
+            restorePrimaryHero(main)
         }, 300)
     }
 
@@ -210,6 +247,14 @@ class DisplayCoordinator(
      */
     fun beginFastSecondaryReclaim(displayId: Int) {
         if (store.state.value == DualScreenState.AppOnSecondary) return
+        if (shouldDeferReclaimForMemoryGuard()) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "beginFastSecondaryReclaim: defer displayId=$displayId — memory-guard grace"
+            )
+            scheduleSecondaryHomeReclaim(displayId, delayMs = MEMORY_GUARD_RECLAIM_DEFER_MS)
+            return
+        }
         if (shouldDeferReclaimForGameLaunch()) {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
@@ -253,33 +298,50 @@ class DisplayCoordinator(
      * Without this, Thor keeps the HOME task resumed while the emulator sits invisible.
      */
     fun focusGameOnPrimary(packageName: String) {
+        val now = System.currentTimeMillis()
+        if (packageName == lastFocusGamePkg && now - lastFocusGameAt < FOCUS_DEBOUNCE_MS) {
+            return
+        }
+        lastFocusGamePkg = packageName
+        lastFocusGameAt = now
+        focusGameOnPrimary(packageName, attempt = 0)
+    }
+
+    private fun focusGameOnPrimary(packageName: String, attempt: Int) {
+        val delayMs = when (attempt) {
+            0 -> 100L
+            1 -> 400L
+            2 -> 900L
+            else -> 1_500L
+        }
         mainHandler.postDelayed({
-            try {
-                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                @Suppress("DEPRECATION")
-                val task = am.getRunningTasks(25).firstOrNull { info ->
-                    val pkg = info.topActivity?.packageName ?: info.baseActivity?.packageName
-                    pkg == packageName
-                }
-                if (task != null) {
+            val moved = SessionTaskRegistry.moveToFront(context, packageName)
+            if (moved) {
+                WajihaLog.i(
+                    WajihaTags.DISPLAY,
+                    "focusGameOnPrimary: moveTaskToFront pkg=$packageName attempt=$attempt"
+                )
+            } else if (attempt < 3) {
+                WajihaLog.d(
+                    WajihaTags.DISPLAY,
+                    "focusGameOnPrimary: retry pkg=$packageName attempt=$attempt"
+                )
+                focusGameOnPrimary(packageName, attempt + 1)
+            } else {
+                val reordered = SessionTaskRegistry.moveToFront(context, packageName)
+                if (reordered) {
                     WajihaLog.i(
                         WajihaTags.DISPLAY,
-                        "focusGameOnPrimary: moveTaskToFront taskId=${task.id} pkg=$packageName"
+                        "focusGameOnPrimary: reorderToFront pkg=$packageName"
                     )
-                    am.moveTaskToFront(task.id, 0)
                 } else {
                     WajihaLog.w(
                         WajihaTags.DISPLAY,
                         "focusGameOnPrimary: no task for pkg=$packageName"
                     )
                 }
-            } catch (e: Exception) {
-                WajihaLog.w(
-                    WajihaTags.DISPLAY,
-                    "focusGameOnPrimary: moveTaskToFront failed — ${e.message}"
-                )
             }
-        }, 200)
+        }, delayMs)
     }
 
     /** Bottom leave-hint during startActivity must not beat the top-display game task. */
@@ -290,7 +352,28 @@ class DisplayCoordinator(
         return elapsed < GAME_LAUNCH_RECLAIM_DEFER_MS
     }
 
+    /** After OOM-guard kills, pause reclaim so recovery does not thrash bottom HOME. */
+    fun deferReclaimForMemoryGuard() {
+        memoryGuardReclaimDeferUntil =
+            System.currentTimeMillis() + MEMORY_GUARD_RECLAIM_DEFER_MS
+        stopFastSecondaryReclaim()
+        WajihaLog.i(
+            WajihaTags.DISPLAY,
+            "deferReclaimForMemoryGuard: ${MEMORY_GUARD_RECLAIM_DEFER_MS}ms"
+        )
+    }
+
+    private fun shouldDeferReclaimForMemoryGuard(): Boolean =
+        System.currentTimeMillis() < memoryGuardReclaimDeferUntil
+
     fun reclaimSecondaryHomeOnDisplay(displayId: Int, launchIfNeeded: Boolean = true) {
+        if (shouldDeferReclaimForMemoryGuard()) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "reclaimSecondaryHomeOnDisplay: skip — memory-guard grace"
+            )
+            return
+        }
         if (store.state.value == DualScreenState.AppOnSecondary) {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
@@ -308,7 +391,7 @@ class DisplayCoordinator(
                     "reclaimSecondaryHomeOnDisplay: moveTaskToFront taskId=$taskId " +
                         "displayId=$displayId"
                 )
-                am.moveTaskToFront(taskId, ActivityManager.MOVE_TASK_WITH_HOME)
+                am.moveTaskToFront(taskId, 0)
                 moved = true
             } catch (e: Exception) {
                 WajihaLog.w(
@@ -319,6 +402,20 @@ class DisplayCoordinator(
         }
         if (!moved && launchIfNeeded) {
             launchSecondaryHomeOn(displayId, reclaim = true)
+        }
+        // Fast-reclaim ticks use launchIfNeeded=false — only re-focus after real work.
+        if (launchIfNeeded || moved) {
+            refreshTopDisplayAfterSecondaryReclaim()
+        }
+    }
+
+    /** Keep display 0 on the active game or Wajiha hero — never Recents. */
+    private fun refreshTopDisplayAfterSecondaryReclaim() {
+        val topGame = store.topDisplayForegroundPackage.value
+        if (topGame != null && topGame != context.packageName && store.getSession(topGame) != null) {
+            focusGameOnPrimary(topGame)
+        } else if (!store.hasActiveSessions()) {
+            restorePrimaryHero()
         }
     }
 
@@ -338,6 +435,10 @@ class DisplayCoordinator(
                     return
                 }
                 if (store.state.value != DualScreenState.AppOnSecondary) {
+                    if (shouldDeferReclaimForMemoryGuard()) {
+                        mainHandler.postDelayed(this, WATCHDOG_INTERVAL_MS)
+                        return
+                    }
                     val onScreen = SecondaryHomeActivity.isResumed &&
                         SecondaryHomeActivity.visibleDisplayId == display.displayId
                     if (!onScreen) {
@@ -443,8 +544,11 @@ class DisplayCoordinator(
         const val SECONDARY_HOME_CATEGORY = "android.intent.category.SECONDARY_HOME"
         private const val WATCHDOG_INTERVAL_MS = 200L
         private const val FAST_RECLAIM_INTERVAL_MS = 16L
+        private const val FOCUS_DEBOUNCE_MS = 400L
         /** Let top-display emulator win before bottom HOME reclaim runs. */
         private const val GAME_LAUNCH_RECLAIM_DEFER_MS = 800L
+        /** After memory-guard kills, avoid reclaim thrashing during recovery. */
+        private const val MEMORY_GUARD_RECLAIM_DEFER_MS = 10_000L
     }
 
     /** Launch an app on a specific display (running-apps "move to display"). */

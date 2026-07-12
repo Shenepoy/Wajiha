@@ -1,19 +1,24 @@
 package com.wajiha.data.scraper.sources
 
+import com.wajiha.data.WajihaJson
+import com.wajiha.data.ra.RaMediaUrls
+import com.wajiha.data.ra.parseRaGameIdFromHashResponse
+import com.wajiha.data.scraper.HttpJsonResult
 import com.wajiha.data.scraper.MediaCandidate
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeCandidate
+import com.wajiha.data.scraper.ScrapeFailure
+import com.wajiha.data.scraper.ScrapeFailureKind
 import com.wajiha.data.scraper.ScrapeQuery
 import com.wajiha.data.scraper.ScrapedMetadata
 import com.wajiha.data.scraper.ScraperSettings
 import com.wajiha.data.scraper.ScraperSource
+import com.wajiha.data.scraper.SourceLookupOutcome
+import com.wajiha.data.scraper.getStringResult
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 /**
  * RetroAchievements as a metadata source: hash → game match plus icon media.
@@ -25,54 +30,70 @@ class RetroAchievementsSource(private val http: HttpClient) : ScraperSource {
     override val id = "ra"
     override val displayName = "RetroAchievements"
 
-    private val json = Json { ignoreUnknownKeys = true }
-
     override fun isConfigured(settings: ScraperSettings): Boolean =
         settings.raUsername.isNotBlank() && settings.raApiKey.isNotBlank()
 
-    override suspend fun lookup(query: ScrapeQuery, settings: ScraperSettings): ScrapeCandidate? {
-        val md5 = query.md5 ?: return null
-        val game = try {
-            val body = http.get("https://retroachievements.org/API/API_GetGameInfoByHash.php") {
-                parameter("z", settings.raUsername)
-                parameter("y", settings.raApiKey)
-                parameter("h", md5)
-            }.body<String>()
-            json.decodeFromString<RaGame>(body)
-        } catch (_: Exception) {
-            return null
+    override suspend fun lookupResult(
+        query: ScrapeQuery,
+        settings: ScraperSettings
+    ): SourceLookupOutcome {
+        val md5 = query.md5
+            ?: return SourceLookupOutcome.Miss
+        val result = http.getStringResult(
+            "https://retroachievements.org/API/API_GetGameInfoByHash.php"
+        ) {
+            parameter("z", settings.raUsername)
+            parameter("y", settings.raApiKey)
+            parameter("h", md5)
         }
-        val gameId = game.id ?: return null
-        if (gameId <= 0) return null
-        return ScrapeCandidate(
-            sourceId = id,
-            sourceGameId = gameId.toString(),
-            name = game.title ?: query.displayName,
-            metadata = ScrapedMetadata(
-                name = game.title,
-                developer = game.developer,
-                publisher = game.publisher,
-                genre = game.genre,
-                releaseDate = game.released,
-                raGameId = gameId.toLong()
-            ),
-            media = buildList {
-                if (settings.raFetchIcon) {
-                    game.imageIcon?.let {
-                        add(MediaCandidate(type = MediaType.Icon, url = "https://media.retroachievements.org$it"))
+        val body = when (result) {
+            is HttpJsonResult.Failed -> return SourceLookupOutcome.Failed(result.failure)
+            is HttpJsonResult.Ok -> result.value
+        }
+        val gameId = parseRaGameIdFromHashResponse(body)
+            ?: return SourceLookupOutcome.Miss
+        val game = runCatching {
+            WajihaJson.Default.decodeFromString<RaGame>(body)
+        }.getOrNull()
+            ?: return SourceLookupOutcome.Failed(
+                ScrapeFailure(ScrapeFailureKind.Parse, "Could not parse RA game")
+            )
+        return SourceLookupOutcome.Hit(
+            ScrapeCandidate(
+                sourceId = id,
+                sourceGameId = gameId.toString(),
+                name = game.title ?: query.displayName,
+                metadata = ScrapedMetadata(
+                    name = game.title,
+                    developer = game.developer,
+                    publisher = game.publisher,
+                    genre = game.genre,
+                    releaseDate = game.released,
+                    raGameId = gameId
+                ),
+                media = buildList {
+                    if (settings.raFetchIcon) {
+                        game.imageIcon?.let {
+                            add(MediaCandidate(type = MediaType.Icon, url = RaMediaUrls.media(it)))
+                        }
+                    }
+                    if (settings.raFetchBoxArt) {
+                        game.imageBoxArt?.let {
+                            add(MediaCandidate(type = MediaType.Boxart, url = RaMediaUrls.media(it)))
+                        }
+                    }
+                    if (settings.raFetchTitle) {
+                        game.imageTitle?.let {
+                            add(
+                                MediaCandidate(
+                                    type = MediaType.Screenshot,
+                                    url = RaMediaUrls.media(it)
+                                )
+                            )
+                        }
                     }
                 }
-                if (settings.raFetchBoxArt) {
-                    game.imageBoxArt?.let {
-                        add(MediaCandidate(type = MediaType.Boxart, url = "https://media.retroachievements.org$it"))
-                    }
-                }
-                if (settings.raFetchTitle) {
-                    game.imageTitle?.let {
-                        add(MediaCandidate(type = MediaType.Screenshot, url = "https://media.retroachievements.org$it"))
-                    }
-                }
-            }
+            )
         )
     }
 

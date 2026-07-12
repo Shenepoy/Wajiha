@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.requestContentFocus
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 import com.wajiha.platform.LaunchableApp
@@ -113,6 +114,7 @@ fun AppDrawerScreen(
                 add("Y" to "Bottom screen")
                 add("X" to "Menu")
                 add("B" to "Back")
+                add("L2" to "Focus screen")
             }
         }
     }
@@ -124,6 +126,14 @@ fun AppDrawerScreen(
         gamepadHints = gamepadHints,
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
+        onOwnerGainedFocus = {
+            if (!menuOpen) {
+                val pkg = selectedPackage ?: apps.firstOrNull()?.packageName
+                if (pkg != null) {
+                    tileFocusRequesters[pkg]?.requestContentFocus()
+                }
+            }
+        },
         onPreviewKey = { event ->
             if (menuOpen) return@WajihaScreen false
             val pkg = selectedPackage

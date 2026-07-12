@@ -28,6 +28,12 @@ object GamepadKeys {
     fun isR1(type: KeyEventType, key: Key): Boolean =
         type == KeyEventType.KeyDown && key in r1Keys
 
+    fun isR2(type: KeyEventType, key: Key): Boolean =
+        type == KeyEventType.KeyDown && key == Key.ButtonR2
+
+    fun isL2(type: KeyEventType, key: Key): Boolean =
+        type == KeyEventType.KeyDown && key == Key.ButtonL2
+
     private val l1Keys = setOf(
         Key.ButtonL1,
         Key.PageUp,
@@ -50,6 +56,18 @@ object GamepadKeys {
     fun isY(type: KeyEventType, key: Key): Boolean =
         type == KeyEventType.KeyDown && key == Key.ButtonY
 
+    fun isUp(type: KeyEventType, key: Key): Boolean =
+        type == KeyEventType.KeyDown && key == Key.DirectionUp
+
+    fun isDown(type: KeyEventType, key: Key): Boolean =
+        type == KeyEventType.KeyDown && key == Key.DirectionDown
+
+    fun isLeft(type: KeyEventType, key: Key): Boolean =
+        type == KeyEventType.KeyDown && key == Key.DirectionLeft
+
+    fun isRight(type: KeyEventType, key: Key): Boolean =
+        type == KeyEventType.KeyDown && key == Key.DirectionRight
+
     /** Any gamepad key that should restore gamepad chrome / input mode. */
     fun switchesToGamepadMode(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown) return false
@@ -69,6 +87,8 @@ object GamepadKeys {
             Key.ButtonY,
             Key.ButtonL1,
             Key.ButtonR1,
+            Key.ButtonL2,
+            Key.ButtonR2,
             Key.ButtonSelect,
             Key.ButtonMode,
             Key.PageUp,
@@ -78,15 +98,4 @@ object GamepadKeys {
             else -> false
         }
     }
-}
-
-enum class GamepadConfirmPolicy {
-    /** Grid: A launches the selected item. */
-    LaunchOnSelect,
-    /** Button/chip: A activates the focused control. */
-    ActivateFocused,
-    /** List row: A enters sub-focus or selects. */
-    EnterSubFocus,
-    /** Dialog: A confirms primary action. */
-    DialogConfirm
 }

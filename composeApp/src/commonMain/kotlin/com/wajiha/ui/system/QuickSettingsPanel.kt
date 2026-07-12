@@ -11,8 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.wajiha.platform.SystemControls
-import com.wajiha.ui.components.WajihaPanel
-import com.wajiha.ui.components.gamepad.GamepadActionBar
+import com.wajiha.ui.components.SecondaryPanelScaffold
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadForm
 import com.wajiha.ui.components.gamepad.GamepadSlider
@@ -40,9 +39,12 @@ fun QuickSettingsPanel(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        WajihaPanel(modifier = Modifier.weight(1f)) {
-            GamepadForm(modifier = Modifier.fillMaxSize()) {
+    SecondaryPanelScaffold(
+        modifier = modifier,
+        showGamepadHints = showGamepadHints,
+        hints = quickSettingsGamepadHints
+    ) {
+        GamepadForm(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -108,10 +110,6 @@ fun QuickSettingsPanel(
                     )
                 }
             }
-            }
-        }
-        if (showGamepadHints) {
-            GamepadActionBar(hints = quickSettingsGamepadHints)
         }
     }
 }

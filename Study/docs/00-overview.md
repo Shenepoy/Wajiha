@@ -13,13 +13,15 @@ Wajiha aims to be the **primary Android shell** on retro handhelds:
 
 ## Current Wajiha codebase state
 
-The repo is a **fresh KMP template**:
+Wajiha is a **shipping Android launcher** (Kotlin Multiplatform + Compose). See the root [README](../README.md) and [architecture.md](../docs/architecture.md) for the live module map.
 
-- `composeApp/` — shared Compose UI (`App.kt` is placeholder)
-- `androidApp/` — standard Android host (`MainActivity.kt`)
-- No launcher manifest, no ROM DB, no dual-display code yet
+Implemented today:
 
-All substantial reference logic lives under `Study/`.
+- `composeApp/` — shared UI, Room DB, scrapers, `DualScreenStore`, gamepad framework
+- `androidApp/` — `MainActivity` + `SecondaryHomeActivity`, foreground monitor, emulator launch, WorkManager jobs
+- Dual-screen Thor support, multi-session Now Playing, deep scraping, RetroAchievements
+
+The `Study/` folder remains reference material for patterns not yet ported or for comparison.
 
 ## Why these four references?
 

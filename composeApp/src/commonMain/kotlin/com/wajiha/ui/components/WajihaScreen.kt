@@ -30,6 +30,7 @@ fun WajihaScreen(
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     onPreviewKey: ((KeyEvent) -> Boolean)? = null,
+    onOwnerGainedFocus: (suspend () -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
     content: @Composable () -> Unit
 ) {
@@ -42,7 +43,8 @@ fun WajihaScreen(
         modifier = modifier.fillMaxSize(),
         owner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
-        onPreviewKey = onPreviewKey
+        onPreviewKey = onPreviewKey,
+        onOwnerGainedFocus = onOwnerGainedFocus
     ) {
         WajihaSnackbarScaffold(
             snackbarHostState = snackbarHostState ?: rememberWajihaSnackbarHostState()

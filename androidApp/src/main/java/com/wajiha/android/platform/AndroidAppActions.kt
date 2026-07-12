@@ -13,6 +13,7 @@ import com.wajiha.android.launch.GameLauncher
 import com.wajiha.android.launch.LaunchResult
 import com.wajiha.android.library.RomFileDeleter
 import com.wajiha.android.monitor.ForegroundAppMonitor
+import com.wajiha.android.monitor.SessionTaskRegistry
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.platform.AppActions
 import com.wajiha.platform.LaunchableApp
@@ -148,5 +149,12 @@ class AndroidAppActions(
 
     override fun moveAppToDisplay(packageName: String, displayId: Int) {
         displayCoordinator.launchOnDisplay(packageName, displayId)
+    }
+
+    override fun focusApp(packageName: String) {
+        monitor.switchToSession(packageName)
+        SessionTaskRegistry.moveToFront(context, packageName)
+        displayCoordinator.focusGameOnPrimary(packageName)
+        monitor.scheduleTopDisplayRefresh()
     }
 }

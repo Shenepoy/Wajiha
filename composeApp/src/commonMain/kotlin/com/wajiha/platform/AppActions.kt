@@ -34,6 +34,9 @@ interface AppActions {
 
     fun killApp(packageName: String)
     fun moveAppToDisplay(packageName: String, displayId: Int)
+
+    /** Bring a running app's task to the foreground on the primary (top) display. */
+    fun focusApp(packageName: String)
 }
 
 /** Library actions that need the host activity (SAF picker, WorkManager). */
@@ -46,8 +49,21 @@ interface LibraryActions {
     /** Rescan ROM folders for a single platform (null = all). */
     fun rescanPlatform(platformId: String)
 
-    /** Starts a batch scrape job (all platforms when null). */
-    fun startScrape(platformId: String? = null)
+    /**
+     * Starts a batch scrape job (all platforms when null).
+     * @param mode `fill_gaps` (default) or `force`
+     * @return null if enqueued, or a short reason if blocked / already running.
+     */
+    suspend fun startScrape(
+        platformId: String? = null,
+        mode: String = "fill_gaps"
+    ): String?
+
+    /**
+     * Retries Error + Partial games from the last batch (optionally one platform).
+     * @return null if enqueued, or a short reason if blocked.
+     */
+    suspend fun retryFailedScrape(platformId: String? = null): String?
 
     fun cancelScrape()
 }

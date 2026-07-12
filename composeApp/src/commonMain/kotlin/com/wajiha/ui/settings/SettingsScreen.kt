@@ -43,11 +43,15 @@ import com.wajiha.platform.PermissionStates
 import com.wajiha.platform.SystemControls
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadLayers
+import com.wajiha.input.requestContentFocus
 import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.WajihaEmptyState
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.LocalUiFeedback
+import com.wajiha.state.GamepadOwner
+import com.wajiha.state.DualScreenStore
+import org.koin.compose.koinInject
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadFocusable
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
@@ -86,9 +90,7 @@ import com.wajiha.ui.scraper.ScraperPageContent
 import com.wajiha.ui.scraper.ScraperViewModel
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import org.koin.compose.koinInject
 
 private enum class SettingsSection(val label: String) {
     Library("Library"),
@@ -109,6 +111,8 @@ fun SettingsScreen(
     onAddPlatform: () -> Unit = {},
     onOpenPlatform: (String) -> Unit = {},
     onSectionChange: (String) -> Unit = {},
+    gamepadOwner: GamepadOwner? = null,
+    onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val inUsePlatforms by settingsViewModel.inUsePlatforms.collectAsState()
@@ -150,6 +154,9 @@ fun SettingsScreen(
         onBack = onBack,
         showActionBar = true,
         gamepadHints = settingsGamepadHints,
+        gamepadOwner = gamepadOwner,
+        onClaimGamepad = onClaimGamepad,
+        onOwnerGainedFocus = { sectionFocus.requestContentFocus() },
         onPreviewKey = { event ->
             if (GamepadLayers.stack.topLayer != "settings") return@WajihaScreen false
             when {
@@ -348,6 +355,16 @@ private fun DualScreenSectionContent(
         defaultChecked = true,
         onReset = { settingsViewModel.setDetectManualLaunches(true) }
     )
+    SettingsGroupDivider()
+    SettingsToggleRow(
+        label = "Close runaway games when memory is low",
+        description = "Force-stop emulator sessions that balloon RAM so the " +
+            "device stays responsive. May lose unsaved progress.",
+        checked = settings.memoryGuardEnabled,
+        onCheckedChange = settingsViewModel::setMemoryGuardEnabled,
+        defaultChecked = true,
+        onReset = { settingsViewModel.setMemoryGuardEnabled(true) }
+    )
     if (settings.detectManualLaunches) {
         SettingsGroupDivider()
         SettingsToggleRow(
@@ -403,6 +420,23 @@ private fun DualScreenSectionContent(
         onReset = { settingsViewModel.setGameSecondaryMode("NowPlaying") }
     )
     SettingsGroupDivider()
+    SettingsMultiChoiceRow(
+        label = "Show active sessions",
+        description = "Choose how running games appear on the bottom screen while you play. " +
+            "None hides session indicators; grid tiles sit in the game strip; " +
+            "the floating chip stays above the action bar.",
+        choiceOptions = listOf(
+            MultiChoiceOption("None", "None", icon = "○"),
+            MultiChoiceOption("GridTiles", "Grid tiles", icon = "▦"),
+            MultiChoiceOption("FloatingChip", "Floating chip", icon = "◉"),
+            MultiChoiceOption("Both", "Both", icon = "⊞")
+        ),
+        selected = settings.nowPlayingDisplay,
+        onSelect = settingsViewModel::setNowPlayingDisplay,
+        defaultValue = "Both",
+        onReset = { settingsViewModel.setNowPlayingDisplay("Both") }
+    )
+    SettingsGroupDivider()
     SettingsToggleRow(
         label = "Dim bottom screen while a game runs",
         description = "Darken the secondary display during gameplay. " +
@@ -413,6 +447,16 @@ private fun DualScreenSectionContent(
         onReset = { settingsViewModel.setGameDimEnabled(false) }
     )
     if (settings.gameDimEnabled) {
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Dim only on Now Playing page",
+            description = "When on, the dim scrim applies only while the bottom screen shows Now Playing. " +
+                "When off, dim applies on any secondary screen except Blackout.",
+            checked = settings.gameDimOnlyOnNowPlaying,
+            onCheckedChange = settingsViewModel::setGameDimOnlyOnNowPlaying,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setGameDimOnlyOnNowPlaying(true) }
+        )
         SettingsGroupDivider()
         SettingsNumberRow(
             label = "Dim strength",

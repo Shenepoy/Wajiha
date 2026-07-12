@@ -38,6 +38,8 @@ fun GamepadTile(
     focusRequester: FocusRequester? = null,
     gamepadFocusable: Boolean = true,
     navHighlighted: Boolean = false,
+    /** When true, touch always invokes [onLaunch] (session switcher tiles). */
+    touchSwitchMode: Boolean = false,
     content: @Composable () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -91,11 +93,15 @@ fun GamepadTile(
                     Modifier
                 }
             )
-            .pointerInput(selected, onSelect, onLaunch, onLongPress) {
+            .pointerInput(selected, onSelect, onLaunch, onLongPress, touchSwitchMode) {
                 detectTapGestures(
                     onLongPress = { onLongPress?.invoke() },
                     onTap = {
-                        if (selected) onLaunch() else onSelect()
+                        when {
+                            touchSwitchMode -> onLaunch()
+                            selected -> onLaunch()
+                            else -> onSelect()
+                        }
                     }
                 )
             },

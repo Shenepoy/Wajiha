@@ -1,8 +1,10 @@
 package com.wajiha.state
 
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
@@ -54,9 +56,25 @@ data class NowPlayingState(
     val boxartPath: String? = null,
     val heroPath: String? = null,
     val sessionStartedAt: Long = 0,
+    /** Accumulated ms on the top display before the current segment. */
+    val sessionElapsedMs: Long = 0,
+    /** Wall time when this session was last on top (0 = paused / backgrounded). */
+    val sessionResumedAt: Long = 0,
     /** true when launched from Wajiha, false when detected externally */
     val launchedByWajiha: Boolean = true
-)
+) {
+    fun activeElapsedMs(now: Long = kotlin.time.Clock.System.now().toEpochMilliseconds()): Long =
+        sessionElapsedMs +
+            if (sessionResumedAt > 0L) {
+                (now - sessionResumedAt).coerceAtLeast(0)
+            } else {
+                0L
+            }
+}
+
+/** Prefer game title, then app label, then package name. */
+fun sessionDisplayLabel(state: NowPlayingState?): String? =
+    state?.gameName ?: state?.appLabel ?: state?.packageName
 
 data class RunningApp(
     val packageName: String,
@@ -90,6 +108,14 @@ class DualScreenStore {
     /** Active sessions keyed by package — survives when a game moves off the top display. */
     private val sessionCache = mutableMapOf<String, NowPlayingState>()
 
+    private val _activeSessions = MutableStateFlow<List<NowPlayingState>>(emptyList())
+    /** All live sessions, sorted by start time — drives the left session rail. */
+    val activeSessions: StateFlow<List<NowPlayingState>> = _activeSessions.asStateFlow()
+
+    /** Single-display: App.kt navigates to [Route.NowRunning] when this fires. */
+    private val _navigateToNowPlaying = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val navigateToNowPlayingRequests = _navigateToNowPlaying.asSharedFlow()
+
     /**
      * Now Playing UI state: only non-null when the featured session is foreground on
      * the top display (dual) or any session exists (single display).
@@ -106,13 +132,6 @@ class DualScreenStore {
             else -> null
         }
     }.stateIn(scope, SharingStarted.Eagerly, null)
-
-    val nowPlayingOnTopScreen: StateFlow<Boolean> = combine(
-        nowPlayingUiState,
-        _nowPlaying
-    ) { uiSession, session ->
-        uiSession != null && session != null
-    }.stateIn(scope, SharingStarted.Eagerly, false)
 
     private val _runningApps = MutableStateFlow<List<RunningApp>>(emptyList())
     val runningApps: StateFlow<List<RunningApp>> = _runningApps.asStateFlow()
@@ -132,6 +151,10 @@ class DualScreenStore {
     private val _appsHeroCount = MutableStateFlow(0)
     private val _appsHeroFocusedLabel = MutableStateFlow<String?>(null)
     private val _systemHeroSnapshot = MutableStateFlow(HeroContext.System())
+    /** Manual scrape review open — top shows slot candidate grid / hint. */
+    private val _scrapeReviewActive = MutableStateFlow(false)
+    /** Slot picker visible on hero display — gamepad follows the top grid. */
+    private val _scrapeReviewPicking = MutableStateFlow(false)
 
     /** Resolved hero for whichever display is showing [TopScreen]. */
     val heroContext: StateFlow<HeroContext> = combine(
@@ -145,8 +168,10 @@ class DualScreenStore {
             HeroInputsPartial(primary, secondary, section, appCount, focusedApp)
         },
         _gameDetailId,
-        _systemHeroSnapshot
-    ) { partial, detailId, system ->
+        _systemHeroSnapshot,
+        _scrapeReviewActive
+    ) { partial, detailId, system, scrapeReview ->
+        if (scrapeReview) return@combine HeroContext.ScrapeReview
         val inputs = HeroInputs(
             primary = partial.primary,
             secondary = partial.secondary,
@@ -182,6 +207,22 @@ class DualScreenStore {
     private val _gamepadOwner = MutableStateFlow(GamepadOwner.Secondary)
     val gamepadOwner: StateFlow<GamepadOwner> = _gamepadOwner.asStateFlow()
 
+    /**
+     * Bumps whenever [gamepadOwner] changes so the gaining screen can restore
+     * Compose focus onto its content (L2 toggle, touch claim, route recompute).
+     */
+    private val _gamepadFocusEpoch = MutableStateFlow(0L)
+    val gamepadFocusEpoch: StateFlow<Long> = _gamepadFocusEpoch.asStateFlow()
+
+    /**
+     * L2 / touch claim sticky override. While set, [recomputeGamepadOwner] keeps
+     * this owner instead of route heuristics. Cleared on single-display.
+     */
+    private var stickyGamepadOwner: GamepadOwner? = null
+
+    /** Debounce digital + analog L2 firing for the same physical press. */
+    private var lastL2ToggleAtMs: Long = 0L
+
     /** Primary (top) is showing onboarding or a non-home route (Settings/Apps/…). */
     private var primaryHoldsInput: Boolean = false
 
@@ -191,10 +232,20 @@ class DualScreenStore {
     /** When true, the games grid lives on the primary display instead of secondary. */
     private var gamesMenuOnPrimary: Boolean = false
 
+    /** Which activity hosts the launcher menu (grid / settings / review dialog). */
+    fun menuGamepadOwner(): GamepadOwner =
+        if (gamesMenuOnPrimary) GamepadOwner.Primary else GamepadOwner.Secondary
+
+    /** Which activity hosts the hero / top preview. */
+    fun heroGamepadOwner(): GamepadOwner =
+        if (gamesMenuOnPrimary) GamepadOwner.Secondary else GamepadOwner.Primary
+
     // Options (mirrored from settings so state transitions can use them synchronously)
     var blackoutOnLaunch: Boolean = false
     var preferredGameMode: SecondaryMode = SecondaryMode.NowPlaying
+    var nowPlayingDisplay: NowPlayingDisplayMode = NowPlayingDisplayMode.Both
     var gameDimEnabled: Boolean = false
+    var gameDimOnlyOnNowPlaying: Boolean = true
     var gameDimPercent: Int = 90
     /** Seconds before dim applies and before re-dimming after idle (0 = immediate / stay lifted). */
     var gameplayDimTimeoutSeconds: Int = 10
@@ -233,35 +284,71 @@ class DualScreenStore {
 
     fun hasActiveSessions(): Boolean = sessionCache.isNotEmpty()
 
+    private fun publishActiveSessions() {
+        _activeSessions.value = sessionCache.values.sortedBy { it.sessionStartedAt }
+    }
+
+    /** Feature a cached session for the Now Running panel (e.g. rail confirm before focus). */
+    fun featureSession(packageName: String) {
+        val cached = sessionCache[packageName] ?: return
+        if (_nowPlaying.value?.packageName != cached.packageName) {
+            WajihaLog.i(
+                WajihaTags.NOW_PLAYING,
+                "featureSession: ${_nowPlaying.value?.packageName ?: "none"} -> ${cached.packageName}"
+            )
+            _nowPlaying.value = cached
+        }
+    }
+
+    /**
+     * Task-switcher: bring [packageName] to the top display without ending other sessions.
+     * Pauses elapsed time on background sessions and resumes the selected one.
+     */
+    fun switchToSession(packageName: String) {
+        if (!sessionCache.containsKey(packageName)) return
+        applyTopDisplaySessionClocks(packageName)
+        _topDisplayForegroundPackage.value = packageName
+        featureSession(packageName)
+        publishActiveSessions()
+        WajihaLog.i(WajihaTags.NOW_PLAYING, "switchToSession: $packageName")
+    }
+
     /** Launch intent or first external detection — sets session immediately. */
     fun beginGameSession(nowPlaying: NowPlayingState) {
         GamepadLayers.stack.deactivateAll()
+        val now = nowMs()
         val wasEmpty = sessionCache.isEmpty()
-        sessionCache[nowPlaying.packageName] = nowPlaying
-        _nowPlaying.value = nowPlaying
+        sessionCache.keys.toList().forEach { pkg ->
+            sessionCache[pkg]?.let { sessionCache[pkg] = pauseSessionClock(it, now) }
+        }
+        val started = nowPlaying.copy(
+            sessionStartedAt = nowPlaying.sessionStartedAt.takeIf { it > 0L } ?: now,
+            sessionResumedAt = now,
+            sessionElapsedMs = nowPlaying.sessionElapsedMs
+        )
+        sessionCache[started.packageName] = started
+        _nowPlaying.value = started
+        _topDisplayForegroundPackage.value = started.packageName
+        publishActiveSessions()
         if (wasEmpty) {
             enterGameRunningStateIfNeeded()
         } else if (_state.value == DualScreenState.DualBrowsing) {
             _state.value = DualScreenState.GameRunning
         }
         when {
-            nowPlaying.launchedByWajiha && !blackoutOnLaunch -> showNowPlayingDuringSession()
+            nowPlaying.launchedByWajiha && !blackoutOnLaunch ->
+                requestNavigateToNowPlaying()
             else -> showGridDuringSession()
         }
     }
 
     /** Update metadata without changing [secondaryMode]. */
     fun updateGameSession(state: NowPlayingState) {
-        val previous = _nowPlaying.value
         sessionCache[state.packageName] = state
-        _nowPlaying.value = state
-        if (previous?.packageName != state.packageName) {
-            WajihaLog.i(
-                WajihaTags.NOW_PLAYING,
-                "updateGameSession: ${previous?.packageName ?: "none"} -> ${state.packageName} " +
-                    "(${state.appLabel ?: state.gameName ?: "unlabeled"})"
-            )
+        if (_nowPlaying.value?.packageName == state.packageName) {
+            _nowPlaying.value = state
         }
+        publishActiveSessions()
         if (_state.value == DualScreenState.SingleDisplay) return
         if (_state.value == DualScreenState.DualBrowsing) {
             _state.value = DualScreenState.GameRunning
@@ -274,6 +361,8 @@ class DualScreenStore {
      */
     fun setTopDisplayForeground(packageName: String?) {
         if (_topDisplayForegroundPackage.value == packageName) return
+        val gamingTop = packageName?.takeIf { sessionCache.containsKey(it) }
+        applyTopDisplaySessionClocks(gamingTop)
         _topDisplayForegroundPackage.value = packageName
         val cached = packageName?.let { sessionCache[it] } ?: return
         if (_nowPlaying.value?.packageName != cached.packageName) {
@@ -283,12 +372,14 @@ class DualScreenStore {
             )
             _nowPlaying.value = cached
         }
+        publishActiveSessions()
     }
 
     /** Confirmed process exit or explicit kill — clears one session. */
     fun endGameSession(packageName: String? = null) {
         val cleared = packageName ?: _nowPlaying.value?.packageName ?: return
         sessionCache.remove(cleared)
+        publishActiveSessions()
         WajihaLog.i(WajihaTags.NOW_PLAYING, "endGameSession: clear $cleared")
         if (sessionCache.isEmpty()) {
             _nowPlaying.value = null
@@ -331,12 +422,21 @@ class DualScreenStore {
         }
     }
 
-    /** Wajiha-initiated launch: show the Now Running panel on the bottom screen. */
-    private fun showNowPlayingDuringSession() {
-        if (!hasActiveSessions() || _state.value == DualScreenState.SingleDisplay) return
-        _state.value = DualScreenState.GameRunning
-        _secondaryMode.value = SecondaryMode.NowPlaying
-        WajihaLog.i(WajihaTags.NOW_PLAYING, "showNowPlayingDuringSession")
+    /**
+     * Open the Now Playing screen — dual: [SecondaryMode.NowPlaying];
+     * single: emits [navigateToNowPlayingRequests] for App.kt [Route.NowRunning].
+     */
+    fun requestNavigateToNowPlaying() {
+        if (!hasActiveSessions()) return
+        when (_state.value) {
+            DualScreenState.SingleDisplay ->
+                _navigateToNowPlaying.tryEmit(Unit)
+            else -> {
+                _state.value = DualScreenState.GameRunning
+                _secondaryMode.value = SecondaryMode.NowPlaying
+            }
+        }
+        WajihaLog.i(WajihaTags.NOW_PLAYING, "requestNavigateToNowPlaying")
     }
 
     fun onAppSentToSecondary() {
@@ -388,6 +488,30 @@ class DualScreenStore {
         _gameDetailId.value = gameId
     }
 
+    /** Top screen shows scrape-review slot grid while Manual review is open. */
+    fun setScrapeReviewActive(active: Boolean) {
+        _scrapeReviewActive.value = active
+        if (!active) {
+            _scrapeReviewPicking.value = false
+        }
+        // Drop L2 sticky on open (menu overview) and close (underlying host).
+        stickyGamepadOwner = null
+        recomputeGamepadOwner()
+        // Owner may be unchanged — still refocus overview or the host underneath.
+        _gamepadFocusEpoch.value = _gamepadFocusEpoch.value + 1L
+    }
+
+    /** Hero display owns the slot candidate grid (gamepad → primary). */
+    fun setScrapeReviewPicking(picking: Boolean) {
+        if (_scrapeReviewPicking.value == picking) return
+        _scrapeReviewPicking.value = picking
+        // Drop L2 sticky so the slot grid on the hero display receives keys.
+        if (picking) stickyGamepadOwner = null
+        recomputeGamepadOwner()
+        // Owner may already match — still bump so hero/overview content refocuses.
+        _gamepadFocusEpoch.value = _gamepadFocusEpoch.value + 1L
+    }
+
     fun setAppsHeroDetail(appCount: Int, focusedLabel: String? = null) {
         _appsHeroCount.value = appCount
         _appsHeroFocusedLabel.value = focusedLabel
@@ -431,14 +555,81 @@ class DualScreenStore {
         recomputeGamepadOwner()
     }
 
-    /** Explicit claim — used when touch selects the games grid on a display. */
+    /**
+     * Explicit claim — touch / key on a display. Sticky until L2 toggles or
+     * single-display clears it.
+     */
     fun claimGamepad(owner: GamepadOwner) {
+        if (_state.value == DualScreenState.SingleDisplay) {
+            stickyGamepadOwner = null
+            setGamepadOwner(GamepadOwner.Primary)
+            return
+        }
+        stickyGamepadOwner = owner
+        setGamepadOwner(owner)
+    }
+
+    /** L2 — flip gamepad between top (Primary) and bottom (Secondary). */
+    fun toggleGamepadOwner() {
+        if (_state.value == DualScreenState.SingleDisplay) return
+        val now = nowMs()
+        // Digital BUTTON_L2 and analog AXIS_LTRIGGER can both fire for one press.
+        if (now - lastL2ToggleAtMs < 280L) return
+        lastL2ToggleAtMs = now
+        val next = when (_gamepadOwner.value) {
+            GamepadOwner.Primary -> GamepadOwner.Secondary
+            GamepadOwner.Secondary -> GamepadOwner.Primary
+        }
+        stickyGamepadOwner = next
+        setGamepadOwner(next)
+    }
+
+    private fun setGamepadOwner(owner: GamepadOwner) {
+        if (_gamepadOwner.value == owner) return
         _gamepadOwner.value = owner
+        _gamepadFocusEpoch.value = _gamepadFocusEpoch.value + 1L
+    }
+
+    private fun nowMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
+
+    private fun pauseSessionClock(session: NowPlayingState, now: Long): NowPlayingState {
+        if (session.sessionResumedAt <= 0L) return session
+        return session.copy(
+            sessionElapsedMs = session.sessionElapsedMs +
+                (now - session.sessionResumedAt).coerceAtLeast(0),
+            sessionResumedAt = 0L
+        )
+    }
+
+    private fun resumeSessionClock(session: NowPlayingState, now: Long): NowPlayingState =
+        if (session.sessionResumedAt > 0L) session else session.copy(sessionResumedAt = now)
+
+    /** Pause every session except [topPackage] (null pauses all). */
+    private fun applyTopDisplaySessionClocks(topPackage: String?) {
+        val now = nowMs()
+        sessionCache.keys.toList().forEach { pkg ->
+            val current = sessionCache[pkg] ?: return@forEach
+            sessionCache[pkg] = when (pkg) {
+                topPackage -> resumeSessionClock(current, now)
+                else -> pauseSessionClock(current, now)
+            }
+        }
     }
 
     private fun recomputeGamepadOwner() {
-        _gamepadOwner.value = when {
-            _state.value == DualScreenState.SingleDisplay -> GamepadOwner.Primary
+        if (_state.value == DualScreenState.SingleDisplay) {
+            stickyGamepadOwner = null
+            setGamepadOwner(GamepadOwner.Primary)
+            return
+        }
+        // Re-read sticky at decision time — never pass a stale null into apply that
+        // would wipe an L2/claim sticky set concurrently by toggle/claim.
+        val sticky = stickyGamepadOwner
+        val next = when {
+            sticky != null -> sticky
+            // Slot grid follows the hero display (primary by default; secondary when swapped).
+            _scrapeReviewPicking.value ->
+                if (gamesMenuOnPrimary) GamepadOwner.Secondary else GamepadOwner.Primary
             // Explicit destination overlays take keys first (Settings/Apps/…).
             secondaryHoldsInput -> GamepadOwner.Secondary
             primaryHoldsInput -> GamepadOwner.Primary
@@ -446,6 +637,7 @@ class DualScreenStore {
             gamesMenuOnPrimary -> GamepadOwner.Primary
             else -> GamepadOwner.Secondary
         }
+        setGamepadOwner(next)
     }
 }
 

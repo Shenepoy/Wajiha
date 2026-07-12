@@ -3,9 +3,10 @@ package com.wajiha.android.detect.probes
 import com.wajiha.android.detect.EmulatorDataReader
 import com.wajiha.android.detect.RomPathCandidate
 import com.wajiha.android.detect.RomPathProbe
+import com.wajiha.data.WajihaJson
+import com.wajiha.domain.EmulatorPackages
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -21,7 +22,7 @@ class RetroArchRomPathProbe(
 ) : RomPathProbe {
 
     override val probeId = "retroarch"
-    override val supportedPackages = RETROARCH_PACKAGES
+    override val supportedPackages = EmulatorPackages.retroArch
     override val priority = 20
 
     override suspend fun probe(packageName: String, sessionStartedAt: Long): RomPathCandidate? =
@@ -36,11 +37,11 @@ class RetroArchRomPathProbe(
         val cfg = runCatching {
             java.io.File(cfgPath).takeIf { it.isFile }?.readText()
         }.getOrNull()
-        val fromCfg = cfg?.let { parseCfgValue(it, "content_history_path") }
+        val fromCfg = cfg?.let { IniKeyParser.cfgValue(it, "content_history_path") }
         if (!fromCfg.isNullOrBlank() && reader.exists(fromCfg)) {
             return fromCfg
         }
-        val playlistDir = cfg?.let { parseCfgValue(it, "playlist_directory") }
+        val playlistDir = cfg?.let { IniKeyParser.cfgValue(it, "playlist_directory") }
         if (!playlistDir.isNullOrBlank()) {
             val builtin = "$playlistDir/builtin/content_history.lpl"
             if (reader.exists(builtin)) return builtin
@@ -56,15 +57,8 @@ class RetroArchRomPathProbe(
         parseHistoryContent(content, sessionStartedAt, probeId)
 
     companion object {
-        val RETROARCH_PACKAGES = setOf(
-            "com.retroarch",
-            "com.retroarch.aarch64",
-            "com.retroarch.ra32",
-            "com.retroarch.plus"
-        )
-
         private const val SESSION_SKEW_MS = 60_000L
-        private val json = Json { ignoreUnknownKeys = true }
+        private val json = WajihaJson.Default
 
         fun parseHistoryContent(
             content: String,
@@ -129,12 +123,6 @@ class RetroArchRomPathProbe(
                 platformHint = null,
                 timestamp = sessionStartedAt
             )
-        }
-
-        fun parseCfgValue(cfg: String, key: String): String? {
-            val pattern = Regex("""^\s*$key\s*=\s*"?([^"\n]+)"?\s*$""", RegexOption.MULTILINE)
-            val match = pattern.find(cfg) ?: return null
-            return match.groupValues[1].trim().trim('"')
         }
 
         fun platformFromCore(coreName: String): String? {

@@ -5,8 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 /**
- * Tracks the active [GamepadSafeTextField] edit session so B / system back
- * dismisses the keyboard before menus, navigation, or other back handlers run.
+ * Tracks the active [com.wajiha.ui.components.gamepad.GamepadSafeTextField] edit session
+ * so B / system back dismisses the keyboard before menus, navigation, or other back handlers run.
+ * Tap-outside dismiss is handled by [dismissKeyboardOnOutsideTap] / [GamepadScreen].
  */
 object GamepadTextEditRegistry {
     private var dismissHandler: (() -> Boolean)? = null
