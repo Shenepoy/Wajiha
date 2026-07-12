@@ -12,7 +12,7 @@ MODE="${1:-check}"
 
 usage() {
   echo "Usage: $0 [check|format]" >&2
-  echo "  check   Fail on autocorrectable style issues (default; CI-friendly)" >&2
+  echo "  check   Apply format, then fail if any .kt/.kts still differ from HEAD (CI gate)" >&2
   echo "  format  Auto-fix style issues in place" >&2
   exit 2
 }
@@ -32,9 +32,12 @@ if [[ ! -x "$KTLINT_BIN" ]]; then
   chmod +x "$KTLINT_BIN"
 fi
 
+# -F applies fixes. --ignore-autocorrect-failures keeps exit 0 despite naming/etc.
+# noise that cannot be auto-fixed (Compose PascalCase, backing props, …).
 # Include sources, then negate Study/ and build (globs apply right-to-left).
 args=(
   --relative
+  -F
   --ignore-autocorrect-failures
   "**/*.kt"
   "**/*.kts"
@@ -42,8 +45,15 @@ args=(
   "!**/build/**"
 )
 
+"$KTLINT_BIN" "${args[@]}"
+
 if [[ "$MODE" == format ]]; then
-  args=(-F "${args[@]}")
+  exit 0
 fi
 
-exec "$KTLINT_BIN" "${args[@]}"
+# CI gate: if formatting changed anything vs HEAD, the tree was out of style.
+if ! git diff --quiet -- '*.kt' '*.kts'; then
+  echo "ktlint found formatting issues. Run: ./scripts/ktlint.sh format && commit the result." >&2
+  git --no-pager diff --stat -- '*.kt' '*.kts' >&2
+  exit 1
+fi
