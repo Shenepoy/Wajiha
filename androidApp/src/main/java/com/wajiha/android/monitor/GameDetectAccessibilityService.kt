@@ -10,8 +10,9 @@ import org.koin.core.component.inject
  * settings). Reacts to window-state changes instantly instead of waiting for
  * the 2s UsageStats poll — same trade-off RetroHrai offers for hotkeys.
  */
-class GameDetectAccessibilityService : AccessibilityService(), KoinComponent {
-
+class GameDetectAccessibilityService :
+    AccessibilityService(),
+    KoinComponent {
     private val monitor: ForegroundAppMonitor by inject()
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {

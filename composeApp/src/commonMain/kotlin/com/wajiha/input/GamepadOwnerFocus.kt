@@ -20,7 +20,7 @@ import org.koin.compose.koinInject
 @Composable
 fun RememberGamepadOwnerFocus(
     owner: GamepadOwner?,
-    onGained: suspend () -> Unit
+    onGained: suspend () -> Unit,
 ) {
     if (owner == null) return
     val dualStore = koinInject<DualScreenStore>()

@@ -19,20 +19,25 @@ import com.wajiha.domain.repository.GameRepository
  */
 class RomFolderManager(
     private val context: Context,
-    private val gameRepository: GameRepository
+    private val gameRepository: GameRepository,
 ) {
-    suspend fun addFolder(treeUri: Uri, platformId: String, scanDepth: Int = 3): Long {
+    suspend fun addFolder(
+        treeUri: Uri,
+        platformId: String,
+        scanDepth: Int = 3,
+    ): Long {
         context.contentResolver.takePersistableUriPermission(
             treeUri,
-            Intent.FLAG_GRANT_READ_URI_PERMISSION
+            Intent.FLAG_GRANT_READ_URI_PERMISSION,
         )
-        val id = gameRepository.addRomFolder(
-            RomFolderEntity(
-                platformId = platformId,
-                treeUri = treeUri.toString(),
-                scanDepth = scanDepth
+        val id =
+            gameRepository.addRomFolder(
+                RomFolderEntity(
+                    platformId = platformId,
+                    treeUri = treeUri.toString(),
+                    scanDepth = scanDepth,
+                ),
             )
-        )
         LibraryScanWorker.enqueue(context, platformId = platformId)
         return id
     }

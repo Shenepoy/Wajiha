@@ -19,12 +19,16 @@ import org.koin.core.component.inject
  * Safe for production: system [Intent.ACTION_PACKAGE_*] broadcasts are
  * exempt from implicit-broadcast restrictions and carry no Play policy risk.
  */
-class EmulatorPackageReceiver : BroadcastReceiver(), KoinComponent {
-
+class EmulatorPackageReceiver :
+    BroadcastReceiver(),
+    KoinComponent {
     private val monitor: ForegroundAppMonitor by inject()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    override fun onReceive(context: Context, intent: Intent) {
+    override fun onReceive(
+        context: Context,
+        intent: Intent,
+    ) {
         val action = intent.action ?: return
         if (action != Intent.ACTION_PACKAGE_ADDED &&
             action != Intent.ACTION_PACKAGE_REMOVED &&

@@ -14,7 +14,7 @@ fun WajihaDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     confirmText: String = "OK",
-    dismissText: String = "Cancel"
+    dismissText: String = "Cancel",
 ) {
     if (!visible) return
     val layerId = "dialog_${title.hashCode()}"
@@ -25,7 +25,7 @@ fun WajihaDialog(
         onConfirm = {
             onConfirm()
             true
-        }
+        },
     ) {
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -36,7 +36,7 @@ fun WajihaDialog(
             },
             dismissButton = {
                 GamepadButton(text = dismissText, onClick = onDismiss, outlined = true)
-            }
+            },
         )
     }
 }

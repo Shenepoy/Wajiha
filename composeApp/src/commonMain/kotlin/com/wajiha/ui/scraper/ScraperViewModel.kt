@@ -37,14 +37,14 @@ data class ManualMatchState(
     val applying: Boolean = false,
     val message: String? = null,
     /** null = neutral, true = success, false = error */
-    val messageSuccess: Boolean? = null
+    val messageSuccess: Boolean? = null,
 )
 
 /** Result of a credential test probe for one scraper source. */
 data class SourceTestState(
     val loading: Boolean = false,
     val message: String? = null,
-    val success: Boolean? = null
+    val success: Boolean? = null,
 )
 
 class ScraperViewModel(
@@ -55,11 +55,11 @@ class ScraperViewModel(
     platformRepository: PlatformRepository,
     private val libraryActions: LibraryActions,
     private val credentialValidator: ScraperCredentialValidator,
-    private val raRepository: RaRepository
+    private val raRepository: RaRepository,
 ) : ViewModel() {
-
-    val settings: StateFlow<ScraperSettings> = settingsRepository.settings
-        .stateIn(viewModelScope, SharingStarted.Eagerly, ScraperSettings())
+    val settings: StateFlow<ScraperSettings> =
+        settingsRepository.settings
+            .stateIn(viewModelScope, SharingStarted.Eagerly, ScraperSettings())
 
     val progress: StateFlow<BatchScrapeProgress> = batchScraper.progress
 
@@ -68,8 +68,10 @@ class ScraperViewModel(
         viewModelScope.launch { batchScraper.restoreIfIdle() }
     }
 
-    val platforms: StateFlow<List<PlatformEntity>> = platformRepository.observeEnabled()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val platforms: StateFlow<List<PlatformEntity>> =
+        platformRepository
+            .observeEnabled()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Platforms with at least one ROM folder — the ones actually in the library. */
     val inUsePlatforms: StateFlow<List<PlatformEntity>> =
@@ -88,6 +90,7 @@ class ScraperViewModel(
     val sourceTests: StateFlow<Map<String, SourceTestState>> = _sourceTests
 
     private val _batchFeedback = MutableStateFlow<String?>(null)
+
     /** One-shot banner for preflight / already-running / enqueue feedback. */
     val batchFeedback: StateFlow<String?> = _batchFeedback
 
@@ -101,18 +104,25 @@ class ScraperViewModel(
         viewModelScope.launch { settingsRepository.update(transform) }
     }
 
-    fun toggleSource(sourceId: String, enabled: Boolean) = update { s ->
+    fun toggleSource(
+        sourceId: String,
+        enabled: Boolean,
+    ) = update { s ->
         s.copy(
-            enabledSources = if (enabled) {
-                (s.enabledSources + sourceId).distinct()
-            } else {
-                s.enabledSources - sourceId
-            }
+            enabledSources =
+                if (enabled) {
+                    (s.enabledSources + sourceId).distinct()
+                } else {
+                    s.enabledSources - sourceId
+                },
         )
     }
 
     /** Moves a source one step up in the priority chain for a media type. */
-    fun promoteMediaSource(mediaType: String, sourceId: String) = update { s ->
+    fun promoteMediaSource(
+        mediaType: String,
+        sourceId: String,
+    ) = update { s ->
         val chain = (s.mediaPriority[mediaType] ?: return@update s).toMutableList()
         val index = chain.indexOf(sourceId)
         if (index > 0) {
@@ -128,71 +138,98 @@ class ScraperViewModel(
         _sourceTests.value = _sourceTests.value + (sourceId to SourceTestState(loading = true))
         viewModelScope.launch {
             val settings = settingsRepository.current()
-            val result = when (sourceId) {
-                "screenscraper" -> credentialValidator.testScreenScraper(settings)
-                "steamgriddb" -> credentialValidator.testSteamGridDb(settings)
-                "romm" -> credentialValidator.testRomm(settings)
-                "ra" -> {
-                    val profile = raRepository.login()
-                    if (profile != null) {
-                        CredentialTestResult.Success(
-                            "Logged in as ${profile.user} (${profile.totalPoints} pts)"
-                        )
-                    } else {
-                        CredentialTestResult.Failure("Login failed — check username/API key")
+            val result =
+                when (sourceId) {
+                    "screenscraper" -> {
+                        credentialValidator.testScreenScraper(settings)
+                    }
+
+                    "steamgriddb" -> {
+                        credentialValidator.testSteamGridDb(settings)
+                    }
+
+                    "romm" -> {
+                        credentialValidator.testRomm(settings)
+                    }
+
+                    "ra" -> {
+                        val profile = raRepository.login()
+                        if (profile != null) {
+                            CredentialTestResult.Success(
+                                "Logged in as ${profile.user} (${profile.totalPoints} pts)",
+                            )
+                        } else {
+                            CredentialTestResult.Failure("Login failed — check username/API key")
+                        }
+                    }
+
+                    else -> {
+                        CredentialTestResult.Failure("No test available for this source")
                     }
                 }
-                else -> CredentialTestResult.Failure("No test available for this source")
-            }
             _sourceTests.value = _sourceTests.value + (
-                sourceId to SourceTestState(
-                    loading = false,
-                    message = when (result) {
-                        is CredentialTestResult.Success -> result.message
-                        is CredentialTestResult.Failure -> result.message
-                    },
-                    success = result is CredentialTestResult.Success
-                )
-                )
+                sourceId to
+                    SourceTestState(
+                        loading = false,
+                        message =
+                            when (result) {
+                                is CredentialTestResult.Success -> result.message
+                                is CredentialTestResult.Failure -> result.message
+                            },
+                        success = result is CredentialTestResult.Success,
+                    )
+            )
         }
     }
 
     // ---- per-platform overrides ----
 
     /** Toggles a source for one platform; starts from the effective set. */
-    fun togglePlatformSource(platformId: String, sourceId: String, enabled: Boolean) = update { s ->
+    fun togglePlatformSource(
+        platformId: String,
+        sourceId: String,
+        enabled: Boolean,
+    ) = update { s ->
         val current = s.platformOverrides[platformId]?.enabledSources ?: s.enabledSources
         val next = if (enabled) (current + sourceId).distinct() else current - sourceId
-        val override = (s.platformOverrides[platformId] ?: PlatformScraperOverride())
-            .copy(enabledSources = next)
+        val override =
+            (s.platformOverrides[platformId] ?: PlatformScraperOverride())
+                .copy(enabledSources = next)
         s.copy(platformOverrides = s.platformOverrides + (platformId to override))
     }
 
-    fun setPlatformRegionPriority(platformId: String, regions: List<String>) = update { s ->
-        val override = (s.platformOverrides[platformId] ?: PlatformScraperOverride())
-            .copy(regionPriority = regions.ifEmpty { null })
+    fun setPlatformRegionPriority(
+        platformId: String,
+        regions: List<String>,
+    ) = update { s ->
+        val override =
+            (s.platformOverrides[platformId] ?: PlatformScraperOverride())
+                .copy(regionPriority = regions.ifEmpty { null })
         s.copy(
-            platformOverrides = if (override.isEmpty) {
-                s.platformOverrides - platformId
-            } else {
-                s.platformOverrides + (platformId to override)
-            }
+            platformOverrides =
+                if (override.isEmpty) {
+                    s.platformOverrides - platformId
+                } else {
+                    s.platformOverrides + (platformId to override)
+                },
         )
     }
 
-    fun clearPlatformOverride(platformId: String) = update { s ->
-        s.copy(platformOverrides = s.platformOverrides - platformId)
-    }
+    fun clearPlatformOverride(platformId: String) =
+        update { s ->
+            s.copy(platformOverrides = s.platformOverrides - platformId)
+        }
 
     private fun updatePlatformOverride(
         platformId: String,
-        transform: (PlatformScraperOverride?) -> PlatformScraperOverride?
+        transform: (PlatformScraperOverride?) -> PlatformScraperOverride?,
     ) = update { s ->
         val next = transform(s.platformOverrides[platformId])
-        val overrides = when {
-            next == null || next.isEmpty -> s.platformOverrides - platformId
-            else -> s.platformOverrides + (platformId to next)
-        }
+        val overrides =
+            when {
+                next == null || next.isEmpty -> s.platformOverrides - platformId
+                else -> s.platformOverrides + (platformId to next)
+            }
         s.copy(platformOverrides = overrides)
     }
 
@@ -200,7 +237,7 @@ class ScraperViewModel(
         platformId: String,
         global: String,
         apply: (PlatformScraperOverride, String?) -> PlatformScraperOverride,
-        value: String?
+        value: String?,
     ) = updatePlatformOverride(platformId) { current ->
         val normalized = value?.takeIf { it != global }
         apply(current ?: PlatformScraperOverride(), normalized)
@@ -210,7 +247,7 @@ class ScraperViewModel(
         platformId: String,
         global: Boolean,
         apply: (PlatformScraperOverride, Boolean?) -> PlatformScraperOverride,
-        value: Boolean?
+        value: Boolean?,
     ) = updatePlatformOverride(platformId) { current ->
         val normalized = value?.takeIf { it != global }
         apply(current ?: PlatformScraperOverride(), normalized)
@@ -220,58 +257,67 @@ class ScraperViewModel(
         platformId: String,
         global: Int,
         apply: (PlatformScraperOverride, Int?) -> PlatformScraperOverride,
-        value: Int?
+        value: Int?,
     ) = updatePlatformOverride(platformId) { current ->
         val normalized = value?.takeIf { it != global }
         apply(current ?: PlatformScraperOverride(), normalized)
     }
 
-    fun setPlatformGridStyles(platformId: String, styles: List<String>) =
-        setPlatformStyleList(
-            platformId,
-            styles,
-            global = { it.steamGridDbGridStyles },
-            apply = { o, v -> o.copy(steamGridDbGridStyles = v) }
-        )
+    fun setPlatformGridStyles(
+        platformId: String,
+        styles: List<String>,
+    ) = setPlatformStyleList(
+        platformId,
+        styles,
+        global = { it.steamGridDbGridStyles },
+        apply = { o, v -> o.copy(steamGridDbGridStyles = v) },
+    )
 
-    fun setPlatformHeroStyles(platformId: String, styles: List<String>) =
-        setPlatformStyleList(
-            platformId,
-            styles,
-            global = { it.steamGridDbHeroStyles },
-            apply = { o, v -> o.copy(steamGridDbHeroStyles = v) }
-        )
+    fun setPlatformHeroStyles(
+        platformId: String,
+        styles: List<String>,
+    ) = setPlatformStyleList(
+        platformId,
+        styles,
+        global = { it.steamGridDbHeroStyles },
+        apply = { o, v -> o.copy(steamGridDbHeroStyles = v) },
+    )
 
-    fun setPlatformLogoStyles(platformId: String, styles: List<String>) =
-        setPlatformStyleList(
-            platformId,
-            styles,
-            global = { it.steamGridDbLogoStyles },
-            apply = { o, v -> o.copy(steamGridDbLogoStyles = v) }
-        )
+    fun setPlatformLogoStyles(
+        platformId: String,
+        styles: List<String>,
+    ) = setPlatformStyleList(
+        platformId,
+        styles,
+        global = { it.steamGridDbLogoStyles },
+        apply = { o, v -> o.copy(steamGridDbLogoStyles = v) },
+    )
 
-    fun setPlatformIconStyles(platformId: String, styles: List<String>) =
-        setPlatformStyleList(
-            platformId,
-            styles,
-            global = { it.steamGridDbIconStyles },
-            apply = { o, v -> o.copy(steamGridDbIconStyles = v) }
-        )
+    fun setPlatformIconStyles(
+        platformId: String,
+        styles: List<String>,
+    ) = setPlatformStyleList(
+        platformId,
+        styles,
+        global = { it.steamGridDbIconStyles },
+        apply = { o, v -> o.copy(steamGridDbIconStyles = v) },
+    )
 
     private fun setPlatformStyleList(
         platformId: String,
         styles: List<String>,
         global: (ScraperSettings) -> List<String>,
-        apply: (PlatformScraperOverride, List<String>?) -> PlatformScraperOverride
+        apply: (PlatformScraperOverride, List<String>?) -> PlatformScraperOverride,
     ) = update { s ->
         val normalized = styles.takeIf { it != global(s) }
         val current = s.platformOverrides[platformId] ?: PlatformScraperOverride()
         val next = apply(current, normalized)
-        val overrides = if (next.isEmpty) {
-            s.platformOverrides - platformId
-        } else {
-            s.platformOverrides + (platformId to next)
-        }
+        val overrides =
+            if (next.isEmpty) {
+                s.platformOverrides - platformId
+            } else {
+                s.platformOverrides + (platformId to next)
+            }
         s.copy(platformOverrides = overrides)
     }
 
@@ -279,7 +325,7 @@ class ScraperViewModel(
 
     fun startBatch(
         platformId: String? = null,
-        policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps
+        policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps,
     ) {
         viewModelScope.launch {
             _batchFeedback.value = null
@@ -293,21 +339,26 @@ class ScraperViewModel(
     /** Games that would be processed for Fill gaps / Force on a platform. */
     suspend fun estimateBatchCount(
         platformId: String?,
-        policy: ScrapeRunPolicy
+        policy: ScrapeRunPolicy,
     ): Int {
         val all = gameRepository.observeAll().first()
         val scoped = if (platformId == null) all else all.filter { it.platformId == platformId }
         return when (policy.mode) {
-            com.wajiha.data.scraper.ScrapeRunMode.Force -> scoped.size
-            com.wajiha.data.scraper.ScrapeRunMode.FillGaps -> scoped.count { game ->
-                game.needsGapFill(gameRepository.media(game.id))
+            com.wajiha.data.scraper.ScrapeRunMode.Force -> {
+                scoped.size
+            }
+
+            com.wajiha.data.scraper.ScrapeRunMode.FillGaps -> {
+                scoped.count { game ->
+                    game.needsGapFill(gameRepository.media(game.id))
+                }
             }
         }
     }
 
     suspend fun reviewQueueGames(
         platformId: String,
-        includeScraped: Boolean
+        includeScraped: Boolean,
     ): List<GameEntity> {
         val all = gameRepository.observeAll().first().filter { it.platformId == platformId }
         if (includeScraped) return all
@@ -324,11 +375,12 @@ class ScraperViewModel(
         }
     }
 
-    fun canRetryFailed(platformId: String? = null): Boolean =
-        batchScraper.hasRetryableIssues(platformId)
+    fun canRetryFailed(platformId: String? = null): Boolean = batchScraper.hasRetryableIssues(platformId)
 
     fun cancelBatch() = libraryActions.cancelScrape()
+
     fun pauseBatch() = batchScraper.pause()
+
     fun resumeBatch() = batchScraper.resume()
 
     fun hasConfiguredSources(platformId: String? = null): Boolean {
@@ -362,28 +414,31 @@ class ScraperViewModel(
 
     fun searchSources(name: String) {
         val game = _manual.value.game ?: return
-        _manual.value = _manual.value.copy(
-            searching = true,
-            candidates = emptyList(),
-            message = null,
-            messageSuccess = null
-        )
+        _manual.value =
+            _manual.value.copy(
+                searching = true,
+                candidates = emptyList(),
+                message = null,
+                messageSuccess = null,
+            )
         viewModelScope.launch {
             try {
                 val candidates = engine.searchAll(name, game, settingsRepository.current())
-                _manual.value = _manual.value.copy(
-                    searching = false,
-                    candidates = candidates,
-                    message = if (candidates.isEmpty()) "No matches found" else null,
-                    messageSuccess = if (candidates.isEmpty()) false else null
-                )
+                _manual.value =
+                    _manual.value.copy(
+                        searching = false,
+                        candidates = candidates,
+                        message = if (candidates.isEmpty()) "No matches found" else null,
+                        messageSuccess = if (candidates.isEmpty()) false else null,
+                    )
             } catch (e: Exception) {
-                _manual.value = _manual.value.copy(
-                    searching = false,
-                    candidates = emptyList(),
-                    message = e.message ?: "Search failed",
-                    messageSuccess = false
-                )
+                _manual.value =
+                    _manual.value.copy(
+                        searching = false,
+                        candidates = emptyList(),
+                        message = e.message ?: "Search failed",
+                        messageSuccess = false,
+                    )
             }
         }
     }
@@ -396,19 +451,21 @@ class ScraperViewModel(
                 val result = engine.applyManualMatch(game, candidate, settingsRepository.current())
                 val refreshedGame = gameRepository.byId(game.id)
                 val (msg, ok) = result.userMessage(verb = "Applied")
-                _manual.value = _manual.value.copy(
-                    game = refreshedGame ?: game,
-                    media = gameRepository.media(game.id),
-                    applying = false,
-                    message = msg,
-                    messageSuccess = ok
-                )
+                _manual.value =
+                    _manual.value.copy(
+                        game = refreshedGame ?: game,
+                        media = gameRepository.media(game.id),
+                        applying = false,
+                        message = msg,
+                        messageSuccess = ok,
+                    )
             } catch (e: Exception) {
-                _manual.value = _manual.value.copy(
-                    applying = false,
-                    message = e.message ?: "Apply failed",
-                    messageSuccess = false
-                )
+                _manual.value =
+                    _manual.value.copy(
+                        applying = false,
+                        message = e.message ?: "Apply failed",
+                        messageSuccess = false,
+                    )
             }
         }
     }
@@ -429,19 +486,21 @@ class ScraperViewModel(
             try {
                 val result = engine.scrapeGame(game, settingsRepository.current())
                 val (msg, ok) = result.userMessage(verb = "Scraped")
-                _manual.value = _manual.value.copy(
-                    game = gameRepository.byId(game.id) ?: game,
-                    media = gameRepository.media(game.id),
-                    applying = false,
-                    message = msg,
-                    messageSuccess = ok
-                )
+                _manual.value =
+                    _manual.value.copy(
+                        game = gameRepository.byId(game.id) ?: game,
+                        media = gameRepository.media(game.id),
+                        applying = false,
+                        message = msg,
+                        messageSuccess = ok,
+                    )
             } catch (e: Exception) {
-                _manual.value = _manual.value.copy(
-                    applying = false,
-                    message = e.message ?: "Scrape failed",
-                    messageSuccess = false
-                )
+                _manual.value =
+                    _manual.value.copy(
+                        applying = false,
+                        message = e.message ?: "Scrape failed",
+                        messageSuccess = false,
+                    )
             }
         }
     }

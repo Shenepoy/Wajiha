@@ -34,7 +34,7 @@ import org.koin.compose.koinInject
 @Composable
 fun AchievementsPanel(
     modifier: Modifier = Modifier,
-    showGamepadHints: Boolean = true
+    showGamepadHints: Boolean = true,
 ) {
     val viewModel = koinInject<RaViewModel>()
     val state by viewModel.state.collectAsState()
@@ -42,7 +42,7 @@ fun AchievementsPanel(
     SecondaryPanelScaffold(
         modifier = modifier,
         showGamepadHints = showGamepadHints,
-        hints = achievementsGamepadHints
+        hints = achievementsGamepadHints,
     ) {
         val progress = state.progress
         when {
@@ -50,30 +50,33 @@ fun AchievementsPanel(
                 WajihaEmptyState(
                     title = "RetroAchievements not configured",
                     subtitle = "Add your RetroAchievements login in Settings → Scraper",
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
+
             state.loading && progress == null -> {
                 WajihaLoadingState(modifier = Modifier.fillMaxSize())
             }
+
             progress == null -> {
                 WajihaEmptyState(
                     title = "No achievement data",
                     subtitle = state.message,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
+
             else -> {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = WajihaSpacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm + WajihaSpacing.xs)
+                    horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm + WajihaSpacing.xs),
                 ) {
                     progress.imageIcon?.let { icon ->
                         AsyncImage(
                             model = RaMediaUrls.media(icon),
                             contentDescription = progress.title,
-                            modifier = Modifier.size(WajihaSpacing.touchMin).clip(WajihaShapes.focus)
+                            modifier = Modifier.size(WajihaSpacing.touchMin).clip(WajihaShapes.focus),
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
@@ -81,56 +84,61 @@ fun AchievementsPanel(
                         Text(
                             text = "${progress.numAwardedToUser} / ${progress.numAchievements} achievements",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
                 LinearProgressIndicator(
                     progress = {
-                        if (progress.numAchievements == 0) 0f
-                        else progress.numAwardedToUser.toFloat() / progress.numAchievements
+                        if (progress.numAchievements == 0) {
+                            0f
+                        } else {
+                            progress.numAwardedToUser.toFloat() / progress.numAchievements
+                        }
                     },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = WajihaSpacing.sm)
+                    modifier = Modifier.fillMaxWidth().padding(bottom = WajihaSpacing.sm),
                 )
                 GamepadList(
                     items = progress.sortedAchievements,
                     key = { it.id },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 ) { achievement ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm + WajihaSpacing.xs)
+                        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm + WajihaSpacing.xs),
                     ) {
                         AsyncImage(
-                            model = if (achievement.earned) {
-                                achievement.badgeUrl
-                            } else {
-                                achievement.badgeLockedUrl
-                            },
+                            model =
+                                if (achievement.earned) {
+                                    achievement.badgeUrl
+                                } else {
+                                    achievement.badgeLockedUrl
+                                },
                             contentDescription = achievement.title,
-                            modifier = Modifier.size(WajihaSpacing.touchMin - WajihaSpacing.xs).clip(WajihaShapes.focus)
+                            modifier = Modifier.size(WajihaSpacing.touchMin - WajihaSpacing.xs).clip(WajihaShapes.focus),
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = achievement.title,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = if (achievement.earned) {
-                                    MaterialTheme.colorScheme.onBackground
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
+                                color =
+                                    if (achievement.earned) {
+                                        MaterialTheme.colorScheme.onBackground
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
                             )
                             Text(
                                 text = achievement.description,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Text(
                             text = "${achievement.points}",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }

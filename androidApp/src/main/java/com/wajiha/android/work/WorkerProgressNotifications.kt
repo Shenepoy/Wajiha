@@ -10,7 +10,7 @@ import kotlinx.coroutines.launch
 internal suspend fun <T> CoroutineWorker.launchProgressNotifications(
     progress: Flow<T>,
     shouldUpdate: (T) -> Boolean,
-    foregroundInfo: (T) -> ForegroundInfo
+    foregroundInfo: (T) -> ForegroundInfo,
 ): Job {
     val scope = CoroutineScope(coroutineContext + Job())
     return scope.launch {

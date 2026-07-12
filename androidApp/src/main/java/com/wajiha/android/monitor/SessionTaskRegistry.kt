@@ -14,7 +14,6 @@ import com.wajiha.log.WajihaTags
  * still works with a known taskId from the launch window.
  */
 internal object SessionTaskRegistry {
-
     private val mainHandler = Handler(Looper.getMainLooper())
     private val taskIds = mutableMapOf<String, Int>()
     private val components = mutableMapOf<String, ComponentName>()
@@ -23,7 +22,7 @@ internal object SessionTaskRegistry {
         context: Context,
         packageName: String,
         activityName: String?,
-        delayMs: Long = 400L
+        delayMs: Long = 400L,
     ) {
         if (activityName != null) {
             components[packageName] = ComponentName(packageName, activityName)
@@ -32,7 +31,10 @@ internal object SessionTaskRegistry {
         mainHandler.postDelayed({ captureTaskId(context, packageName) }, delayMs + 1_500L)
     }
 
-    fun captureTaskId(context: Context, packageName: String) {
+    fun captureTaskId(
+        context: Context,
+        packageName: String,
+    ) {
         TopDisplayTaskResolver.taskIdForPackage(context, packageName)?.let { id ->
             taskIds[packageName] = id
             WajihaLog.d(WajihaTags.DISPLAY, "SessionTaskRegistry: taskId=$id pkg=$packageName")
@@ -46,12 +48,15 @@ internal object SessionTaskRegistry {
         components.remove(packageName)
     }
 
-    fun moveToFront(context: Context, packageName: String): Boolean {
+    fun moveToFront(
+        context: Context,
+        packageName: String,
+    ): Boolean {
         taskIds[packageName]?.let { id ->
             if (moveTaskId(context, id)) {
                 WajihaLog.i(
                     WajihaTags.DISPLAY,
-                    "SessionTaskRegistry: moveTaskToFront taskId=$id pkg=$packageName"
+                    "SessionTaskRegistry: moveTaskToFront taskId=$id pkg=$packageName",
                 )
                 return true
             }
@@ -67,7 +72,10 @@ internal object SessionTaskRegistry {
         return TopDisplayTaskResolver.reorderPackageToFront(context, packageName)
     }
 
-    private fun moveTaskId(context: Context, taskId: Int): Boolean =
+    private fun moveTaskId(
+        context: Context,
+        taskId: Int,
+    ): Boolean =
         try {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             am.moveTaskToFront(taskId, 0)

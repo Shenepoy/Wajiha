@@ -47,7 +47,7 @@ fun GamepadScreen(
     onPreviewKey: ((KeyEvent) -> Boolean)? = null,
     /** Called when [owner] gains gamepad ownership — restore content focus. */
     onOwnerGainedFocus: (suspend () -> Unit)? = null,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val processor = remember { GamepadInputProcessor() }
     val focusManager = LocalFocusManager.current
@@ -79,47 +79,47 @@ fun GamepadScreen(
     CompositionLocalProvider(
         LocalInputModeController provides inputModeController,
         LocalInputMode provides inputModeController.mode,
-        LocalFocusRingOverlay provides focusRingOverlay
+        LocalFocusRingOverlay provides focusRingOverlay,
     ) {
         FocusRingOverlayHost(
             state = focusRingOverlay,
-            modifier = modifier
-                .fillMaxSize()
-                .pointerInput(inputModeController, focusManager, keyboard) {
-                    detectTapGestures(
-                        onPress = {
-                            inputModeController.onTouch()
-                            tryAwaitRelease()
-                        },
-                        onTap = {
-                            if (GamepadTextEditRegistry.isEditing) {
-                                dismissTextEdit(focusManager, keyboard)
-                            }
+            modifier =
+                modifier
+                    .fillMaxSize()
+                    .pointerInput(inputModeController, focusManager, keyboard) {
+                        detectTapGestures(
+                            onPress = {
+                                inputModeController.onTouch()
+                                tryAwaitRelease()
+                            },
+                            onTap = {
+                                if (GamepadTextEditRegistry.isEditing) {
+                                    dismissTextEdit(focusManager, keyboard)
+                                }
+                            },
+                        )
+                    }.onPreviewKeyEvent { event ->
+                        if (GamepadKeys.switchesToGamepadMode(event)) {
+                            inputModeController.onGamepadKey()
                         }
-                    )
-                }
-                .onPreviewKeyEvent { event ->
-                    if (GamepadKeys.switchesToGamepadMode(event)) {
-                        inputModeController.onGamepadKey()
-                    }
-                    if (
-                        GamepadKeys.isBack(event.type, event.key) &&
-                        dismissTextEdit(focusManager, keyboard)
-                    ) {
-                        return@onPreviewKeyEvent true
-                    }
-                    if (
-                        onClaimGamepad != null &&
-                        owner != null &&
-                        event.type == KeyEventType.KeyDown &&
-                        isGamepadClaimKey(event.key)
-                    ) {
-                        onClaimGamepad(owner)
-                    }
-                    // Screen handlers (L1/R1 tab cycle, X, etc.) before grace/repeat throttle.
-                    if (onPreviewKey?.invoke(event) == true) return@onPreviewKeyEvent true
-                    processor.shouldConsume(event.type, event.key)
-                }
+                        if (
+                            GamepadKeys.isBack(event.type, event.key) &&
+                            dismissTextEdit(focusManager, keyboard)
+                        ) {
+                            return@onPreviewKeyEvent true
+                        }
+                        if (
+                            onClaimGamepad != null &&
+                            owner != null &&
+                            event.type == KeyEventType.KeyDown &&
+                            isGamepadClaimKey(event.key)
+                        ) {
+                            onClaimGamepad(owner)
+                        }
+                        // Screen handlers (L1/R1 tab cycle, X, etc.) before grace/repeat throttle.
+                        if (onPreviewKey?.invoke(event) == true) return@onPreviewKeyEvent true
+                        processor.shouldConsume(event.type, event.key)
+                    },
         ) {
             content()
         }

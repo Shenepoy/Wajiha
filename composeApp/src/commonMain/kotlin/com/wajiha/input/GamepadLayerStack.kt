@@ -29,7 +29,10 @@ class GamepadLayerStack {
         previewHandlers.remove(layerId)
     }
 
-    fun setPreviewHandler(layerId: String, handler: ((KeyEvent) -> Boolean)?) {
+    fun setPreviewHandler(
+        layerId: String,
+        handler: ((KeyEvent) -> Boolean)?,
+    ) {
         if (handler == null) {
             previewHandlers.remove(layerId)
         } else {
@@ -46,11 +49,12 @@ class GamepadLayerStack {
     fun deactivateAll() {
         // Dismiss modal/menu overlays only — keep screen layers so confirm handlers
         // on home_grid and settings survive a game start.
-        val modalLayers = _layers.value.filter { layerId ->
-            layerId.startsWith("game_context_") ||
-                layerId.startsWith("dialog_") ||
-                layerId.startsWith("modal_")
-        }
+        val modalLayers =
+            _layers.value.filter { layerId ->
+                layerId.startsWith("game_context_") ||
+                    layerId.startsWith("dialog_") ||
+                    layerId.startsWith("modal_")
+            }
         if (modalLayers.isEmpty()) return
         _layers.value = _layers.value.filterNot { it in modalLayers }
         modalLayers.forEach { previewHandlers.remove(it) }

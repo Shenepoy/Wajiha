@@ -16,7 +16,7 @@ fun <T> GamepadList(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(WajihaSpacing.md),
     emptyContent: @Composable (() -> Unit)? = null,
-    row: @Composable (item: T) -> Unit
+    row: @Composable (item: T) -> Unit,
 ) {
     if (items.isEmpty()) {
         emptyContent?.invoke()
@@ -25,7 +25,7 @@ fun <T> GamepadList(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = contentPadding,
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
         items(items, key = { key(it) }) { item ->
             row(item)

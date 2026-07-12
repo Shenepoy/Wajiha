@@ -1,12 +1,12 @@
 package com.wajiha.data.prefs
 
+import androidx.compose.ui.graphics.Color
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.compose.ui.graphics.Color
 import com.wajiha.state.NowPlayingDisplayMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -65,80 +65,73 @@ data class AppSettings(
     /** When true, library scan skips ROMs whose filename or path matches [ignoreFileNamePatterns]. */
     val ignorePatternFilesEnabled: Boolean = false,
     /** Case-insensitive substrings matched against ROM filename and content URI during scan. */
-    val ignoreFileNamePatterns: List<String> = SettingsRepository.DEFAULT_IGNORE_FILE_NAME_PATTERNS
+    val ignoreFileNamePatterns: List<String> = SettingsRepository.DEFAULT_IGNORE_FILE_NAME_PATTERNS,
 )
 
-class SettingsRepository(private val dataStore: DataStore<Preferences>) {
+class SettingsRepository(
+    private val dataStore: DataStore<Preferences>,
+) {
+    val settings: Flow<AppSettings> =
+        dataStore.data.map { prefs ->
+            AppSettings(
+                blackoutOnLaunch = prefs[BLACKOUT_ON_LAUNCH] ?: false,
+                detectManualLaunches = prefs[DETECT_MANUAL] ?: true,
+                memoryGuardEnabled = prefs[MEMORY_GUARD_ENABLED] ?: true,
+                romReconciliationEnabled = prefs[ROM_RECONCILIATION_ENABLED] ?: false,
+                romReconciliationShowFilenameFallback =
+                    prefs[ROM_RECONCILIATION_FILENAME_FALLBACK] ?: true,
+                gameSecondaryMode = prefs[GAME_SECONDARY_MODE] ?: "NowPlaying",
+                nowPlayingDisplay = normalizeNowPlayingDisplay(prefs[NOW_PLAYING_DISPLAY]),
+                gameDimEnabled = prefs[GAME_DIM_ENABLED] ?: false,
+                gameDimOnlyOnNowPlaying = prefs[GAME_DIM_ONLY_ON_NOW_PLAYING] ?: true,
+                gameDimPercent = normalizeGameDimPercent(prefs[GAME_DIM_PERCENT]),
+                gameplayDimTimeoutSeconds = readGameplayDimTimeoutSeconds(prefs),
+                gridRows = prefs[GRID_ROWS] ?: 2,
+                soundsEnabled = prefs[SOUNDS_ENABLED] ?: true,
+                onboardingDone = prefs[ONBOARDING_DONE] ?: false,
+                swapScreenRoles = prefs[SWAP_SCREEN_ROLES] ?: false,
+                theme = prefs[THEME] ?: "dark",
+                focusBorderStyle = normalizeFocusBorderStyle(prefs[FOCUS_BORDER_STYLE]),
+                focusColor = normalizeFocusColor(prefs[FOCUS_COLOR]),
+                focusThickness = normalizeFocusThickness(prefs[FOCUS_THICKNESS]),
+                focusPlacement = normalizeFocusPlacement(prefs[FOCUS_PLACEMENT]),
+                topHeroBackdrop = prefs[TOP_HERO_BACKDROP] ?: true,
+                topHeroCover = prefs[TOP_HERO_COVER] ?: true,
+                topHeroCoverBorder = prefs[TOP_HERO_COVER_BORDER] ?: false,
+                topHeroLogo = prefs[TOP_HERO_LOGO] ?: true,
+                topHeroPlatformIcon = prefs[TOP_HERO_PLATFORM_ICON] ?: true,
+                topHeroPlatform = prefs[TOP_HERO_PLATFORM] ?: true,
+                topHeroTitle = prefs[TOP_HERO_TITLE] ?: true,
+                topHeroMetadata = prefs[TOP_HERO_METADATA] ?: true,
+                topHeroDescription = prefs[TOP_HERO_DESCRIPTION] ?: true,
+                topHeroPlayStats = prefs[TOP_HERO_PLAY_STATS] ?: true,
+                topHeroFavorite = prefs[TOP_HERO_FAVORITE] ?: true,
+                topHeroSectionHint = prefs[TOP_HERO_SECTION_HINT] ?: false,
+                ignorePatternFilesEnabled = prefs[IGNORE_PATTERN_FILES_ENABLED] ?: false,
+                ignoreFileNamePatterns = parseIgnoreFileNamePatterns(prefs[IGNORE_FILE_NAME_PATTERNS]),
+            )
+        }
 
-    val settings: Flow<AppSettings> = dataStore.data.map { prefs ->
-        AppSettings(
-            blackoutOnLaunch = prefs[BLACKOUT_ON_LAUNCH] ?: false,
-            detectManualLaunches = prefs[DETECT_MANUAL] ?: true,
-            memoryGuardEnabled = prefs[MEMORY_GUARD_ENABLED] ?: true,
-            romReconciliationEnabled = prefs[ROM_RECONCILIATION_ENABLED] ?: false,
-            romReconciliationShowFilenameFallback =
-                prefs[ROM_RECONCILIATION_FILENAME_FALLBACK] ?: true,
-            gameSecondaryMode = prefs[GAME_SECONDARY_MODE] ?: "NowPlaying",
-            nowPlayingDisplay = normalizeNowPlayingDisplay(prefs[NOW_PLAYING_DISPLAY]),
-            gameDimEnabled = prefs[GAME_DIM_ENABLED] ?: false,
-            gameDimOnlyOnNowPlaying = prefs[GAME_DIM_ONLY_ON_NOW_PLAYING] ?: true,
-            gameDimPercent = normalizeGameDimPercent(prefs[GAME_DIM_PERCENT]),
-            gameplayDimTimeoutSeconds = readGameplayDimTimeoutSeconds(prefs),
-            gridRows = prefs[GRID_ROWS] ?: 2,
-            soundsEnabled = prefs[SOUNDS_ENABLED] ?: true,
-            onboardingDone = prefs[ONBOARDING_DONE] ?: false,
-            swapScreenRoles = prefs[SWAP_SCREEN_ROLES] ?: false,
-            theme = prefs[THEME] ?: "dark",
-            focusBorderStyle = normalizeFocusBorderStyle(prefs[FOCUS_BORDER_STYLE]),
-            focusColor = normalizeFocusColor(prefs[FOCUS_COLOR]),
-            focusThickness = normalizeFocusThickness(prefs[FOCUS_THICKNESS]),
-            focusPlacement = normalizeFocusPlacement(prefs[FOCUS_PLACEMENT]),
-            topHeroBackdrop = prefs[TOP_HERO_BACKDROP] ?: true,
-            topHeroCover = prefs[TOP_HERO_COVER] ?: true,
-            topHeroCoverBorder = prefs[TOP_HERO_COVER_BORDER] ?: false,
-            topHeroLogo = prefs[TOP_HERO_LOGO] ?: true,
-            topHeroPlatformIcon = prefs[TOP_HERO_PLATFORM_ICON] ?: true,
-            topHeroPlatform = prefs[TOP_HERO_PLATFORM] ?: true,
-            topHeroTitle = prefs[TOP_HERO_TITLE] ?: true,
-            topHeroMetadata = prefs[TOP_HERO_METADATA] ?: true,
-            topHeroDescription = prefs[TOP_HERO_DESCRIPTION] ?: true,
-            topHeroPlayStats = prefs[TOP_HERO_PLAY_STATS] ?: true,
-            topHeroFavorite = prefs[TOP_HERO_FAVORITE] ?: true,
-            topHeroSectionHint = prefs[TOP_HERO_SECTION_HINT] ?: false,
-            ignorePatternFilesEnabled = prefs[IGNORE_PATTERN_FILES_ENABLED] ?: false,
-            ignoreFileNamePatterns = parseIgnoreFileNamePatterns(prefs[IGNORE_FILE_NAME_PATTERNS])
-        )
-    }
+    suspend fun setBlackoutOnLaunch(value: Boolean) = dataStore.edit { it[BLACKOUT_ON_LAUNCH] = value }
 
-    suspend fun setBlackoutOnLaunch(value: Boolean) =
-        dataStore.edit { it[BLACKOUT_ON_LAUNCH] = value }
+    suspend fun setDetectManualLaunches(value: Boolean) = dataStore.edit { it[DETECT_MANUAL] = value }
 
-    suspend fun setDetectManualLaunches(value: Boolean) =
-        dataStore.edit { it[DETECT_MANUAL] = value }
+    suspend fun setMemoryGuardEnabled(value: Boolean) = dataStore.edit { it[MEMORY_GUARD_ENABLED] = value }
 
-    suspend fun setMemoryGuardEnabled(value: Boolean) =
-        dataStore.edit { it[MEMORY_GUARD_ENABLED] = value }
-
-    suspend fun setRomReconciliationEnabled(value: Boolean) =
-        dataStore.edit { it[ROM_RECONCILIATION_ENABLED] = value }
+    suspend fun setRomReconciliationEnabled(value: Boolean) = dataStore.edit { it[ROM_RECONCILIATION_ENABLED] = value }
 
     suspend fun setRomReconciliationShowFilenameFallback(value: Boolean) =
         dataStore.edit { it[ROM_RECONCILIATION_FILENAME_FALLBACK] = value }
 
-    suspend fun setGameSecondaryMode(value: String) =
-        dataStore.edit { it[GAME_SECONDARY_MODE] = value }
+    suspend fun setGameSecondaryMode(value: String) = dataStore.edit { it[GAME_SECONDARY_MODE] = value }
 
-    suspend fun setNowPlayingDisplay(value: String) =
-        dataStore.edit { it[NOW_PLAYING_DISPLAY] = normalizeNowPlayingDisplay(value) }
+    suspend fun setNowPlayingDisplay(value: String) = dataStore.edit { it[NOW_PLAYING_DISPLAY] = normalizeNowPlayingDisplay(value) }
 
-    suspend fun setGameDimEnabled(value: Boolean) =
-        dataStore.edit { it[GAME_DIM_ENABLED] = value }
+    suspend fun setGameDimEnabled(value: Boolean) = dataStore.edit { it[GAME_DIM_ENABLED] = value }
 
-    suspend fun setGameDimOnlyOnNowPlaying(value: Boolean) =
-        dataStore.edit { it[GAME_DIM_ONLY_ON_NOW_PLAYING] = value }
+    suspend fun setGameDimOnlyOnNowPlaying(value: Boolean) = dataStore.edit { it[GAME_DIM_ONLY_ON_NOW_PLAYING] = value }
 
-    suspend fun setGameDimPercent(value: Int) =
-        dataStore.edit { it[GAME_DIM_PERCENT] = normalizeGameDimPercent(value) }
+    suspend fun setGameDimPercent(value: Int) = dataStore.edit { it[GAME_DIM_PERCENT] = normalizeGameDimPercent(value) }
 
     suspend fun setGameplayDimTimeoutSeconds(value: Int) =
         dataStore.edit { it[GAMEPLAY_DIM_TIMEOUT_SECONDS] = normalizeGameplayDimTimeoutSeconds(value) }
@@ -149,8 +142,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setOnboardingDone(value: Boolean) = dataStore.edit { it[ONBOARDING_DONE] = value }
 
-    suspend fun setSwapScreenRoles(value: Boolean) =
-        dataStore.edit { it[SWAP_SCREEN_ROLES] = value }
+    suspend fun setSwapScreenRoles(value: Boolean) = dataStore.edit { it[SWAP_SCREEN_ROLES] = value }
 
     suspend fun toggleSwapScreenRoles(): Boolean {
         var next = false
@@ -163,56 +155,39 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setTheme(value: String) = dataStore.edit { it[THEME] = value }
 
-    suspend fun setFocusBorderStyle(value: String) =
-        dataStore.edit { it[FOCUS_BORDER_STYLE] = normalizeFocusBorderStyle(value) }
+    suspend fun setFocusBorderStyle(value: String) = dataStore.edit { it[FOCUS_BORDER_STYLE] = normalizeFocusBorderStyle(value) }
 
-    suspend fun setFocusColor(value: String) =
-        dataStore.edit { it[FOCUS_COLOR] = normalizeFocusColor(value) }
+    suspend fun setFocusColor(value: String) = dataStore.edit { it[FOCUS_COLOR] = normalizeFocusColor(value) }
 
-    suspend fun setFocusThickness(value: Int) =
-        dataStore.edit { it[FOCUS_THICKNESS] = normalizeFocusThickness(value) }
+    suspend fun setFocusThickness(value: Int) = dataStore.edit { it[FOCUS_THICKNESS] = normalizeFocusThickness(value) }
 
-    suspend fun setFocusPlacement(value: String) =
-        dataStore.edit { it[FOCUS_PLACEMENT] = normalizeFocusPlacement(value) }
+    suspend fun setFocusPlacement(value: String) = dataStore.edit { it[FOCUS_PLACEMENT] = normalizeFocusPlacement(value) }
 
-    suspend fun setTopHeroBackdrop(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_BACKDROP] = value }
+    suspend fun setTopHeroBackdrop(value: Boolean) = dataStore.edit { it[TOP_HERO_BACKDROP] = value }
 
-    suspend fun setTopHeroCover(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_COVER] = value }
+    suspend fun setTopHeroCover(value: Boolean) = dataStore.edit { it[TOP_HERO_COVER] = value }
 
-    suspend fun setTopHeroCoverBorder(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_COVER_BORDER] = value }
+    suspend fun setTopHeroCoverBorder(value: Boolean) = dataStore.edit { it[TOP_HERO_COVER_BORDER] = value }
 
-    suspend fun setTopHeroLogo(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_LOGO] = value }
+    suspend fun setTopHeroLogo(value: Boolean) = dataStore.edit { it[TOP_HERO_LOGO] = value }
 
-    suspend fun setTopHeroPlatformIcon(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_PLATFORM_ICON] = value }
+    suspend fun setTopHeroPlatformIcon(value: Boolean) = dataStore.edit { it[TOP_HERO_PLATFORM_ICON] = value }
 
-    suspend fun setTopHeroPlatform(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_PLATFORM] = value }
+    suspend fun setTopHeroPlatform(value: Boolean) = dataStore.edit { it[TOP_HERO_PLATFORM] = value }
 
-    suspend fun setTopHeroTitle(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_TITLE] = value }
+    suspend fun setTopHeroTitle(value: Boolean) = dataStore.edit { it[TOP_HERO_TITLE] = value }
 
-    suspend fun setTopHeroMetadata(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_METADATA] = value }
+    suspend fun setTopHeroMetadata(value: Boolean) = dataStore.edit { it[TOP_HERO_METADATA] = value }
 
-    suspend fun setTopHeroDescription(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_DESCRIPTION] = value }
+    suspend fun setTopHeroDescription(value: Boolean) = dataStore.edit { it[TOP_HERO_DESCRIPTION] = value }
 
-    suspend fun setTopHeroPlayStats(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_PLAY_STATS] = value }
+    suspend fun setTopHeroPlayStats(value: Boolean) = dataStore.edit { it[TOP_HERO_PLAY_STATS] = value }
 
-    suspend fun setTopHeroFavorite(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_FAVORITE] = value }
+    suspend fun setTopHeroFavorite(value: Boolean) = dataStore.edit { it[TOP_HERO_FAVORITE] = value }
 
-    suspend fun setTopHeroSectionHint(value: Boolean) =
-        dataStore.edit { it[TOP_HERO_SECTION_HINT] = value }
+    suspend fun setTopHeroSectionHint(value: Boolean) = dataStore.edit { it[TOP_HERO_SECTION_HINT] = value }
 
-    suspend fun setIgnorePatternFilesEnabled(value: Boolean) =
-        dataStore.edit { it[IGNORE_PATTERN_FILES_ENABLED] = value }
+    suspend fun setIgnorePatternFilesEnabled(value: Boolean) = dataStore.edit { it[IGNORE_PATTERN_FILES_ENABLED] = value }
 
     suspend fun setIgnoreFileNamePatterns(patterns: List<String>) =
         dataStore.edit {
@@ -240,27 +215,28 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         }
     }
 
-    suspend fun resetIgnoreFileNamePatterns() =
-        setIgnoreFileNamePatterns(DEFAULT_IGNORE_FILE_NAME_PATTERNS)
+    suspend fun resetIgnoreFileNamePatterns() = setIgnoreFileNamePatterns(DEFAULT_IGNORE_FILE_NAME_PATTERNS)
 
     companion object {
-        val DEFAULT_IGNORE_FILE_NAME_PATTERNS = listOf(
-            "dlc",
-            "expansion",
-            "update",
-            "patch",
-            "demo",
-            "beta",
-            "sample",
-            "trial",
-            "teaser",
-            "bonus",
-            "soundtrack"
-        )
+        val DEFAULT_IGNORE_FILE_NAME_PATTERNS =
+            listOf(
+                "dlc",
+                "expansion",
+                "update",
+                "patch",
+                "demo",
+                "beta",
+                "sample",
+                "trial",
+                "teaser",
+                "bonus",
+                "soundtrack",
+            )
 
         fun parseIgnoreFileNamePatterns(raw: String?): List<String> {
             if (raw.isNullOrBlank()) return DEFAULT_IGNORE_FILE_NAME_PATTERNS
-            return raw.split(',')
+            return raw
+                .split(',')
                 .map { it.trim().lowercase() }
                 .filter { it.isNotEmpty() }
                 .distinct()
@@ -278,13 +254,13 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
             val defaults = DEFAULT_IGNORE_FILE_NAME_PATTERNS.map { it.lowercase() }.toSet()
             return normalized == defaults
         }
+
         fun normalizeGameDimPercent(value: Int?): Int {
             val raw = (value ?: 90).coerceIn(0, 100)
             return ((raw + 5) / 10) * 10
         }
 
-        fun normalizeGameplayDimTimeoutSeconds(value: Int?): Int =
-            (value ?: 10).coerceIn(0, 120)
+        fun normalizeGameplayDimTimeoutSeconds(value: Int?): Int = (value ?: 10).coerceIn(0, 120)
 
         private fun readGameplayDimTimeoutSeconds(prefs: Preferences): Int {
             prefs[GAMEPLAY_DIM_TIMEOUT_SECONDS]?.let {
@@ -293,28 +269,33 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
             val idle = prefs[GAMEPLAY_DIM_IDLE_SECONDS]
             val delay = prefs[GAMEPLAY_DIM_DELAY_SECONDS]
             return when {
-                idle != null && delay != null ->
+                idle != null && delay != null -> {
                     normalizeGameplayDimTimeoutSeconds(maxOf(idle, delay))
-                idle != null -> normalizeGameplayDimTimeoutSeconds(idle)
-                delay != null -> normalizeGameplayDimTimeoutSeconds(delay)
-                else -> 10
+                }
+
+                idle != null -> {
+                    normalizeGameplayDimTimeoutSeconds(idle)
+                }
+
+                delay != null -> {
+                    normalizeGameplayDimTimeoutSeconds(delay)
+                }
+
+                else -> {
+                    10
+                }
             }
         }
 
-        fun normalizeFocusBorderStyle(value: String?): String =
-            FocusIndicatorPreferenceValues.normalizeBorderStyle(value)
+        fun normalizeFocusBorderStyle(value: String?): String = FocusIndicatorPreferenceValues.normalizeBorderStyle(value)
 
-        fun normalizeFocusColor(value: String?): String =
-            FocusIndicatorPreferenceValues.normalizeColor(value)
+        fun normalizeFocusColor(value: String?): String = FocusIndicatorPreferenceValues.normalizeColor(value)
 
-        fun normalizeFocusThickness(value: Int?): Int =
-            FocusIndicatorPreferenceValues.normalizeThickness(value)
+        fun normalizeFocusThickness(value: Int?): Int = FocusIndicatorPreferenceValues.normalizeThickness(value)
 
-        fun normalizeFocusPlacement(value: String?): String =
-            FocusIndicatorPreferenceValues.normalizePlacement(value)
+        fun normalizeFocusPlacement(value: String?): String = FocusIndicatorPreferenceValues.normalizePlacement(value)
 
-        fun normalizeNowPlayingDisplay(value: String?): String =
-            NowPlayingDisplayMode.fromName(value).name
+        fun normalizeNowPlayingDisplay(value: String?): String = NowPlayingDisplayMode.fromName(value).name
 
         private val BLACKOUT_ON_LAUNCH = booleanPreferencesKey("blackout_on_launch")
         val DETECT_MANUAL = booleanPreferencesKey("detect_manual_launches")
@@ -358,30 +339,32 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
 /** Preset names and helpers for focus ring color / border preferences. */
 object FocusIndicatorPreferenceValues {
-    val borderStyles = listOf(
-        "Solid",
-        "Dotted",
-        "Dashed",
-        "MarchingAnts",
-        "Pulsing",
-        "Double",
-        "Glow",
-        "CornerBrackets",
-        "GradientPulse",
-        "Neon"
-    )
-    val colors = listOf(
-        "theme",
-        "white",
-        "yellow",
-        "cyan",
-        "red",
-        "green",
-        "magenta",
-        "orange",
-        "lime",
-        "pink"
-    )
+    val borderStyles =
+        listOf(
+            "Solid",
+            "Dotted",
+            "Dashed",
+            "MarchingAnts",
+            "Pulsing",
+            "Double",
+            "Glow",
+            "CornerBrackets",
+            "GradientPulse",
+            "Neon",
+        )
+    val colors =
+        listOf(
+            "theme",
+            "white",
+            "yellow",
+            "cyan",
+            "red",
+            "green",
+            "magenta",
+            "orange",
+            "lime",
+            "pink",
+        )
     val thicknesses = listOf(1, 2, 3)
     val placements = listOf("Inside", "Outside")
 
@@ -407,7 +390,7 @@ object FocusIndicatorPreferenceValues {
             Color(
                 red = ((rgb shr 16) and 0xFF) / 255f,
                 green = ((rgb shr 8) and 0xFF) / 255f,
-                blue = (rgb and 0xFF) / 255f
+                blue = (rgb and 0xFF) / 255f,
             )
         }.getOrNull()
     }

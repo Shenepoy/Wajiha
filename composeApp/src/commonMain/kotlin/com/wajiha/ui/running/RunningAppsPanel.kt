@@ -33,7 +33,7 @@ import org.koin.compose.koinInject
 @Composable
 fun RunningAppsPanel(
     modifier: Modifier = Modifier,
-    showGamepadHints: Boolean = true
+    showGamepadHints: Boolean = true,
 ) {
     val store = koinInject<DualScreenStore>()
     val appActions = koinInject<AppActions>()
@@ -43,13 +43,13 @@ fun RunningAppsPanel(
     SecondaryPanelScaffold(
         modifier = modifier,
         showGamepadHints = showGamepadHints,
-        hints = runningAppsGamepadHints
+        hints = runningAppsGamepadHints,
     ) {
         Text(
             text = "Running apps",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = WajihaSpacing.sm)
+            modifier = Modifier.padding(bottom = WajihaSpacing.sm),
         )
         GamepadList(
             items = apps,
@@ -59,54 +59,55 @@ fun RunningAppsPanel(
                 WajihaEmptyState(
                     title = "No running apps",
                     subtitle = "Grant usage access in onboarding to enable this panel.",
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 )
-            }
+            },
         ) { app ->
             Surface(
                 shape = WajihaShapes.focus,
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(
-                        horizontal = WajihaSpacing.sm + WajihaSpacing.xs,
-                        vertical = WajihaSpacing.sm
-                    ),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier =
+                        Modifier.fillMaxWidth().padding(
+                            horizontal = WajihaSpacing.sm + WajihaSpacing.xs,
+                            vertical = WajihaSpacing.sm,
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = app.label,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         if (app.isGame) {
                             Text(
                                 text = "Game",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         }
                     }
                     GamepadButton(
                         text = "Top",
                         onClick = { appActions.moveAppToDisplay(app.packageName, 0) },
-                        outlined = true
+                        outlined = true,
                     )
                     secondaryDisplayId?.let { displayId ->
                         GamepadButton(
                             text = "Bottom",
                             onClick = { appActions.moveAppToDisplay(app.packageName, displayId) },
                             outlined = true,
-                            modifier = Modifier.padding(start = WajihaSpacing.xs)
+                            modifier = Modifier.padding(start = WajihaSpacing.xs),
                         )
                     }
                     GamepadButton(
                         text = "Kill",
                         onClick = { appActions.killApp(app.packageName) },
                         outlined = true,
-                        modifier = Modifier.padding(start = WajihaSpacing.xs)
+                        modifier = Modifier.padding(start = WajihaSpacing.xs),
                     )
                 }
             }

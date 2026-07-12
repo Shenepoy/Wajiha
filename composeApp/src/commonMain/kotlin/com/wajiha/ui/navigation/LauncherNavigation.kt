@@ -21,15 +21,20 @@ import org.koin.compose.koinInject
 
 data class LauncherHero(
     val focusedTile: GameTile?,
-    val platformName: String?
+    val platformName: String?,
 )
 
-fun launcherHero(state: HomeUiState, focusedGameId: Long?): LauncherHero {
-    val focusedTile = state.tiles.firstOrNull { it.game.id == focusedGameId }
-        ?: state.recent.firstOrNull()
-    val platformName = focusedTile?.let { tile ->
-        state.platforms.firstOrNull { it.id == tile.game.platformId }?.name
-    }
+fun launcherHero(
+    state: HomeUiState,
+    focusedGameId: Long?,
+): LauncherHero {
+    val focusedTile =
+        state.tiles.firstOrNull { it.game.id == focusedGameId }
+            ?: state.recent.firstOrNull()
+    val platformName =
+        focusedTile?.let { tile ->
+            state.platforms.firstOrNull { it.id == tile.game.platformId }?.name
+        }
     return LauncherHero(focusedTile, platformName)
 }
 
@@ -41,7 +46,7 @@ fun LauncherGameDetailRoute(
     dualDisplay: Boolean,
     secondaryDisplayId: Int?,
     onBack: () -> Unit,
-    onMissingGame: () -> Unit
+    onMissingGame: () -> Unit,
 ) {
     if (gameId == null) {
         LaunchedEffect(Unit) { onMissingGame() }
@@ -51,7 +56,7 @@ fun LauncherGameDetailRoute(
         gameId = gameId,
         secondaryDisplayId = secondaryDisplayId,
         dualDisplay = dualDisplay,
-        onBack = onBack
+        onBack = onBack,
     )
     LaunchedEffect(gameId) {
         store.setGameDetailGameId(gameId)
@@ -68,24 +73,30 @@ fun LauncherSettingsFlow(
     onPlatformDetailIdChange: (String?) -> Unit,
     onRouteChange: (LauncherSettingsRoute) -> Unit,
     onExitSettings: () -> Unit,
-    content: @Composable () -> Unit = {}
+    content: @Composable () -> Unit = {},
 ) {
     when (route) {
-        LauncherSettingsRoute.Hidden -> content()
-        LauncherSettingsRoute.Settings -> SettingsScreen(
-            settingsViewModel = settingsViewModel,
-            onBack = onExitSettings,
-            onAddPlatform = {
-                viewModel.playOpen()
-                onRouteChange(LauncherSettingsRoute.PlatformPicker)
-            },
-            onOpenPlatform = { id ->
-                onPlatformDetailIdChange(id)
-                viewModel.playOpen()
-                onRouteChange(LauncherSettingsRoute.PlatformDetail)
-            },
-            onSectionChange = store::setSettingsSectionLabel
-        )
+        LauncherSettingsRoute.Hidden -> {
+            content()
+        }
+
+        LauncherSettingsRoute.Settings -> {
+            SettingsScreen(
+                settingsViewModel = settingsViewModel,
+                onBack = onExitSettings,
+                onAddPlatform = {
+                    viewModel.playOpen()
+                    onRouteChange(LauncherSettingsRoute.PlatformPicker)
+                },
+                onOpenPlatform = { id ->
+                    onPlatformDetailIdChange(id)
+                    viewModel.playOpen()
+                    onRouteChange(LauncherSettingsRoute.PlatformDetail)
+                },
+                onSectionChange = store::setSettingsSectionLabel,
+            )
+        }
+
         LauncherSettingsRoute.PlatformPicker -> {
             PlatformPickerScreen(
                 settingsViewModel = settingsViewModel,
@@ -97,12 +108,13 @@ fun LauncherSettingsFlow(
                     onPlatformDetailIdChange(id)
                     viewModel.playOpen()
                     onRouteChange(LauncherSettingsRoute.PlatformDetail)
-                }
+                },
             )
             LaunchedEffect(Unit) {
                 store.setSettingsSectionLabel("Library")
             }
         }
+
         LauncherSettingsRoute.PlatformDetail -> {
             val id = platformDetailId
             if (id == null) {
@@ -113,13 +125,14 @@ fun LauncherSettingsFlow(
                     onBack = {
                         viewModel.playBack()
                         onRouteChange(LauncherSettingsRoute.Settings)
-                    }
+                    },
                 )
                 LaunchedEffect(Unit) {
                     store.setSettingsSectionLabel("Library")
                 }
             }
         }
+
         LauncherSettingsRoute.Scraper -> {
             ScraperScreen(
                 viewModel = koinInject<ScraperViewModel>(),
@@ -130,9 +143,9 @@ fun LauncherSettingsFlow(
                             LauncherSettingsRoute.PlatformDetail
                         } else {
                             LauncherSettingsRoute.Settings
-                        }
+                        },
                     )
-                }
+                },
             )
             LaunchedEffect(Unit) {
                 store.setSettingsSectionLabel("Scraper")
@@ -146,18 +159,21 @@ enum class LauncherSettingsRoute {
     Settings,
     PlatformPicker,
     PlatformDetail,
-    Scraper
+    Scraper,
 }
 
 @Composable
-fun SyncSystemHeroSnapshot(systemControls: SystemControls, store: DualScreenStore) {
+fun SyncSystemHeroSnapshot(
+    systemControls: SystemControls,
+    store: DualScreenStore,
+) {
     LaunchedEffect(Unit) {
         systemControls.refreshStatus()
         val status = systemControls.status.value
         store.setSystemHeroSnapshot(
             batteryPercent = status.batteryPercent,
             charging = status.charging,
-            wifiEnabled = status.wifiEnabled
+            wifiEnabled = status.wifiEnabled,
         )
     }
 }

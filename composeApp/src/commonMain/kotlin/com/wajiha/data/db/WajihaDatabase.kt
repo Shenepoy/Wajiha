@@ -14,19 +14,25 @@ import androidx.room3.RoomDatabaseConstructor
         GameMediaEntity::class,
         PlaySessionEntity::class,
         CollectionEntity::class,
-        CollectionGameCrossRef::class
+        CollectionGameCrossRef::class,
     ],
     version = 2,
-    exportSchema = true
+    exportSchema = true,
 )
 @ConstructedBy(WajihaDatabaseConstructor::class)
 abstract class WajihaDatabase : RoomDatabase() {
     abstract fun platformDao(): PlatformDao
+
     abstract fun emulatorDao(): EmulatorDao
+
     abstract fun gameDao(): GameDao
+
     abstract fun romFolderDao(): RomFolderDao
+
     abstract fun gameMediaDao(): GameMediaDao
+
     abstract fun playSessionDao(): PlaySessionDao
+
     abstract fun collectionDao(): CollectionDao
 
     companion object {

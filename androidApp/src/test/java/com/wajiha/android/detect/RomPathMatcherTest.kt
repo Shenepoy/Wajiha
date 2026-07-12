@@ -6,7 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RomPathMatcherTest {
-
     @Test
     fun normalizePath_collapsesSdcardSymlink() {
         val normalized = RomPathMatcher.normalizePath("/sdcard/ROMs/game.iso")
@@ -24,7 +23,7 @@ class RomPathMatcherTest {
     fun fileNameFromPath_returnsBasename() {
         assertEquals(
             "Chrono Trigger (USA).sfc",
-            RomPathMatcher.fileNameFromPath("/storage/emulated/0/ROMs/Chrono Trigger (USA).sfc")
+            RomPathMatcher.fileNameFromPath("/storage/emulated/0/ROMs/Chrono Trigger (USA).sfc"),
         )
     }
 

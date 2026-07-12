@@ -15,22 +15,24 @@ import com.wajiha.ui.theme.WajihaSpacing
 @Composable
 fun WajihaLoadingState(
     modifier: Modifier = Modifier,
-    message: String? = null
+    message: String? = null,
 ) {
     Box(
         modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         androidx.compose.foundation.layout.Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(WajihaSpacing.md)
+            verticalArrangement =
+                androidx.compose.foundation.layout.Arrangement
+                    .spacedBy(WajihaSpacing.md),
         ) {
             CircularProgressIndicator(modifier = Modifier.size(40.dp))
             if (message != null) {
                 Text(
                     text = message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

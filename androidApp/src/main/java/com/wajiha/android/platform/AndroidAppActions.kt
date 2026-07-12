@@ -19,12 +19,12 @@ import com.wajiha.platform.AppActions
 import com.wajiha.platform.LaunchableApp
 import com.wajiha.platform.SoundAssets
 import com.wajiha.platform.UiSound
-import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class AndroidAppActions(
     private val context: Context,
@@ -32,20 +32,21 @@ class AndroidAppActions(
     private val displayCoordinator: DisplayCoordinator,
     private val monitor: ForegroundAppMonitor,
     private val gameRepository: GameRepository,
-    private val romFileDeleter: RomFileDeleter
+    private val romFileDeleter: RomFileDeleter,
 ) : AppActions {
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private val soundPool = SoundPool.Builder()
-        .setMaxStreams(2)
-        .setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
-        )
-        .build()
+    private val soundPool =
+        SoundPool
+            .Builder()
+            .setMaxStreams(2)
+            .setAudioAttributes(
+                AudioAttributes
+                    .Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            ).build()
 
     private val soundIds = mutableMapOf<UiSound, Int>()
 
@@ -56,12 +57,13 @@ class AndroidAppActions(
     }
 
     private suspend fun loadSounds() {
-        val files = mapOf(
-            UiSound.Navigate to "navigate.wav",
-            UiSound.Open to "open.wav",
-            UiSound.Back to "back.wav",
-            UiSound.Launch to "launch.wav"
-        )
+        val files =
+            mapOf(
+                UiSound.Navigate to "navigate.wav",
+                UiSound.Open to "open.wav",
+                UiSound.Back to "back.wav",
+                UiSound.Launch to "launch.wav",
+            )
         val dir = File(context.cacheDir, "sounds").apply { mkdirs() }
         for ((sound, name) in files) {
             try {
@@ -79,20 +81,21 @@ class AndroidAppActions(
         withContext(Dispatchers.IO) {
             val pm = context.packageManager
             val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            pm.queryIntentActivities(intent, 0)
+            pm
+                .queryIntentActivities(intent, 0)
                 .asSequence()
                 .filter { it.activityInfo.packageName != context.packageName }
                 .distinctBy { it.activityInfo.packageName }
                 .map { info ->
                     val label = info.loadLabel(pm).toString()
-                    val icon = try {
-                        info.loadIcon(pm).toBitmap(96, 96, Bitmap.Config.ARGB_8888).asImageBitmap()
-                    } catch (_: Exception) {
-                        null
-                    }
+                    val icon =
+                        try {
+                            info.loadIcon(pm).toBitmap(96, 96, Bitmap.Config.ARGB_8888).asImageBitmap()
+                        } catch (_: Exception) {
+                            null
+                        }
                     LaunchableApp(info.activityInfo.packageName, label, icon)
-                }
-                .sortedBy { it.label.lowercase() }
+                }.sortedBy { it.label.lowercase() }
                 .toList()
         }
 
@@ -100,22 +103,27 @@ class AndroidAppActions(
         launchAppOnDisplay(packageName, android.view.Display.DEFAULT_DISPLAY)
     }
 
-    override fun launchAppOnDisplay(packageName: String, displayId: Int) {
+    override fun launchAppOnDisplay(
+        packageName: String,
+        displayId: Int,
+    ) {
         displayCoordinator.launchOnDisplay(packageName, displayId)
     }
 
-    override suspend fun launchGame(gameId: Long): String? =
-        launchResultToError(gameLauncher.launchGame(gameId))
+    override suspend fun launchGame(gameId: Long): String? = launchResultToError(gameLauncher.launchGame(gameId))
 
-    override suspend fun launchGameOnDisplay(gameId: Long, displayId: Int): String? =
-        launchResultToError(gameLauncher.launchGame(gameId, displayId))
+    override suspend fun launchGameOnDisplay(
+        gameId: Long,
+        displayId: Int,
+    ): String? = launchResultToError(gameLauncher.launchGame(gameId, displayId))
 
-    override suspend fun removeFromLibrary(gameId: Long): String? = try {
-        gameRepository.removeFromLibrary(gameId)
-        null
-    } catch (e: Exception) {
-        e.message ?: "Could not remove game"
-    }
+    override suspend fun removeFromLibrary(gameId: Long): String? =
+        try {
+            gameRepository.removeFromLibrary(gameId)
+            null
+        } catch (e: Exception) {
+            e.message ?: "Could not remove game"
+        }
 
     override suspend fun deleteGameFile(gameId: Long): String? {
         val game = gameRepository.byId(gameId) ?: return "Game not found"
@@ -129,16 +137,28 @@ class AndroidAppActions(
         }
     }
 
-    private fun launchResultToError(result: LaunchResult): String? = when (result) {
-            is LaunchResult.Success -> null
-            is LaunchResult.EmulatorNotInstalled ->
+    private fun launchResultToError(result: LaunchResult): String? =
+        when (result) {
+            is LaunchResult.Success -> {
+                null
+            }
+
+            is LaunchResult.EmulatorNotInstalled -> {
                 "Emulator not installed: ${result.packageName}"
-            is LaunchResult.ActivityNotFound ->
+            }
+
+            is LaunchResult.ActivityNotFound -> {
                 "Emulator activity missing in ${result.packageName}"
-            is LaunchResult.PermissionDenied ->
+            }
+
+            is LaunchResult.PermissionDenied -> {
                 "Permission denied: ${result.message ?: "unknown"}"
-            is LaunchResult.Failed -> "Launch failed: ${result.message ?: "unknown"}"
-    }
+            }
+
+            is LaunchResult.Failed -> {
+                "Launch failed: ${result.message ?: "unknown"}"
+            }
+        }
 
     override fun playSound(sound: UiSound) {
         if (!soundsEnabled) return
@@ -147,7 +167,10 @@ class AndroidAppActions(
 
     override fun killApp(packageName: String) = monitor.killApp(packageName)
 
-    override fun moveAppToDisplay(packageName: String, displayId: Int) {
+    override fun moveAppToDisplay(
+        packageName: String,
+        displayId: Int,
+    ) {
         displayCoordinator.launchOnDisplay(packageName, displayId)
     }
 

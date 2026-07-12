@@ -5,9 +5,20 @@ package com.wajiha.log
  * agents can filter with `adb logcat -s Wajiha/Display:D Wajiha/Gamepad:D …`.
  */
 expect object WajihaLog {
-    fun d(tag: String, message: String)
-    fun i(tag: String, message: String)
-    fun w(tag: String, message: String)
+    fun d(
+        tag: String,
+        message: String,
+    )
+
+    fun i(
+        tag: String,
+        message: String,
+    )
+
+    fun w(
+        tag: String,
+        message: String,
+    )
 }
 
 object WajihaTags {
@@ -18,6 +29,7 @@ object WajihaTags {
     const val SCRAPE = "Wajiha/Scrape"
     const val LIBRARY = "Wajiha/Library"
     const val EXTERNAL_RESOLVE = "Wajiha/ExternalResolve"
+
     /** Debug-only session dumps and adb broadcast responses (filter: `adb logcat -s Wajiha/Debug`) */
     const val DEBUG = "Wajiha/Debug"
 }

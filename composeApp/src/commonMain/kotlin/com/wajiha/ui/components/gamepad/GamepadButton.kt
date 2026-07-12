@@ -37,7 +37,7 @@ fun GamepadButton(
     outlined: Boolean = false,
     gamepadFocusable: Boolean = true,
     focusRequester: FocusRequester? = null,
-    sound: UiSound? = UiSound.Open
+    sound: UiSound? = UiSound.Open,
 ) {
     var focused by remember { mutableStateOf(false) }
     val useCustomNav = LocalGamepadNavController.current != null
@@ -56,41 +56,39 @@ fun GamepadButton(
         onClick()
     }
 
-    val chrome = Modifier
-        .clip(WajihaShapes.button)
-        .wajihaPressedFeedback(interactionSource, WajihaShapes.button)
-        .wajihaFocusIndicator(
-            highlighted = !useCustomNav && focused,
-            shape = WajihaShapes.button
-        )
-        .defaultMinSize(minHeight = WajihaSpacing.touchMin)
-        .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-        .then(
-            if (!useCustomNav) {
-                Modifier
-                    .onFocusChanged { focused = it.isFocused }
-                    .wajihaGamepadFocus(enabled && gamepadFocusable)
-            } else {
-                Modifier
-            }
-        )
-        .then(
-            if (!useCustomNav) {
-                Modifier.onPreviewKeyEvent { event ->
-                    if (GamepadKeys.isConfirm(event.type, event.key)) {
-                        performClick()
-                        true
-                    } else {
-                        false
+    val chrome =
+        Modifier
+            .clip(WajihaShapes.button)
+            .wajihaPressedFeedback(interactionSource, WajihaShapes.button)
+            .wajihaFocusIndicator(
+                highlighted = !useCustomNav && focused,
+                shape = WajihaShapes.button,
+            ).defaultMinSize(minHeight = WajihaSpacing.touchMin)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .then(
+                if (!useCustomNav) {
+                    Modifier
+                        .onFocusChanged { focused = it.isFocused }
+                        .wajihaGamepadFocus(enabled && gamepadFocusable)
+                } else {
+                    Modifier
+                },
+            ).then(
+                if (!useCustomNav) {
+                    Modifier.onPreviewKeyEvent { event ->
+                        if (GamepadKeys.isConfirm(event.type, event.key)) {
+                            performClick()
+                            true
+                        } else {
+                            false
+                        }
                     }
-                }
-            } else {
-                Modifier
+                } else {
+                    Modifier
+                },
+            ).pointerInput(enabled) {
+                if (enabled) detectTapGestures { performClick() }
             }
-        )
-        .pointerInput(enabled) {
-            if (enabled) detectTapGestures { performClick() }
-        }
 
     if (outlined) {
         OutlinedButton(
@@ -98,7 +96,7 @@ fun GamepadButton(
             enabled = enabled,
             interactionSource = interactionSource,
             modifier = modifier.then(chrome),
-            shape = WajihaShapes.button
+            shape = WajihaShapes.button,
         ) { Text(text) }
     } else {
         Button(
@@ -106,7 +104,7 @@ fun GamepadButton(
             enabled = enabled,
             interactionSource = interactionSource,
             modifier = modifier.then(chrome),
-            shape = WajihaShapes.button
+            shape = WajihaShapes.button,
         ) { Text(text) }
     }
 }

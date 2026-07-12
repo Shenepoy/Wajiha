@@ -40,7 +40,7 @@ fun GamepadTile(
     navHighlighted: Boolean = false,
     /** When true, touch always invokes [onLaunch] (session switcher tiles). */
     touchSwitchMode: Boolean = false,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val useCustomNav = LocalGamepadNavController.current != null
@@ -48,64 +48,62 @@ fun GamepadTile(
     val requester = focusRequester ?: localRequester
     val rawHighlight = navHighlighted || (!useCustomNav && (focused || selected))
     val navChrome = showGamepadChrome(navHighlighted)
-    val scale = when {
-        navChrome -> WajihaFocus.selectedScale
-        showGamepadChrome(rawHighlight) -> 1.05f
-        else -> 1f
-    }
+    val scale =
+        when {
+            navChrome -> WajihaFocus.selectedScale
+            showGamepadChrome(rawHighlight) -> 1.05f
+            else -> 1f
+        }
 
     Box(
-        modifier = modifier
-            .defaultMinSize(minWidth = WajihaSpacing.touchMin, minHeight = WajihaSpacing.touchMin)
-            .scale(scale)
-            .clip(WajihaShapes.tile)
-            .then(
-                if (navChrome) {
-                    Modifier
-                        .background(
-                            color = WajihaFocus.selectedBackground(),
-                            shape = WajihaShapes.tile
-                        )
-                        .wajihaFocusIndicator(
-                            highlighted = true,
+        modifier =
+            modifier
+                .defaultMinSize(minWidth = WajihaSpacing.touchMin, minHeight = WajihaSpacing.touchMin)
+                .scale(scale)
+                .clip(WajihaShapes.tile)
+                .then(
+                    if (navChrome) {
+                        Modifier
+                            .background(
+                                color = WajihaFocus.selectedBackground(),
+                                shape = WajihaShapes.tile,
+                            ).wajihaFocusIndicator(
+                                highlighted = true,
+                                shape = WajihaShapes.tile,
+                                selected = true,
+                            )
+                    } else {
+                        Modifier.wajihaFocusIndicator(
+                            highlighted = rawHighlight,
                             shape = WajihaShapes.tile,
-                            selected = true
+                            selected = selected,
                         )
-                } else {
-                    Modifier.wajihaFocusIndicator(
-                        highlighted = rawHighlight,
-                        shape = WajihaShapes.tile,
-                        selected = selected
+                    },
+                ).then(
+                    if (!useCustomNav) {
+                        Modifier
+                            .focusRequester(requester)
+                            .onFocusChanged {
+                                focused = it.isFocused
+                                onFocusChanged(it.isFocused)
+                                if (it.isFocused) onSelect()
+                            }.wajihaGamepadFocus(gamepadFocusable)
+                    } else {
+                        Modifier
+                    },
+                ).pointerInput(selected, onSelect, onLaunch, onLongPress, touchSwitchMode) {
+                    detectTapGestures(
+                        onLongPress = { onLongPress?.invoke() },
+                        onTap = {
+                            when {
+                                touchSwitchMode -> onLaunch()
+                                selected -> onLaunch()
+                                else -> onSelect()
+                            }
+                        },
                     )
-                }
-            )
-            .then(
-                if (!useCustomNav) {
-                    Modifier
-                        .focusRequester(requester)
-                        .onFocusChanged {
-                            focused = it.isFocused
-                            onFocusChanged(it.isFocused)
-                            if (it.isFocused) onSelect()
-                        }
-                        .wajihaGamepadFocus(gamepadFocusable)
-                } else {
-                    Modifier
-                }
-            )
-            .pointerInput(selected, onSelect, onLaunch, onLongPress, touchSwitchMode) {
-                detectTapGestures(
-                    onLongPress = { onLongPress?.invoke() },
-                    onTap = {
-                        when {
-                            touchSwitchMode -> onLaunch()
-                            selected -> onLaunch()
-                            else -> onSelect()
-                        }
-                    }
-                )
-            },
-        contentAlignment = androidx.compose.ui.Alignment.Center
+                },
+        contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
         content()
     }

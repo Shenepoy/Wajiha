@@ -34,7 +34,6 @@ import java.util.concurrent.ConcurrentHashMap
  * task; [DisplayCoordinator.scheduleSecondaryHomeReclaim] fights that from here.
  */
 class SecondaryHomeActivity : ComponentActivity() {
-
     private val displayCoordinator: DisplayCoordinator by inject()
     private val gamepadKeyRouter: GamepadKeyRouter by inject()
     private val triggerAxisHandler: TriggerAxisHandler by inject()
@@ -47,14 +46,14 @@ class SecondaryHomeActivity : ComponentActivity() {
         val displayId = display?.displayId
         WajihaLog.i(
             WajihaTags.DISPLAY,
-            "onCreate: displayId=$displayId taskId=$taskId"
+            "onCreate: displayId=$displayId taskId=$taskId",
         )
         if (displayId == Display.DEFAULT_DISPLAY) {
             val secondary = displayCoordinator.secondaryDisplay()
             WajihaLog.w(
                 WajihaTags.DISPLAY,
                 "onCreate: landed on display 0 — redirecting to displayId=" +
-                    "${secondary?.displayId ?: "none"}"
+                    "${secondary?.displayId ?: "none"}",
             )
             if (secondary != null) {
                 displayCoordinator.launchSecondaryHomeOn(secondary.displayId, reclaim = true)
@@ -85,7 +84,7 @@ class SecondaryHomeActivity : ComponentActivity() {
             if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
                 WajihaLog.i(
                     WajihaTags.DISPLAY,
-                    "dispatchKeyEvent: HOME consumed on displayId=$displayId"
+                    "dispatchKeyEvent: HOME consumed on displayId=$displayId",
                 )
                 displayCoordinator.beginFastSecondaryReclaim(displayId)
             }
@@ -95,7 +94,7 @@ class SecondaryHomeActivity : ComponentActivity() {
             owner = GamepadOwner.Secondary,
             event = event,
             gamepadGate = gamepadGate,
-            gamepadKeyRouter = gamepadKeyRouter
+            gamepadKeyRouter = gamepadKeyRouter,
         ) { super.dispatchKeyEvent(it) }
     }
 
@@ -126,7 +125,7 @@ class SecondaryHomeActivity : ComponentActivity() {
         WajihaLog.i(
             WajihaTags.DISPLAY,
             "onNewIntent: displayId=$displayId taskId=$taskId " +
-                "intent=${intent.action ?: intent.categories?.joinToString()}"
+                "intent=${intent.action ?: intent.categories?.joinToString()}",
         )
         if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
             registerTask(displayId, taskId)
@@ -138,7 +137,7 @@ class SecondaryHomeActivity : ComponentActivity() {
         val displayId = display?.displayId
         WajihaLog.d(
             WajihaTags.DISPLAY,
-            "onUserLeaveHint: displayId=$displayId taskId=$taskId"
+            "onUserLeaveHint: displayId=$displayId taskId=$taskId",
         )
         if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
             displayCoordinator.beginFastSecondaryReclaim(displayId)
@@ -153,7 +152,7 @@ class SecondaryHomeActivity : ComponentActivity() {
         } else if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
-                "onWindowFocusChanged: lost focus displayId=$displayId — fast reclaim"
+                "onWindowFocusChanged: lost focus displayId=$displayId — fast reclaim",
             )
             displayCoordinator.beginFastSecondaryReclaim(displayId)
         }
@@ -170,7 +169,7 @@ class SecondaryHomeActivity : ComponentActivity() {
         displayCoordinator.stopFastSecondaryReclaim()
         WajihaLog.d(
             WajihaTags.DISPLAY,
-            "onResume: displayId=$visibleDisplayId taskId=$taskId"
+            "onResume: displayId=$visibleDisplayId taskId=$taskId",
         )
     }
 
@@ -179,7 +178,7 @@ class SecondaryHomeActivity : ComponentActivity() {
         if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
-                "onPause: displayId=$displayId taskId=$taskId — fast reclaim"
+                "onPause: displayId=$displayId taskId=$taskId — fast reclaim",
             )
             displayCoordinator.beginFastSecondaryReclaim(displayId)
         }
@@ -211,11 +210,17 @@ class SecondaryHomeActivity : ComponentActivity() {
 
         fun taskIdForDisplay(displayId: Int): Int? = displayTaskIds[displayId]
 
-        fun registerTask(displayId: Int, taskId: Int) {
+        fun registerTask(
+            displayId: Int,
+            taskId: Int,
+        ) {
             displayTaskIds[displayId] = taskId
         }
 
-        private fun unregisterTask(displayId: Int, taskId: Int) {
+        private fun unregisterTask(
+            displayId: Int,
+            taskId: Int,
+        ) {
             if (displayTaskIds[displayId] == taskId) {
                 displayTaskIds.remove(displayId)
             }

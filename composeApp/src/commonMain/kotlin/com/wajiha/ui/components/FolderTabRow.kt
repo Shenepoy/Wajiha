@@ -44,7 +44,7 @@ fun FolderTabRow(
     tabs: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
 
@@ -58,13 +58,13 @@ fun FolderTabRow(
         state = listState,
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
-        verticalAlignment = Alignment.Bottom
+        verticalAlignment = Alignment.Bottom,
     ) {
         itemsIndexed(tabs, key = { _, label -> label }) { index, label ->
             FolderTab(
                 label = label,
                 selected = index == selectedIndex,
-                onClick = { onSelect(index) }
+                onClick = { onSelect(index) },
             )
         }
     }
@@ -75,79 +75,81 @@ private fun FolderTab(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var pressed by remember { mutableStateOf(false) }
     val shape = WajihaShapes.folderTab
     val containerColor by animateColorAsState(
-        targetValue = when {
-            selected -> MaterialTheme.colorScheme.surfaceContainerLow
-            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-        },
-        label = "folder_tab_color"
+        targetValue =
+            when {
+                selected -> MaterialTheme.colorScheme.surfaceContainerLow
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+            },
+        label = "folder_tab_color",
     )
     val labelColor by animateColorAsState(
-        targetValue = when {
-            selected -> MaterialTheme.colorScheme.onSurface
-            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-        },
-        label = "folder_tab_label"
+        targetValue =
+            when {
+                selected -> MaterialTheme.colorScheme.onSurface
+                else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            },
+        label = "folder_tab_label",
     )
     val topPadding by animateDpAsState(
         targetValue = if (selected) 0.dp else WajihaSpacing.xs,
-        label = "folder_tab_elevation"
+        label = "folder_tab_elevation",
     )
     val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
 
     Box(
-        modifier = modifier.padding(top = topPadding)
+        modifier = modifier.padding(top = topPadding),
     ) {
         Surface(
             shape = shape,
             color = containerColor,
-            modifier = Modifier
-                .clip(shape)
-                .wajihaPressedFeedback(pressed, shape)
-                .then(
-                    if (!selected) {
-                        Modifier.border(
-                            width = 1.dp,
-                            color = outlineColor,
-                            shape = shape
+            modifier =
+                Modifier
+                    .clip(shape)
+                    .wajihaPressedFeedback(pressed, shape)
+                    .then(
+                        if (!selected) {
+                            Modifier.border(
+                                width = 1.dp,
+                                color = outlineColor,
+                                shape = shape,
+                            )
+                        } else {
+                            Modifier
+                        },
+                    ).pointerInput(onClick) {
+                        detectTapGestures(
+                            onPress = {
+                                pressed = true
+                                val released = tryAwaitRelease()
+                                pressed = false
+                                if (released) onClick()
+                            },
                         )
-                    } else {
-                        Modifier
-                    }
-                )
-                .pointerInput(onClick) {
-                    detectTapGestures(
-                        onPress = {
-                            pressed = true
-                            val released = tryAwaitRelease()
-                            pressed = false
-                            if (released) onClick()
-                        }
-                    )
-                }
+                    },
         ) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 color = labelColor,
-                modifier = Modifier
-                    .defaultMinSize(minHeight = WajihaSpacing.touchMin)
-                    .padding(
-                        horizontal = WajihaSpacing.md,
-                        vertical = WajihaSpacing.sm
-                    )
-                    .then(
-                        if (pressed) {
-                            Modifier.background(WajihaFocus.pressedOverlay())
-                        } else {
-                            Modifier
-                        }
-                    )
+                modifier =
+                    Modifier
+                        .defaultMinSize(minHeight = WajihaSpacing.touchMin)
+                        .padding(
+                            horizontal = WajihaSpacing.md,
+                            vertical = WajihaSpacing.sm,
+                        ).then(
+                            if (pressed) {
+                                Modifier.background(WajihaFocus.pressedOverlay())
+                            } else {
+                                Modifier
+                            },
+                        ),
             )
         }
     }

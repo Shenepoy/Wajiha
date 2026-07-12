@@ -10,9 +10,9 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.wajiha.domain.repository.PlatformRepository
 import com.wajiha.domain.scan.LibraryScanner
-import java.util.concurrent.TimeUnit
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import java.util.concurrent.TimeUnit
 
 /**
  * Foreground library scan. Progress lives in [LibraryScanner.progress];
@@ -20,9 +20,9 @@ import org.koin.core.component.inject
  */
 class LibraryScanWorker(
     appContext: Context,
-    params: WorkerParameters
-) : CoroutineWorker(appContext, params), KoinComponent {
-
+    params: WorkerParameters,
+) : CoroutineWorker(appContext, params),
+    KoinComponent {
     private val scanner: LibraryScanner by inject()
     private val platformRepository: PlatformRepository by inject()
 
@@ -37,39 +37,41 @@ class LibraryScanWorker(
                 foldersTotal = 0,
                 gamesAdded = 0,
                 gamesRemoved = 0,
-                detail = null
-            )
+                detail = null,
+            ),
         )
 
-        val notifJob = launchProgressNotifications(
-            progress = scanner.progress,
-            shouldUpdate = { it.running },
-            foregroundInfo = { p ->
-                OperationNotificationHelper.scanForegroundInfo(
-                    context = applicationContext,
-                    platformLabel = platformLabel,
-                    foldersDone = p.foldersDone,
-                    foldersTotal = p.foldersTotal,
-                    gamesAdded = p.gamesAdded,
-                    gamesRemoved = p.gamesRemoved,
-                    detail = p.currentFolder?.let(OperationNotificationHelper::shortenFolderUri)
-                )
-            }
-        )
+        val notifJob =
+            launchProgressNotifications(
+                progress = scanner.progress,
+                shouldUpdate = { it.running },
+                foregroundInfo = { p ->
+                    OperationNotificationHelper.scanForegroundInfo(
+                        context = applicationContext,
+                        platformLabel = platformLabel,
+                        foldersDone = p.foldersDone,
+                        foldersTotal = p.foldersTotal,
+                        gamesAdded = p.gamesAdded,
+                        gamesRemoved = p.gamesRemoved,
+                        detail = p.currentFolder?.let(OperationNotificationHelper::shortenFolderUri),
+                    )
+                },
+            )
         return try {
-            val result = if (platformId != null) {
-                scanner.scanPlatform(platformId)
-            } else {
-                scanner.scanAll()
-            }
+            val result =
+                if (platformId != null) {
+                    scanner.scanPlatform(platformId)
+                } else {
+                    scanner.scanAll()
+                }
 
             if (inputData.getBoolean(KEY_COMPUTE_HASHES, true)) {
                 runCatching {
                     setForeground(
                         OperationNotificationHelper.hashingForegroundInfo(
                             applicationContext,
-                            platformLabel
-                        )
+                            platformLabel,
+                        ),
                     )
                 }
                 var rounds = 0
@@ -83,7 +85,7 @@ class LibraryScanWorker(
                 removed = result.gamesRemoved,
                 skipped = result.gamesSkipped,
                 foldersFailed = result.foldersFailed,
-                failureMessages = result.failureMessages
+                failureMessages = result.failureMessages,
             )
 
             if (result.error != null && result.gamesAdded == 0) {
@@ -94,8 +96,8 @@ class LibraryScanWorker(
                         "added" to result.gamesAdded,
                         "removed" to result.gamesRemoved,
                         "skipped" to result.gamesSkipped,
-                        "foldersFailed" to result.foldersFailed
-                    )
+                        "foldersFailed" to result.foldersFailed,
+                    ),
                 )
             }
         } finally {
@@ -108,20 +110,24 @@ class LibraryScanWorker(
         private const val KEY_COMPUTE_HASHES = "computeHashes"
         private const val UNIQUE_NAME = "wajiha-library-scan"
 
-        fun enqueue(context: Context, platformId: String? = null, computeHashes: Boolean = true) {
-            val request = OneTimeWorkRequestBuilder<LibraryScanWorker>()
-                .setInputData(
-                    workDataOf(
-                        KEY_PLATFORM_ID to platformId,
-                        KEY_COMPUTE_HASHES to computeHashes
-                    )
-                )
-                .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
-                .build()
+        fun enqueue(
+            context: Context,
+            platformId: String? = null,
+            computeHashes: Boolean = true,
+        ) {
+            val request =
+                OneTimeWorkRequestBuilder<LibraryScanWorker>()
+                    .setInputData(
+                        workDataOf(
+                            KEY_PLATFORM_ID to platformId,
+                            KEY_COMPUTE_HASHES to computeHashes,
+                        ),
+                    ).setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
+                    .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_NAME,
                 ExistingWorkPolicy.REPLACE,
-                request
+                request,
             )
         }
     }

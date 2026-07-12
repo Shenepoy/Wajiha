@@ -30,7 +30,6 @@ import java.io.File
  * - RetroArch LIBRETRO core path expansion + CONFIGFILE default
  */
 object EmulatorLauncher {
-
     private const val ROM_IMPORT_DIR = "rom_import"
     private const val MAX_CACHE_AGE_MS = 7 * 24 * 60 * 60 * 1000L
     private const val MAX_ROM_CACHE_SIZE_BYTES = 1024L * 1024L * 1024L
@@ -39,7 +38,10 @@ object EmulatorLauncher {
 
     private val needsRealPathPackages = EmulatorPackages.needsRealPath
 
-    fun launch(context: Context, spec: LaunchSpec): LaunchResult {
+    fun launch(
+        context: Context,
+        spec: LaunchSpec,
+    ): LaunchResult {
         try {
             if (spec.killBeforeLaunch) {
                 PackageKiller.forceStopPackageBestEffort(context, spec.packageName)
@@ -60,15 +62,20 @@ object EmulatorLauncher {
             }
 
             val resolvedData = spec.data?.let { resolveMarkedValue(context, it) }
-            val resolvedExtras = spec.extras.map { extra ->
-                val resolved = resolveMarkedValue(context, extra.value)
-                if (resolved == extra.value) extra else extra.copy(value = resolved)
-            }
+            val resolvedExtras =
+                spec.extras.map { extra ->
+                    val resolved = resolveMarkedValue(context, extra.value)
+                    if (resolved == extra.value) extra else extra.copy(value = resolved)
+                }
 
-            var uriData: Uri? = resolvedData?.let {
-                if (!it.contains("://") && it.startsWith("/")) Uri.parse("file://$it")
-                else Uri.parse(it)
-            }
+            var uriData: Uri? =
+                resolvedData?.let {
+                    if (!it.contains("://") && it.startsWith("/")) {
+                        Uri.parse("file://$it")
+                    } else {
+                        Uri.parse(it)
+                    }
+                }
 
             val needsRealPathForMultiFile = spec.packageName in needsRealPathPackages
             var masterRealPath: String? = null
@@ -90,10 +97,17 @@ object EmulatorLauncher {
             }
 
             when {
-                uriData != null && spec.mimeType != null ->
+                uriData != null && spec.mimeType != null -> {
                     intent.setDataAndType(uriData, spec.mimeType)
-                uriData != null -> intent.data = uriData
-                spec.mimeType != null -> intent.type = spec.mimeType
+                }
+
+                uriData != null -> {
+                    intent.data = uriData
+                }
+
+                spec.mimeType != null -> {
+                    intent.type = spec.mimeType
+                }
             }
 
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -109,28 +123,52 @@ object EmulatorLauncher {
                     extra.key == "LIBRETRO" && !value.startsWith("/")
                 ) {
                     val libretroDir = getDefaultLibretroDirectory(context, spec.packageName)
-                    val base = value
-                        .removeSuffix("_libretro_android.so")
-                        .removeSuffix("_libretro.so")
+                    val base =
+                        value
+                            .removeSuffix("_libretro_android.so")
+                            .removeSuffix("_libretro.so")
                     intent.putExtra(extra.key, "$libretroDir${base}_libretro_android.so")
                     continue
                 }
 
-                val finalValue = if (value.startsWith("content://") && needsRealPathForMultiFile) {
-                    resolveMultiFileExtraToFileUri(context, value)
-                } else value
+                val finalValue =
+                    if (value.startsWith("content://") && needsRealPathForMultiFile) {
+                        resolveMultiFileExtraToFileUri(context, value)
+                    } else {
+                        value
+                    }
 
                 when (extra.type) {
-                    "string" -> intent.putExtra(extra.key, finalValue)
-                    "bool", "boolean" -> intent.putExtra(extra.key, finalValue.toBoolean())
-                    "int" -> intent.putExtra(extra.key, finalValue.toIntOrNull() ?: 0)
-                    "long" -> intent.putExtra(extra.key, finalValue.toLongOrNull() ?: 0L)
-                    "float" -> intent.putExtra(extra.key, finalValue.toFloatOrNull() ?: 0f)
-                    "uri" -> intent.putExtra(extra.key, Uri.parse(finalValue))
-                    "string_array" -> intent.putExtra(
-                        extra.key,
-                        finalValue.split(",").map { it.trim() }.toTypedArray()
-                    )
+                    "string" -> {
+                        intent.putExtra(extra.key, finalValue)
+                    }
+
+                    "bool", "boolean" -> {
+                        intent.putExtra(extra.key, finalValue.toBoolean())
+                    }
+
+                    "int" -> {
+                        intent.putExtra(extra.key, finalValue.toIntOrNull() ?: 0)
+                    }
+
+                    "long" -> {
+                        intent.putExtra(extra.key, finalValue.toLongOrNull() ?: 0L)
+                    }
+
+                    "float" -> {
+                        intent.putExtra(extra.key, finalValue.toFloatOrNull() ?: 0f)
+                    }
+
+                    "uri" -> {
+                        intent.putExtra(extra.key, Uri.parse(finalValue))
+                    }
+
+                    "string_array" -> {
+                        intent.putExtra(
+                            extra.key,
+                            finalValue.split(",").map { it.trim() }.toTypedArray(),
+                        )
+                    }
                 }
             }
 
@@ -138,16 +176,23 @@ object EmulatorLauncher {
             if (EmulatorPackages.isRetroArch(spec.packageName) && !intent.hasExtra("CONFIGFILE")) {
                 intent.putExtra(
                     "CONFIGFILE",
-                    "/storage/emulated/0/Android/data/${spec.packageName}/files/retroarch.cfg"
+                    "/storage/emulated/0/Android/data/${spec.packageName}/files/retroarch.cfg",
                 )
             }
 
             // Grant SAF permissions for any remaining content:// URI
-            val primaryContentUri: Uri? = when {
-                uriData?.scheme == "content" -> uriData
-                else -> resolvedExtras.firstOrNull { it.value.startsWith("content://") }
-                    ?.let { Uri.parse(it.value) }
-            }
+            val primaryContentUri: Uri? =
+                when {
+                    uriData?.scheme == "content" -> {
+                        uriData
+                    }
+
+                    else -> {
+                        resolvedExtras
+                            .firstOrNull { it.value.startsWith("content://") }
+                            ?.let { Uri.parse(it.value) }
+                    }
+                }
             if (primaryContentUri != null) {
                 grantPrimary(context, spec.packageName, intent, primaryContentUri)
                 grantParentTreePermission(context, spec.packageName, intent, primaryContentUri)
@@ -174,9 +219,10 @@ object EmulatorLauncher {
 
             // Don't pre-resolve — returns null on Android 11+ for visible-but-unqueried
             // apps. Catch ActivityNotFoundException instead.
-            val options = spec.launchDisplayId?.let {
-                ActivityOptions.makeBasic().setLaunchDisplayId(it).toBundle()
-            }
+            val options =
+                spec.launchDisplayId?.let {
+                    ActivityOptions.makeBasic().setLaunchDisplayId(it).toBundle()
+                }
             if (options != null) {
                 context.startActivity(intent, options)
             } else {
@@ -197,21 +243,30 @@ object EmulatorLauncher {
         }
     }
 
-    fun isPackageInstalled(context: Context, packageName: String): Boolean = try {
-        context.packageManager.getPackageInfo(packageName, 0)
-        true
-    } catch (_: Exception) {
-        false
-    }
+    fun isPackageInstalled(
+        context: Context,
+        packageName: String,
+    ): Boolean =
+        try {
+            context.packageManager.getPackageInfo(packageName, 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
 
-    private fun grantPrimary(context: Context, packageName: String, intent: Intent, uri: Uri) {
+    private fun grantPrimary(
+        context: Context,
+        packageName: String,
+        intent: Intent,
+        uri: Uri,
+    ) {
         // Synchronous grant — FLAG_GRANT_READ_URI_PERMISSION alone is processed
         // asynchronously and can lose the first-launch race.
         try {
             context.grantUriPermission(
                 packageName,
                 uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
         } catch (_: Exception) {
         }
@@ -222,39 +277,50 @@ object EmulatorLauncher {
         }
     }
 
-    private fun resolveMarkedValue(context: Context, value: String): String = when {
-        value.startsWith("wajiha-realpath:") -> {
-            val raw = value.removePrefix("wajiha-realpath:")
-            if (raw.startsWith("content://")) {
-                val uri = Uri.parse(raw)
-                resolveSafUriToPath(uri) ?: run {
-                    val fileName = getFileNameFromUri(context, uri) ?: "rom"
-                    cacheContentUriToFile(context, uri, fileName)?.absolutePath ?: raw
+    private fun resolveMarkedValue(
+        context: Context,
+        value: String,
+    ): String =
+        when {
+            value.startsWith("wajiha-realpath:") -> {
+                val raw = value.removePrefix("wajiha-realpath:")
+                if (raw.startsWith("content://")) {
+                    val uri = Uri.parse(raw)
+                    resolveSafUriToPath(uri) ?: run {
+                        val fileName = getFileNameFromUri(context, uri) ?: "rom"
+                        cacheContentUriToFile(context, uri, fileName)?.absolutePath ?: raw
+                    }
+                } else {
+                    raw
                 }
-            } else raw
-        }
-        value.startsWith("wajiha-localuri:") -> {
-            val raw = value.removePrefix("wajiha-localuri:")
-            when {
-                raw.startsWith("content://") -> raw
-                raw.startsWith("file://") -> raw
-                else -> "file://$raw"
+            }
+
+            value.startsWith("wajiha-localuri:") -> {
+                val raw = value.removePrefix("wajiha-localuri:")
+                when {
+                    raw.startsWith("content://") -> raw
+                    raw.startsWith("file://") -> raw
+                    else -> "file://$raw"
+                }
+            }
+
+            else -> {
+                value
             }
         }
-        else -> value
-    }
 
-    private fun flagStringToIntent(flag: String): Int? = when (flag) {
-        "clear-task" -> Intent.FLAG_ACTIVITY_CLEAR_TASK
-        "clear-top" -> Intent.FLAG_ACTIVITY_CLEAR_TOP
-        "no-animation" -> Intent.FLAG_ACTIVITY_NO_ANIMATION
-        "no-history" -> Intent.FLAG_ACTIVITY_NO_HISTORY
-        "single-top" -> Intent.FLAG_ACTIVITY_SINGLE_TOP
-        "reorder-to-front" -> Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-        "reset-task-if-needed" -> Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-        "brought-to-front" -> Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
-        else -> flag.removePrefix("raw:").toIntOrNull()
-    }
+    private fun flagStringToIntent(flag: String): Int? =
+        when (flag) {
+            "clear-task" -> Intent.FLAG_ACTIVITY_CLEAR_TASK
+            "clear-top" -> Intent.FLAG_ACTIVITY_CLEAR_TOP
+            "no-animation" -> Intent.FLAG_ACTIVITY_NO_ANIMATION
+            "no-history" -> Intent.FLAG_ACTIVITY_NO_HISTORY
+            "single-top" -> Intent.FLAG_ACTIVITY_SINGLE_TOP
+            "reorder-to-front" -> Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            "reset-task-if-needed" -> Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+            "brought-to-front" -> Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
+            else -> flag.removePrefix("raw:").toIntOrNull()
+        }
 
     private fun resolveSafUriToPath(uri: Uri): String? {
         try {
@@ -276,41 +342,62 @@ object EmulatorLauncher {
         }
     }
 
-    private fun getFileNameFromUri(context: Context, uri: Uri): String? {
+    private fun getFileNameFromUri(
+        context: Context,
+        uri: Uri,
+    ): String? {
         var result: String? = null
         if (uri.scheme == "content") {
-            context.contentResolver.query(
-                uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (idx >= 0) result = cursor.getString(idx)
+            context.contentResolver
+                .query(
+                    uri,
+                    arrayOf(OpenableColumns.DISPLAY_NAME),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0) result = cursor.getString(idx)
+                    }
                 }
-            }
         }
         return result ?: uri.lastPathSegment
     }
 
-    private fun cacheContentUriToFile(context: Context, uri: Uri, fileName: String): File? {
+    private fun cacheContentUriToFile(
+        context: Context,
+        uri: Uri,
+        fileName: String,
+    ): File? {
         try {
             // Public dir so the emulator can read the cached copy (NAS/remote SAF
             // providers have no filesystem path).
             val publicDir = File(Environment.getExternalStorageDirectory(), "Wajiha/$ROM_IMPORT_DIR")
-            val importDir = if (publicDir.mkdirs() || publicDir.exists()) publicDir
-            else File(context.externalCacheDir ?: context.cacheDir, ROM_IMPORT_DIR).also { it.mkdirs() }
+            val importDir =
+                if (publicDir.mkdirs() || publicDir.exists()) {
+                    publicDir
+                } else {
+                    File(context.externalCacheDir ?: context.cacheDir, ROM_IMPORT_DIR).also { it.mkdirs() }
+                }
 
             cleanupOldCacheFiles(importDir)
             val destFile = File(importDir, fileName)
 
             var remoteSize = -1L
-            context.contentResolver.query(
-                uri, arrayOf(OpenableColumns.SIZE), null, null, null
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    if (idx >= 0) remoteSize = cursor.getLong(idx)
+            context.contentResolver
+                .query(
+                    uri,
+                    arrayOf(OpenableColumns.SIZE),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (idx >= 0) remoteSize = cursor.getLong(idx)
+                    }
                 }
-            }
 
             if (destFile.exists() && destFile.length() == remoteSize && remoteSize > 0) {
                 return destFile
@@ -336,7 +423,10 @@ object EmulatorLauncher {
         }
     }
 
-    private fun getDefaultLibretroDirectory(context: Context, retroArchPackage: String): String =
+    private fun getDefaultLibretroDirectory(
+        context: Context,
+        retroArchPackage: String,
+    ): String =
         try {
             val appInfo = context.packageManager.getApplicationInfo(retroArchPackage, 0)
             "${appInfo.dataDir}/cores/"
@@ -348,7 +438,7 @@ object EmulatorLauncher {
         context: Context,
         packageName: String,
         intent: Intent,
-        fileUri: Uri
+        fileUri: Uri,
     ) {
         try {
             if (!DocumentsContract.isDocumentUri(context, fileUri)) return
@@ -358,7 +448,7 @@ object EmulatorLauncher {
             context.grantUriPermission(
                 packageName,
                 treeUri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
@@ -377,7 +467,7 @@ object EmulatorLauncher {
         context: Context,
         packageName: String,
         intent: Intent,
-        fileUri: Uri
+        fileUri: Uri,
     ) {
         try {
             if (!DocumentsContract.isDocumentUri(context, fileUri)) return
@@ -396,25 +486,28 @@ object EmulatorLauncher {
                 DocumentsContract.buildChildDocumentsUriUsingTree(parentTreeUri, parentDocId)
 
             var subfolderDocId: String? = null
-            context.contentResolver.query(
-                parentChildrenUri,
-                arrayOf(
-                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                    DocumentsContract.Document.COLUMN_MIME_TYPE
-                ),
-                null, null, null
-            )?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    val childDocId = cursor.getString(0) ?: continue
-                    val childName = cursor.getString(1) ?: continue
-                    val mimeType = cursor.getString(2) ?: continue
-                    if (childName == folderName && mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                        subfolderDocId = childDocId
-                        break
+            context.contentResolver
+                .query(
+                    parentChildrenUri,
+                    arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    ),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val childDocId = cursor.getString(0) ?: continue
+                        val childName = cursor.getString(1) ?: continue
+                        val mimeType = cursor.getString(2) ?: continue
+                        if (childName == folderName && mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
+                            subfolderDocId = childDocId
+                            break
+                        }
                     }
                 }
-            }
             val folderDocId = subfolderDocId ?: return
 
             val subfolderTreeUri = DocumentsContract.buildTreeDocumentUri(authority, folderDocId)
@@ -422,7 +515,7 @@ object EmulatorLauncher {
                 context.grantUriPermission(
                     packageName,
                     subfolderTreeUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                 )
                 intent.clipData?.addItem(ClipData.Item(subfolderTreeUri))
             } catch (_: Exception) {
@@ -430,29 +523,32 @@ object EmulatorLauncher {
 
             val subfolderChildrenUri =
                 DocumentsContract.buildChildDocumentsUriUsingTree(subfolderTreeUri, folderDocId)
-            context.contentResolver.query(
-                subfolderChildrenUri,
-                arrayOf(
-                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME
-                ),
-                null, null, null
-            )?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    val childDocId = cursor.getString(0) ?: continue
-                    val childUri =
-                        DocumentsContract.buildDocumentUriUsingTree(subfolderTreeUri, childDocId)
-                    try {
-                        context.grantUriPermission(
-                            packageName,
-                            childUri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                        )
-                        intent.clipData?.addItem(ClipData.Item(childUri))
-                    } catch (_: Exception) {
+            context.contentResolver
+                .query(
+                    subfolderChildrenUri,
+                    arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    ),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val childDocId = cursor.getString(0) ?: continue
+                        val childUri =
+                            DocumentsContract.buildDocumentUriUsingTree(subfolderTreeUri, childDocId)
+                        try {
+                            context.grantUriPermission(
+                                packageName,
+                                childUri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                            )
+                            intent.clipData?.addItem(ClipData.Item(childUri))
+                        } catch (_: Exception) {
+                        }
                     }
                 }
-            }
         } catch (_: Exception) {
         }
     }
@@ -461,7 +557,7 @@ object EmulatorLauncher {
         context: Context,
         packageName: String,
         intent: Intent,
-        masterUri: Uri
+        masterUri: Uri,
     ) {
         val trackExts = setOf("bin", "iso", "img", "sub", "wav", "flac", "dat")
         try {
@@ -474,41 +570,49 @@ object EmulatorLauncher {
             val masterFileName = getFileNameFromUri(context, masterUri) ?: ""
             val masterBase = masterFileName.substringBeforeLast('.').lowercase()
 
-            context.contentResolver.query(
-                childrenUri,
-                arrayOf(
-                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME
-                ),
-                null, null, null
-            )?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    val childDocId = cursor.getString(0) ?: continue
-                    val childName = cursor.getString(1) ?: continue
-                    val childExt = childName.substringAfterLast('.', "").lowercase()
-                    val childBase = childName.substringBeforeLast('.').lowercase()
+            context.contentResolver
+                .query(
+                    childrenUri,
+                    arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    ),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val childDocId = cursor.getString(0) ?: continue
+                        val childName = cursor.getString(1) ?: continue
+                        val childExt = childName.substringAfterLast('.', "").lowercase()
+                        val childBase = childName.substringBeforeLast('.').lowercase()
 
-                    val sameBaseName = childBase == masterBase
-                    val isTrackSibling =
-                        childExt in trackExts && childName.lowercase().startsWith(masterBase)
+                        val sameBaseName = childBase == masterBase
+                        val isTrackSibling =
+                            childExt in trackExts && childName.lowercase().startsWith(masterBase)
 
-                    if (sameBaseName || isTrackSibling) {
-                        val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId)
-                        try {
-                            context.grantUriPermission(
-                                packageName, childUri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            )
-                            intent.clipData?.addItem(ClipData.Item(childUri))
-                        } catch (_: Exception) {
+                        if (sameBaseName || isTrackSibling) {
+                            val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId)
+                            try {
+                                context.grantUriPermission(
+                                    packageName,
+                                    childUri,
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                                )
+                                intent.clipData?.addItem(ClipData.Item(childUri))
+                            } catch (_: Exception) {
+                            }
                         }
                     }
                 }
-            }
         } catch (_: Exception) {
         }
     }
 
-    private fun resolveToFileProviderUri(context: Context, contentUri: Uri): Uri? {
+    private fun resolveToFileProviderUri(
+        context: Context,
+        contentUri: Uri,
+    ): Uri? {
         val realPath = resolveSafUriToPath(contentUri) ?: return null
         val file = File(realPath)
         if (!file.exists()) return null
@@ -519,7 +623,10 @@ object EmulatorLauncher {
         }
     }
 
-    private fun resolveMultiFileExtraToFileUri(context: Context, value: String): String {
+    private fun resolveMultiFileExtraToFileUri(
+        context: Context,
+        value: String,
+    ): String {
         if (!value.startsWith("content://")) return value
         val uri = Uri.parse(value)
         val fileName = getFileNameFromUri(context, uri) ?: return value
@@ -533,7 +640,7 @@ object EmulatorLauncher {
         context: Context,
         packageName: String,
         intent: Intent,
-        masterRealPath: String
+        masterRealPath: String,
     ) {
         val trackExts = setOf("bin", "iso", "img", "sub", "wav", "flac", "dat", "raw", "ogg", "mp3")
         try {
@@ -552,13 +659,16 @@ object EmulatorLauncher {
 
                 if (sameBaseName || isTrackSibling) {
                     try {
-                        val siblingUri = FileProvider.getUriForFile(
-                            context, "${context.packageName}.fileprovider", file
-                        )
+                        val siblingUri =
+                            FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                file,
+                            )
                         context.grantUriPermission(
                             packageName,
                             siblingUri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                         )
                         intent.clipData?.addItem(ClipData.Item(siblingUri))
                     } catch (_: Exception) {

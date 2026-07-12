@@ -17,20 +17,21 @@ import com.wajiha.ui.theme.WajihaSpacing
 fun WajihaErrorState(
     message: String,
     modifier: Modifier = Modifier,
-    onRetry: (() -> Unit)? = null
+    onRetry: (() -> Unit)? = null,
 ) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(WajihaSpacing.lg),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(WajihaSpacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.md)
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.md),
     ) {
         Text(
             text = message,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.error,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
         )
         if (onRetry != null) {
             GamepadButton(text = "Retry", onClick = onRetry)

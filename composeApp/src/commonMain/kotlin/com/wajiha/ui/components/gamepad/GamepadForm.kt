@@ -14,14 +14,15 @@ import com.wajiha.ui.theme.WajihaSpacing
 @Composable
 fun GamepadForm(
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(WajihaSpacing.md),
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.md)
+        modifier =
+            modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(WajihaSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.md),
     ) {
         content()
     }
@@ -30,11 +31,11 @@ fun GamepadForm(
 @Composable
 fun GamepadFormField(
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
     ) {
         content()
     }

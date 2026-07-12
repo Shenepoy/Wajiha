@@ -66,34 +66,35 @@ import coil3.compose.AsyncImage
 import com.wajiha.data.scraper.MediaCandidate
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeCandidate
-import com.wajiha.state.DualScreenStore
-import com.wajiha.state.GamepadOwner
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadOverlayLayer
-import com.wajiha.input.dismissKeyboardOnOutsideTap
 import com.wajiha.input.RememberGamepadOwnerFocus
+import com.wajiha.input.dismissKeyboardOnOutsideTap
 import com.wajiha.input.dismissTextEdit
 import com.wajiha.input.requestContentFocus
 import com.wajiha.input.wajihaGamepadFocus
+import com.wajiha.state.DualScreenStore
+import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.CriticalChangeActions
 import com.wajiha.ui.components.WajihaLoadingState
 import com.wajiha.ui.components.gamepad.GamepadActionBar
 import com.wajiha.ui.components.gamepad.GamepadButton
-import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
 import com.wajiha.ui.components.gamepad.GamepadSafeTextField
+import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.koin.compose.koinInject
 
-val scrapeReviewGamepadHints: List<Pair<String, String>> = listOf(
-    "A" to "Select",
-    "B" to "Back",
-    "X" to "Clear",
-    "Y" to "Confirm",
-    "SELECT" to "Search"
-)
+val scrapeReviewGamepadHints: List<Pair<String, String>> =
+    listOf(
+        "A" to "Select",
+        "B" to "Back",
+        "X" to "Clear",
+        "Y" to "Confirm",
+        "SELECT" to "Search",
+    )
 
 /**
  * Dual-display Manual review:
@@ -111,7 +112,7 @@ fun ScrapeReviewPicker(
     dualDisplay: Boolean = false,
     /** Display hosting this dialog (menu screen). Used for L2 content focus. */
     hostGamepadOwner: GamepadOwner? = null,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     val state by viewModel.state.collectAsState()
     val game = state.game
@@ -128,8 +129,9 @@ fun ScrapeReviewPicker(
     // On dual Thor, overview stays on bottom; slot grid lives on the top hero.
     val showPickerHere = inPicker && !dualDisplay
     val overviewFocus = remember { FocusRequester() }
-    val menuOwner = hostGamepadOwner
-        ?: if (dualDisplay) dualStore.menuGamepadOwner() else null
+    val menuOwner =
+        hostGamepadOwner
+            ?: if (dualDisplay) dualStore.menuGamepadOwner() else null
     RememberGamepadOwnerFocus(owner = menuOwner) {
         if (!showPickerHere) overviewFocus.requestContentFocus()
     }
@@ -193,87 +195,107 @@ fun ScrapeReviewPicker(
 
     BackHandler {
         when {
-            inPicker -> viewModel.closeSlot()
+            inPicker -> {
+                viewModel.closeSlot()
+            }
+
             searchOpen -> {
                 releaseSearchFocus()
                 searchOpen = false
             }
-            else -> dismiss()
+
+            else -> {
+                dismiss()
+            }
         }
     }
 
     Dialog(
         onDismissRequest = ::dismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false
-        )
+        properties =
+            DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = false,
+            ),
     ) {
         GamepadOverlayLayer(
             layerId = layerId,
             onDismiss = {
                 if (inPicker) viewModel.closeSlot() else dismiss()
             },
-            modifier = Modifier
-                .fillMaxSize()
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    // When dual + picking, gamepad is on the top display — skip here.
-                    if (dualDisplay && inPicker) return@onPreviewKeyEvent false
-                    when {
-                        GamepadKeys.isY(event.type, event.key) -> {
-                            confirm()
-                            true
-                        }
-                        GamepadKeys.isX(event.type, event.key) -> {
-                            if (!showPickerHere) {
-                                clearFocused()
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        // When dual + picking, gamepad is on the top display — skip here.
+                        if (dualDisplay && inPicker) return@onPreviewKeyEvent false
+                        when {
+                            GamepadKeys.isY(event.type, event.key) -> {
+                                confirm()
                                 true
-                            } else {
+                            }
+
+                            GamepadKeys.isX(event.type, event.key) -> {
+                                if (!showPickerHere) {
+                                    clearFocused()
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+
+                            GamepadKeys.isSelect(event.type, event.key) -> {
+                                if (searchOpen) runSearch() else searchOpen = true
+                                true
+                            }
+
+                            GamepadKeys.isConfirm(event.type, event.key) && !showPickerHere -> {
+                                viewModel.openSlot(focusedSlot)
+                                true
+                            }
+
+                            GamepadKeys.isBack(event.type, event.key) -> {
+                                when {
+                                    searchOpen -> {
+                                        releaseSearchFocus()
+                                        searchOpen = false
+                                        true
+                                    }
+
+                                    inPicker -> {
+                                        viewModel.closeSlot()
+                                        true
+                                    }
+
+                                    else -> {
+                                        dismissTextEdit(focusManager, keyboard)
+                                    }
+                                }
+                            }
+
+                            else -> {
                                 false
                             }
                         }
-                        GamepadKeys.isSelect(event.type, event.key) -> {
-                            if (searchOpen) runSearch() else searchOpen = true
-                            true
-                        }
-                        GamepadKeys.isConfirm(event.type, event.key) && !showPickerHere -> {
-                            viewModel.openSlot(focusedSlot)
-                            true
-                        }
-                        GamepadKeys.isBack(event.type, event.key) -> {
-                            when {
-                                searchOpen -> {
-                                    releaseSearchFocus()
-                                    searchOpen = false
-                                    true
-                                }
-                                inPicker -> {
-                                    viewModel.closeSlot()
-                                    true
-                                }
-                                else -> dismissTextEdit(focusManager, keyboard)
-                            }
-                        }
-                        else -> false
-                    }
-                }
+                    },
         ) {
             Surface(
                 modifier = modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(0.dp)
+                shape = RoundedCornerShape(0.dp),
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Bottom chrome: always game overview header (even while top shows picker)
                     ReviewHeader(
                         title = game?.displayName ?: "Manual",
-                        queueLabel = if (state.queueTotal > 1) {
-                            "${state.queueIndex + 1}/${state.queueTotal}"
-                        } else {
-                            null
-                        },
+                        queueLabel =
+                            if (state.queueTotal > 1) {
+                                "${state.queueIndex + 1}/${state.queueTotal}"
+                            } else {
+                                null
+                            },
                         searchOpen = searchOpen,
                         showBack = true,
                         onBack = {
@@ -293,7 +315,7 @@ fun ScrapeReviewPicker(
                                 searchOpen = true
                             }
                         },
-                        searchEnabled = !state.applying && !state.loading
+                        searchEnabled = !state.applying && !state.loading,
                     )
 
                     if (searchOpen && !state.loading && !state.applying) {
@@ -303,7 +325,7 @@ fun ScrapeReviewPicker(
                             searching = state.slotLoading,
                             onDraftChange = viewModel::setDraftSearchName,
                             onSearch = ::runSearch,
-                            enabled = !state.slotLoading
+                            enabled = !state.slotLoading,
                         )
                     }
 
@@ -311,28 +333,31 @@ fun ScrapeReviewPicker(
                         state.loading -> {
                             Box(
                                 Modifier.weight(1f).fillMaxWidth(),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.Center,
                             ) {
                                 WajihaLoadingState(message = "Loading…")
                             }
                         }
+
                         state.applying -> {
                             Box(
                                 Modifier.weight(1f).fillMaxWidth(),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.Center,
                             ) {
                                 WajihaLoadingState(message = "Applying…")
                             }
                         }
+
                         showPickerHere -> {
                             SlotPicker(
                                 slot = state.activeSlot!!,
                                 state = state,
                                 viewModel = viewModel,
                                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                                firstFocusRequester = overviewFocus
+                                firstFocusRequester = overviewFocus,
                             )
                         }
+
                         else -> {
                             ReviewOverview(
                                 state = state,
@@ -350,29 +375,30 @@ fun ScrapeReviewPicker(
                                     }
                                 },
                                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                                firstFocusRequester = overviewFocus
+                                firstFocusRequester = overviewFocus,
                             )
                         }
                     }
 
                     // Footer: Options | count (single-display picker) | Confirm
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (!showPickerHere) {
                             Box {
                                 GamepadButton(
                                     text = "Options",
                                     onClick = { optionsOpen = true },
-                                    outlined = true
+                                    outlined = true,
                                 )
                                 DropdownMenu(
                                     expanded = optionsOpen,
-                                    onDismissRequest = { optionsOpen = false }
+                                    onDismissRequest = { optionsOpen = false },
                                 ) {
                                     if (state.lockedSlots == null) {
                                         DropdownMenuItem(
@@ -380,7 +406,7 @@ fun ScrapeReviewPicker(
                                             onClick = {
                                                 optionsOpen = false
                                                 viewModel.autoFillFromPriorities()
-                                            }
+                                            },
                                         )
                                     }
                                     if (showSkip && state.queueTotal > 1) {
@@ -389,7 +415,7 @@ fun ScrapeReviewPicker(
                                             onClick = {
                                                 optionsOpen = false
                                                 skipGame()
-                                            }
+                                            },
                                         )
                                     }
                                     DropdownMenuItem(
@@ -397,19 +423,19 @@ fun ScrapeReviewPicker(
                                         onClick = {
                                             optionsOpen = false
                                             dismiss()
-                                        }
+                                        },
                                     )
                                 }
                             }
                         } else {
                             Surface(
                                 shape = WajihaShapes.chip,
-                                color = MaterialTheme.colorScheme.surfaceVariant
+                                color = MaterialTheme.colorScheme.surfaceVariant,
                             ) {
                                 Text(
                                     text = pickerCountLabel(state),
                                     style = MaterialTheme.typography.labelLarge,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                 )
                             }
                         }
@@ -421,7 +447,7 @@ fun ScrapeReviewPicker(
                                 hasChanges = state.hasChanges,
                                 onRevert = viewModel::revertStaged,
                                 onConfirm = ::confirm,
-                                confirmEnabled = !state.applying && game != null
+                                confirmEnabled = !state.applying && game != null,
                             )
                         }
                     }
@@ -433,34 +459,43 @@ fun ScrapeReviewPicker(
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
 
                     GamepadActionBar(
-                        hints = when {
-                            showPickerHere -> listOf(
-                                "A" to "Select",
-                                "B" to "Back",
-                                "L2" to "Focus screen",
-                                "SELECT" to if (searchOpen) "Go" else "Search"
-                            )
-                            dualDisplay && inPicker -> listOf(
-                                "A" to "Pick (top)",
-                                "B" to "Close slot",
-                                "Y" to "Confirm",
-                                "L2" to "Focus screen",
-                                "SELECT" to if (searchOpen) "Go" else "Search"
-                            )
-                            else -> listOf(
-                                "A" to "Open",
-                                "B" to "Back",
-                                "X" to "Clear",
-                                "Y" to "Confirm",
-                                "L2" to "Focus screen",
-                                "SELECT" to if (searchOpen) "Go" else "Search"
-                            )
-                        }
+                        hints =
+                            when {
+                                showPickerHere -> {
+                                    listOf(
+                                        "A" to "Select",
+                                        "B" to "Back",
+                                        "L2" to "Focus screen",
+                                        "SELECT" to if (searchOpen) "Go" else "Search",
+                                    )
+                                }
+
+                                dualDisplay && inPicker -> {
+                                    listOf(
+                                        "A" to "Pick (top)",
+                                        "B" to "Close slot",
+                                        "Y" to "Confirm",
+                                        "L2" to "Focus screen",
+                                        "SELECT" to if (searchOpen) "Go" else "Search",
+                                    )
+                                }
+
+                                else -> {
+                                    listOf(
+                                        "A" to "Open",
+                                        "B" to "Back",
+                                        "X" to "Clear",
+                                        "Y" to "Confirm",
+                                        "L2" to "Focus screen",
+                                        "SELECT" to if (searchOpen) "Go" else "Search",
+                                    )
+                                }
+                            },
                     )
                 }
             }
@@ -477,7 +512,7 @@ fun ScrapeReviewPicker(
 fun ScrapeReviewSlotHero(
     viewModel: ScrapeReviewViewModel = koinInject(),
     contentFocusRequester: FocusRequester? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
     val slot = state.activeSlot
@@ -492,54 +527,63 @@ fun ScrapeReviewSlotHero(
     }
 
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when {
-                    GamepadKeys.isY(event.type, event.key) -> {
-                        if (!state.applying && state.game != null && state.hasChanges) {
-                            viewModel.apply(null)
-                        }
-                        true
-                    }
-                    GamepadKeys.isBack(event.type, event.key) -> {
-                        when {
-                            searchOpen -> {
-                                dismissTextEdit(focusManager, keyboard)
-                                searchOpen = false
-                                true
+        modifier =
+            modifier
+                .fillMaxSize()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when {
+                        GamepadKeys.isY(event.type, event.key) -> {
+                            if (!state.applying && state.game != null && state.hasChanges) {
+                                viewModel.apply(null)
                             }
-                            slot != null -> {
-                                viewModel.closeSlot()
-                                true
+                            true
+                        }
+
+                        GamepadKeys.isBack(event.type, event.key) -> {
+                            when {
+                                searchOpen -> {
+                                    dismissTextEdit(focusManager, keyboard)
+                                    searchOpen = false
+                                    true
+                                }
+
+                                slot != null -> {
+                                    viewModel.closeSlot()
+                                    true
+                                }
+
+                                else -> {
+                                    false
+                                }
                             }
-                            else -> false
+                        }
+
+                        GamepadKeys.isSelect(event.type, event.key) -> {
+                            if (searchOpen) runSearch() else searchOpen = true
+                            true
+                        }
+
+                        else -> {
+                            false
                         }
                     }
-                    GamepadKeys.isSelect(event.type, event.key) -> {
-                        if (searchOpen) runSearch() else searchOpen = true
-                        true
-                    }
-                    else -> false
-                }
-            }
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+                }.padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         // Title row — slot name (status bar is drawn by TopScreen)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Surface(
                 shape = WajihaShapes.chip,
-                color = MaterialTheme.colorScheme.surfaceVariant
+                color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Text(
                     text = slot?.label() ?: "Box art",
                     style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
             Spacer(modifier = Modifier.weight(1f))
@@ -555,7 +599,7 @@ fun ScrapeReviewSlotHero(
                         }
                     },
                     outlined = true,
-                    enabled = !state.applying && !state.loading
+                    enabled = !state.applying && !state.loading,
                 )
             }
         }
@@ -567,7 +611,7 @@ fun ScrapeReviewSlotHero(
                 searching = state.slotLoading,
                 onDraftChange = viewModel::setDraftSearchName,
                 onSearch = ::runSearch,
-                enabled = !state.slotLoading
+                enabled = !state.slotLoading,
             )
         }
 
@@ -577,30 +621,32 @@ fun ScrapeReviewSlotHero(
             slot == null -> {
                 Box(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "Select a slot on the bottom screen",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
+
             state.slotLoading -> {
                 Box(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     WajihaLoadingState(message = "Loading…")
                 }
             }
+
             else -> {
                 SlotPicker(
                     slot = slot,
                     state = state,
                     viewModel = viewModel,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    firstFocusRequester = contentFocusRequester
+                    firstFocusRequester = contentFocusRequester,
                 )
             }
         }
@@ -609,12 +655,12 @@ fun ScrapeReviewSlotHero(
         Surface(
             shape = WajihaShapes.chip,
             color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.padding(top = 8.dp)
+            modifier = Modifier.padding(top = 8.dp),
         ) {
             Text(
                 text = if (slot != null) pickerCountLabel(state) else "—",
                 style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }
     }
@@ -628,27 +674,28 @@ private fun ReviewHeader(
     onBack: () -> Unit,
     onToggleSearch: () -> Unit,
     searchEnabled: Boolean,
-    showBack: Boolean = true
+    showBack: Boolean = true,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         // Left cluster: Back | Game Name 🔍
         Row(
             modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (showBack) {
                 GamepadButton(
                     text = "Back",
                     onClick = onBack,
                     outlined = true,
-                    sound = null
+                    sound = null,
                 )
             }
             Text(
@@ -656,24 +703,24 @@ private fun ReviewHeader(
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
+                modifier = Modifier.weight(1f, fill = false),
             )
             GamepadButton(
                 text = if (searchOpen) "✕" else "⌕",
                 onClick = onToggleSearch,
                 outlined = true,
-                enabled = searchEnabled
+                enabled = searchEnabled,
             )
         }
         if (queueLabel != null) {
             Surface(
                 shape = WajihaShapes.chip,
-                color = MaterialTheme.colorScheme.surfaceVariant
+                color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Text(
                     text = queueLabel,
                     style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                 )
             }
         }
@@ -700,25 +747,26 @@ private fun ReviewSearchBar(
     searching: Boolean,
     onDraftChange: (String) -> Unit,
     onSearch: () -> Unit,
-    enabled: Boolean
+    enabled: Boolean,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .dismissKeyboardOnOutsideTap(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .dismissKeyboardOnOutsideTap(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             GamepadSafeTextField(
                 value = draft,
                 onValueChange = onDraftChange,
                 label = "Search",
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
             CompactFilledButton(
                 text = if (searching) "…" else "Go",
@@ -726,17 +774,18 @@ private fun ReviewSearchBar(
                     dismissTextEdit()
                     onSearch()
                 },
-                enabled = enabled && !searching
+                enabled = enabled && !searching,
             )
         }
         Text(
-            text = if (draft != applied) {
-                "Draft — Go/SELECT to refresh this tab"
-            } else {
-                "Query: $applied"
-            },
+            text =
+                if (draft != applied) {
+                    "Draft — Go/SELECT to refresh this tab"
+                } else {
+                    "Query: $applied"
+                },
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -750,11 +799,11 @@ private fun ReviewOverview(
     onOpenSlot: (ReviewSlot) -> Unit,
     onClearSlot: (ReviewSlot) -> Unit,
     modifier: Modifier = Modifier,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     val slots = state.visibleSlots
-    fun tileRequester(slot: ReviewSlot): FocusRequester? =
-        if (slot == focusedSlot) firstFocusRequester else null
+
+    fun tileRequester(slot: ReviewSlot): FocusRequester? = if (slot == focusedSlot) firstFocusRequester else null
 
     if (slots.size == 1) {
         val slot = slots.first()
@@ -767,7 +816,7 @@ private fun ReviewOverview(
                 onOpen = { onOpenSlot(slot) },
                 onClear = { onClearSlot(slot) },
                 modifier = Modifier.fillMaxSize(),
-                focusRequester = tileRequester(slot)
+                focusRequester = tileRequester(slot),
             )
         }
         return
@@ -776,11 +825,11 @@ private fun ReviewOverview(
     // Wireframe mosaic: left Icon/Boxart | center Metadata/Logo+Fanart/Banner | right Hero/Screenshots
     Row(
         modifier = modifier.padding(10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Column(
             modifier = Modifier.weight(0.85f).fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             OverviewTile(
                 slot = ReviewSlot.Icon,
@@ -790,7 +839,7 @@ private fun ReviewOverview(
                 onOpen = { onOpenSlot(ReviewSlot.Icon) },
                 onClear = { onClearSlot(ReviewSlot.Icon) },
                 modifier = Modifier.weight(0.32f).fillMaxWidth(),
-                focusRequester = tileRequester(ReviewSlot.Icon)
+                focusRequester = tileRequester(ReviewSlot.Icon),
             )
             OverviewTile(
                 slot = ReviewSlot.Boxart,
@@ -800,12 +849,12 @@ private fun ReviewOverview(
                 onOpen = { onOpenSlot(ReviewSlot.Boxart) },
                 onClear = { onClearSlot(ReviewSlot.Boxart) },
                 modifier = Modifier.weight(0.68f).fillMaxWidth(),
-                focusRequester = tileRequester(ReviewSlot.Boxart)
+                focusRequester = tileRequester(ReviewSlot.Boxart),
             )
         }
         Column(
             modifier = Modifier.weight(1.25f).fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             OverviewTile(
                 slot = ReviewSlot.Metadata,
@@ -815,11 +864,11 @@ private fun ReviewOverview(
                 onOpen = { onOpenSlot(ReviewSlot.Metadata) },
                 onClear = { onClearSlot(ReviewSlot.Metadata) },
                 modifier = Modifier.weight(0.26f).fillMaxWidth(),
-                focusRequester = tileRequester(ReviewSlot.Metadata)
+                focusRequester = tileRequester(ReviewSlot.Metadata),
             )
             Row(
                 modifier = Modifier.weight(0.42f).fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OverviewTile(
                     slot = ReviewSlot.Logo,
@@ -829,7 +878,7 @@ private fun ReviewOverview(
                     onOpen = { onOpenSlot(ReviewSlot.Logo) },
                     onClear = { onClearSlot(ReviewSlot.Logo) },
                     modifier = Modifier.weight(1f).fillMaxHeight(),
-                    focusRequester = tileRequester(ReviewSlot.Logo)
+                    focusRequester = tileRequester(ReviewSlot.Logo),
                 )
                 OverviewTile(
                     slot = ReviewSlot.Fanart,
@@ -839,7 +888,7 @@ private fun ReviewOverview(
                     onOpen = { onOpenSlot(ReviewSlot.Fanart) },
                     onClear = { onClearSlot(ReviewSlot.Fanart) },
                     modifier = Modifier.weight(1f).fillMaxHeight(),
-                    focusRequester = tileRequester(ReviewSlot.Fanart)
+                    focusRequester = tileRequester(ReviewSlot.Fanart),
                 )
             }
             OverviewTile(
@@ -850,12 +899,12 @@ private fun ReviewOverview(
                 onOpen = { onOpenSlot(ReviewSlot.Banner) },
                 onClear = { onClearSlot(ReviewSlot.Banner) },
                 modifier = Modifier.weight(0.32f).fillMaxWidth(),
-                focusRequester = tileRequester(ReviewSlot.Banner)
+                focusRequester = tileRequester(ReviewSlot.Banner),
             )
         }
         Column(
             modifier = Modifier.weight(1.15f).fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             OverviewTile(
                 slot = ReviewSlot.Hero,
@@ -865,7 +914,7 @@ private fun ReviewOverview(
                 onOpen = { onOpenSlot(ReviewSlot.Hero) },
                 onClear = { onClearSlot(ReviewSlot.Hero) },
                 modifier = Modifier.weight(0.58f).fillMaxWidth(),
-                focusRequester = tileRequester(ReviewSlot.Hero)
+                focusRequester = tileRequester(ReviewSlot.Hero),
             )
             OverviewTile(
                 slot = ReviewSlot.Screenshot,
@@ -875,7 +924,7 @@ private fun ReviewOverview(
                 onOpen = { onOpenSlot(ReviewSlot.Screenshot) },
                 onClear = { onClearSlot(ReviewSlot.Screenshot) },
                 modifier = Modifier.weight(0.42f).fillMaxWidth(),
-                focusRequester = tileRequester(ReviewSlot.Screenshot)
+                focusRequester = tileRequester(ReviewSlot.Screenshot),
             )
         }
     }
@@ -891,61 +940,73 @@ private fun OverviewTile(
     onOpen: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
     val type = slot.mediaType()
     val staged = type != null && type in state.mediaPicks
     val stagedPick = type?.let { state.mediaPicks[it] }
-    val url = when (slot) {
-        ReviewSlot.Metadata -> state.metadataFrom?.thumbnailUrl
-            ?: state.metadataFrom?.media?.firstOrNull()?.url
-        else -> type?.let { state.stagedOrExistingUrl(it) }
-    }
+    val url =
+        when (slot) {
+            ReviewSlot.Metadata -> {
+                state.metadataFrom?.thumbnailUrl
+                    ?: state.metadataFrom
+                        ?.media
+                        ?.firstOrNull()
+                        ?.url
+            }
+
+            else -> {
+                type?.let { state.stagedOrExistingUrl(it) }
+            }
+        }
     val willClear = staged && stagedPick?.candidate == null
-    val border = when {
-        focused -> MaterialTheme.colorScheme.primary
-        staged -> WajihaColors.Tertiary
-        else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
-    }
+    val border =
+        when {
+            focused -> MaterialTheme.colorScheme.primary
+            staged -> WajihaColors.Tertiary
+            else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+        }
 
     Box(
-        modifier = modifier
-            .then(
-                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
-            )
-            .onFocusChanged { if (it.isFocused) onFocus() }
-            .wajihaGamepadFocus()
-            .wajihaFocusIndicator(
-                highlighted = focused,
-                shape = RoundedCornerShape(4.dp),
-                selected = focused
-            )
-            .border(if (focused) 2.dp else 1.dp, border, RoundedCornerShape(4.dp))
-            .clip(RoundedCornerShape(4.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .onPreviewKeyEvent { event ->
-                when {
-                    GamepadKeys.isConfirm(event.type, event.key) -> {
+        modifier =
+            modifier
+                .then(
+                    if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
+                ).onFocusChanged { if (it.isFocused) onFocus() }
+                .wajihaGamepadFocus()
+                .wajihaFocusIndicator(
+                    highlighted = focused,
+                    shape = RoundedCornerShape(4.dp),
+                    selected = focused,
+                ).border(if (focused) 2.dp else 1.dp, border, RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .onPreviewKeyEvent { event ->
+                    when {
+                        GamepadKeys.isConfirm(event.type, event.key) -> {
+                            onOpen()
+                            true
+                        }
+
+                        GamepadKeys.isX(event.type, event.key) -> {
+                            onClear()
+                            true
+                        }
+
+                        else -> {
+                            false
+                        }
+                    }
+                }.combinedClickable(
+                    onClick = {
+                        onFocus()
                         onOpen()
-                        true
-                    }
-                    GamepadKeys.isX(event.type, event.key) -> {
+                    },
+                    onLongClick = {
+                        onFocus()
                         onClear()
-                        true
-                    }
-                    else -> false
-                }
-            }
-            .combinedClickable(
-                onClick = {
-                    onFocus()
-                    onOpen()
-                },
-                onLongClick = {
-                    onFocus()
-                    onClear()
-                }
-            )
+                    },
+                ),
     ) {
         when {
             !url.isNullOrBlank() && !willClear -> {
@@ -953,41 +1014,45 @@ private fun OverviewTile(
                     model = url,
                     contentDescription = slot.label(),
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
+
             slot == ReviewSlot.Metadata && state.metadataFrom != null -> {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(10.dp),
-                    verticalArrangement = Arrangement.Center
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(10.dp),
+                    verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
                         text = state.metadataFrom!!.name,
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = listOfNotNull(
-                            state.metadataFrom?.sourceId,
-                            state.metadataFrom?.metadata?.developer,
-                            state.metadataFrom?.metadata?.region
-                        ).joinToString(" · "),
+                        text =
+                            listOfNotNull(
+                                state.metadataFrom?.sourceId,
+                                state.metadataFrom?.metadata?.developer,
+                                state.metadataFrom?.metadata?.region,
+                            ).joinToString(" · "),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
+
             else -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         text = if (willClear) "Clear" else "",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -995,28 +1060,29 @@ private fun OverviewTile(
 
         // Bottom label strip (wireframe box caption)
         Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f))
-                    )
-                )
-                .padding(horizontal = 8.dp, vertical = 6.dp)
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)),
+                        ),
+                    ).padding(horizontal = 8.dp, vertical = 6.dp),
         ) {
             Text(
-                text = buildString {
-                    append(slot.label())
-                    when {
-                        willClear -> append(" · clear")
-                        staged -> append(" · picked")
-                    }
-                },
+                text =
+                    buildString {
+                        append(slot.label())
+                        when {
+                            willClear -> append(" · clear")
+                            staged -> append(" · picked")
+                        }
+                    },
                 style = MaterialTheme.typography.labelMedium,
                 color = Color.White,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -1028,7 +1094,7 @@ internal fun SlotPicker(
     state: ScrapeReviewState,
     viewModel: ScrapeReviewViewModel,
     modifier: Modifier = Modifier,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
         state.slotError?.let {
@@ -1036,16 +1102,19 @@ internal fun SlotPicker(
                 it,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
         when (slot) {
-            ReviewSlot.Metadata -> MetadataPickerList(
-                state = state,
-                viewModel = viewModel,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                firstFocusRequester = firstFocusRequester
-            )
+            ReviewSlot.Metadata -> {
+                MetadataPickerList(
+                    state = state,
+                    viewModel = viewModel,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    firstFocusRequester = firstFocusRequester,
+                )
+            }
+
             else -> {
                 val type = slot.requireMediaType()
                 MediaPickerGrid(
@@ -1058,7 +1127,7 @@ internal fun SlotPicker(
                     onLeave = { viewModel.leaveSlot(type) },
                     onLoadMore = { viewModel.loadMoreMedia(type) },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    firstFocusRequester = firstFocusRequester
+                    firstFocusRequester = firstFocusRequester,
                 )
             }
         }
@@ -1070,7 +1139,7 @@ private fun MetadataPickerList(
     state: ScrapeReviewState,
     viewModel: ScrapeReviewViewModel,
     modifier: Modifier = Modifier,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     val listState = rememberLazyListState()
     val options = state.metadataOptions()
@@ -1079,7 +1148,7 @@ private fun MetadataPickerList(
             Text(
                 "No matches — search to refresh",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         return
@@ -1088,22 +1157,24 @@ private fun MetadataPickerList(
         state = listState,
         modifier = modifier.padding(horizontal = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        contentPadding = PaddingValues(bottom = 8.dp, top = 4.dp)
+        contentPadding = PaddingValues(bottom = 8.dp, top = 4.dp),
     ) {
         items(options, key = { it.key() }) { candidate ->
             CompactCandidateRow(
                 candidate = candidate,
-                selected = candidate.key() == state.selectedCandidateKey ||
-                    candidate.key() == state.metadataFrom?.key(),
+                selected =
+                    candidate.key() == state.selectedCandidateKey ||
+                        candidate.key() == state.metadataFrom?.key(),
                 onSelect = {
                     dismissTextEdit()
                     viewModel.selectCandidate(candidate, fillEmptyMediaOnly = true)
                 },
-                focusRequester = if (candidate == options.firstOrNull()) {
-                    firstFocusRequester
-                } else {
-                    null
-                }
+                focusRequester =
+                    if (candidate == options.firstOrNull()) {
+                        firstFocusRequester
+                    } else {
+                        null
+                    },
             )
         }
     }
@@ -1118,11 +1189,12 @@ private fun MediaPickerGrid(
     onLeave: () -> Unit,
     onLoadMore: () -> Unit,
     modifier: Modifier = Modifier,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
-    val options = remember(state.slotCache, state.extraMedia, type, state.searchName) {
-        state.mediaOptions(type)
-    }
+    val options =
+        remember(state.slotCache, state.extraMedia, type, state.searchName) {
+            state.mediaOptions(type)
+        }
     val staged = type in state.mediaPicks
     val selected = state.mediaPicks[type]
     val hasMore = state.mediaHasMore[type] == true
@@ -1135,8 +1207,7 @@ private fun MediaPickerGrid(
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
             val total = info.totalItemsCount
             last to total
-        }
-            .distinctUntilChanged()
+        }.distinctUntilChanged()
             .collect { (last, total) ->
                 if (hasMore && !loadingMore && total > 0 && last >= total - 6) {
                     onLoadMore()
@@ -1146,29 +1217,30 @@ private fun MediaPickerGrid(
 
     Column(modifier = modifier) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             CompactChip(
                 "Leave",
                 selected = !staged,
                 onClick = onLeave,
-                focusRequester = if (options.isEmpty()) firstFocusRequester else null
+                focusRequester = if (options.isEmpty()) firstFocusRequester else null,
             )
             CompactChip(
                 "Clear",
                 selected = staged && selected?.candidate == null,
-                onClick = onClear
+                onClick = onClear,
             )
             Spacer(modifier = Modifier.weight(1f))
             if (loadingMore || state.slotLoading) {
                 Text(
                     "Loading…",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -1176,12 +1248,12 @@ private fun MediaPickerGrid(
         if (options.isEmpty() && !state.slotLoading) {
             Box(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = "No ${type.dbName} yet",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         } else {
@@ -1189,13 +1261,14 @@ private fun MediaPickerGrid(
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 96.dp),
                 state = gridState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 8.dp, top = 4.dp)
+                contentPadding = PaddingValues(bottom = 8.dp, top = 4.dp),
             ) {
                 items(options, key = { it.second.url }) { (sourceId, media) ->
                     val isSelected = staged && selected?.candidate?.url == media.url
@@ -1204,11 +1277,12 @@ private fun MediaPickerGrid(
                         label = sourceId,
                         selected = isSelected,
                         onClick = { onSelect(sourceId, media) },
-                        focusRequester = if (media.url == options.firstOrNull()?.second?.url) {
-                            firstFocusRequester
-                        } else {
-                            null
-                        }
+                        focusRequester =
+                            if (media.url == options.firstOrNull()?.second?.url) {
+                                firstFocusRequester
+                            } else {
+                                null
+                            },
                     )
                 }
                 if (hasMore) {
@@ -1217,9 +1291,10 @@ private fun MediaPickerGrid(
                             text = if (loadingMore) "…" else "More",
                             onClick = onLoadMore,
                             enabled = !loadingMore,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(0.7f)
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(0.7f),
                         )
                     }
                 }
@@ -1234,70 +1309,70 @@ private fun CompactCandidateRow(
     candidate: ScrapeCandidate,
     selected: Boolean,
     onSelect: () -> Unit,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val border = if (selected || focused) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.outlineVariant
-    }
+    val border =
+        if (selected || focused) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.outlineVariant
+        }
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .wajihaGamepadFocus()
-            .wajihaFocusIndicator(
-                highlighted = focused || selected,
-                shape = RoundedCornerShape(4.dp),
-                selected = selected
-            )
-            .border(1.dp, border, RoundedCornerShape(4.dp))
-            .clip(RoundedCornerShape(4.dp))
-            .onPreviewKeyEvent { event ->
-                if (GamepadKeys.isConfirm(event.type, event.key)) {
-                    onSelect()
-                    true
-                } else {
-                    false
-                }
-            }
-            .combinedClickable(onClick = onSelect)
-            .padding(8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .then(
+                    if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
+                ).onFocusChanged { focused = it.isFocused }
+                .wajihaGamepadFocus()
+                .wajihaFocusIndicator(
+                    highlighted = focused || selected,
+                    shape = RoundedCornerShape(4.dp),
+                    selected = selected,
+                ).border(1.dp, border, RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(4.dp))
+                .onPreviewKeyEvent { event ->
+                    if (GamepadKeys.isConfirm(event.type, event.key)) {
+                        onSelect()
+                        true
+                    } else {
+                        false
+                    }
+                }.combinedClickable(onClick = onSelect)
+                .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         AsyncImage(
             model = candidate.thumbnailUrl ?: candidate.media.firstOrNull()?.url,
             contentDescription = candidate.name,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+            modifier =
+                Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 candidate.name,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = "${candidate.sourceId} · ${candidate.media.size} media",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
+                maxLines = 1,
             )
         }
         if (selected) {
             Text(
                 "✓",
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -1310,61 +1385,62 @@ private fun MediaThumb(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val border = if (selected || focused) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
-    }
+    val border =
+        if (selected || focused) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+        }
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(0.7f)
-            .then(
-                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .wajihaGamepadFocus()
-            .wajihaFocusIndicator(
-                highlighted = focused || selected,
-                shape = RoundedCornerShape(3.dp),
-                selected = selected
-            )
-            .border(if (selected || focused) 2.dp else 1.dp, border, RoundedCornerShape(3.dp))
-            .clip(RoundedCornerShape(3.dp))
-            .onPreviewKeyEvent { event ->
-                if (GamepadKeys.isConfirm(event.type, event.key)) {
-                    onClick()
-                    true
-                } else {
-                    false
-                }
-            }
-            .combinedClickable(onClick = onClick)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.7f)
+                .then(
+                    if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
+                ).onFocusChanged { focused = it.isFocused }
+                .wajihaGamepadFocus()
+                .wajihaFocusIndicator(
+                    highlighted = focused || selected,
+                    shape = RoundedCornerShape(3.dp),
+                    selected = selected,
+                ).border(if (selected || focused) 2.dp else 1.dp, border, RoundedCornerShape(3.dp))
+                .clip(RoundedCornerShape(3.dp))
+                .onPreviewKeyEvent { event ->
+                    if (GamepadKeys.isConfirm(event.type, event.key)) {
+                        onClick()
+                        true
+                    } else {
+                        false
+                    }
+                }.combinedClickable(onClick = onClick),
     ) {
         AsyncImage(
             model = url,
             contentDescription = label,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
         )
         Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.55f))
-                .padding(horizontal = 4.dp, vertical = 2.dp)
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
         ) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.White,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -1376,39 +1452,40 @@ private fun CompactChip(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
-    val bg = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val fg = if (selected) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val bg =
+        if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
+    val fg =
+        if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
         color = fg,
-        modifier = Modifier
-            .then(
-                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
-            )
-            .wajihaGamepadFocus()
-            .clip(WajihaShapes.chip)
-            .background(bg)
-            .onPreviewKeyEvent { event ->
-                if (GamepadKeys.isConfirm(event.type, event.key)) {
-                    onClick()
-                    true
-                } else {
-                    false
-                }
-            }
-            .combinedClickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+        modifier =
+            Modifier
+                .then(
+                    if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
+                ).wajihaGamepadFocus()
+                .clip(WajihaShapes.chip)
+                .background(bg)
+                .onPreviewKeyEvent { event ->
+                    if (GamepadKeys.isConfirm(event.type, event.key)) {
+                        onClick()
+                        true
+                    } else {
+                        false
+                    }
+                }.combinedClickable(onClick = onClick)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
     )
 }
 
@@ -1417,14 +1494,14 @@ private fun CompactFilledButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
 ) {
     androidx.compose.material3.Button(
         onClick = onClick,
         enabled = enabled,
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
         modifier = modifier.height(36.dp),
-        colors = ButtonDefaults.buttonColors()
+        colors = ButtonDefaults.buttonColors(),
     ) {
         Text(text, style = MaterialTheme.typography.labelMedium)
     }

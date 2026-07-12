@@ -7,12 +7,21 @@ plugins {
 
 android {
     namespace = "com.wajiha.android"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk =
+        libs.versions.android.compileSdk
+            .get()
+            .toInt()
 
     defaultConfig {
         applicationId = "com.wajiha"
-        minSdk = libs.versions.android.minSdk.get().toInt()
-        targetSdk = libs.versions.android.targetSdk.get().toInt()
+        minSdk =
+            libs.versions.android.minSdk
+                .get()
+                .toInt()
+        targetSdk =
+            libs.versions.android.targetSdk
+                .get()
+                .toInt()
         versionCode = 1
         versionName = "0.1.0"
 
@@ -21,12 +30,12 @@ android {
         buildConfigField(
             "String",
             "SCREENSCRAPER_DEV_ID",
-            "\"${providers.gradleProperty("wajiha.screenscraper.devid").orNull ?: ""}\""
+            "\"${providers.gradleProperty("wajiha.screenscraper.devid").orNull ?: ""}\"",
         )
         buildConfigField(
             "String",
             "SCREENSCRAPER_DEV_PASSWORD",
-            "\"${providers.gradleProperty("wajiha.screenscraper.devpassword").orNull ?: ""}\""
+            "\"${providers.gradleProperty("wajiha.screenscraper.devpassword").orNull ?: ""}\"",
         )
     }
 
@@ -36,7 +45,7 @@ android {
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
         }
     }

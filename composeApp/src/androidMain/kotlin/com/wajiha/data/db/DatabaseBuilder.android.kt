@@ -9,9 +9,8 @@ fun databaseBuilder(context: Context): RoomDatabase.Builder<WajihaDatabase> {
     val dbFile = appContext.getDatabasePath(WajihaDatabase.NAME)
     return Room.databaseBuilder<WajihaDatabase>(
         context = appContext,
-        name = dbFile.absolutePath
+        name = dbFile.absolutePath,
     )
 }
 
-fun createWajihaDatabase(context: Context): WajihaDatabase =
-    buildWajihaDatabase(databaseBuilder(context))
+fun createWajihaDatabase(context: Context): WajihaDatabase = buildWajihaDatabase(databaseBuilder(context))

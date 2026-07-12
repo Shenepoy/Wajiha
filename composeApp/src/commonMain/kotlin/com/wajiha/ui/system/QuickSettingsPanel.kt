@@ -1,8 +1,8 @@
 package com.wajiha.ui.system
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
@@ -27,7 +27,7 @@ import org.koin.compose.koinInject
 @Composable
 fun QuickSettingsPanel(
     modifier: Modifier = Modifier,
-    showGamepadHints: Boolean = true
+    showGamepadHints: Boolean = true,
 ) {
     val controls = koinInject<SystemControls>()
     val status by controls.status.collectAsState()
@@ -42,71 +42,72 @@ fun QuickSettingsPanel(
     SecondaryPanelScaffold(
         modifier = modifier,
         showGamepadHints = showGamepadHints,
-        hints = quickSettingsGamepadHints
+        hints = quickSettingsGamepadHints,
     ) {
         GamepadForm(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             ) {
                 androidx.compose.material3.Text(
                     "Quick Settings",
-                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
                 )
                 androidx.compose.material3.Text(
-                    text = if (status.batteryPercent >= 0) {
-                        "${status.batteryPercent}%" + if (status.charging) " ⚡" else ""
-                    } else {
-                        ""
-                    },
-                    style = androidx.compose.material3.MaterialTheme.typography.titleSmall
+                    text =
+                        if (status.batteryPercent >= 0) {
+                            "${status.batteryPercent}%" + if (status.charging) " ⚡" else ""
+                        } else {
+                            ""
+                        },
+                    style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
                 )
             }
 
             GamepadSlider(
                 label = "Brightness",
                 value = status.brightness.coerceIn(0f, 1f),
-                onValueChange = controls::setBrightness
+                onValueChange = controls::setBrightness,
             )
 
             GamepadSlider(
                 label = "Volume",
                 value = status.volume.coerceIn(0f, 1f),
-                onValueChange = controls::setVolume
+                onValueChange = controls::setVolume,
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
             ) {
                 GamepadButton(
                     text = "Wi-Fi" + if (status.wifiEnabled) " (on)" else " (off)",
                     onClick = controls::openWifiSettings,
-                    outlined = true
+                    outlined = true,
                 )
                 GamepadButton(
                     text = "Bluetooth" + if (status.bluetoothEnabled) " (on)" else " (off)",
                     onClick = controls::openBluetoothSettings,
-                    outlined = true
+                    outlined = true,
                 )
                 GamepadButton(
                     text = "Torch" + if (status.torchOn) " (on)" else "",
                     onClick = controls::toggleTorch,
-                    outlined = true
+                    outlined = true,
                 )
             }
 
             androidx.compose.material3.Text(
                 "Screen timeout",
-                style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)) {
                 listOf(30 to "30s", 60 to "1m", 300 to "5m", 1800 to "30m").forEach { (sec, label) ->
                     GamepadButton(
                         text = label,
                         onClick = { controls.setScreenTimeout(sec) },
-                        outlined = status.screenTimeoutSec != sec
+                        outlined = status.screenTimeoutSec != sec,
                     )
                 }
             }

@@ -40,29 +40,29 @@ fun BoxScope.nowPlayingOverlayPlacement(modifier: Modifier = Modifier): Modifier
         .padding(end = WajihaSpacing.md, bottom = NowPlayingOverlayBottomPadding)
 
 /** Chip is only useful on the games grid — not on Now Running or sibling mode tabs. */
-internal fun shouldShowNowPlayingOverlay(mode: SecondaryMode): Boolean =
-    mode == SecondaryMode.GameGrid
+internal fun shouldShowNowPlayingOverlay(mode: SecondaryMode): Boolean = mode == SecondaryMode.GameGrid
 
 @Composable
 fun NowPlayingOverlay(
     store: DualScreenStore,
     modifier: Modifier = Modifier,
-    hiddenByGameplayDim: Boolean = false
+    hiddenByGameplayDim: Boolean = false,
 ) {
     val nowPlaying by store.nowPlayingUiState.collectAsState()
     val mode by store.secondaryMode.collectAsState()
 
-    val show = nowPlaying != null &&
-        shouldShowNowPlayingOverlay(mode) &&
-        store.nowPlayingDisplay.showsFloatingChip &&
-        !hiddenByGameplayDim
+    val show =
+        nowPlaying != null &&
+            shouldShowNowPlayingOverlay(mode) &&
+            store.nowPlayingDisplay.showsFloatingChip &&
+            !hiddenByGameplayDim
     if (!show) return
 
     key(nowPlaying!!.packageName) {
         NowPlayingOverlayChip(
             state = nowPlaying!!,
             onClick = { store.setSecondaryMode(SecondaryMode.NowPlaying) },
-            modifier = modifier
+            modifier = modifier,
         )
     }
 }
@@ -71,7 +71,7 @@ fun NowPlayingOverlay(
 private fun NowPlayingOverlayChip(
     state: NowPlayingState,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val label = sessionDisplayLabel(state) ?: state.packageName
     val scheme = MaterialTheme.colorScheme
@@ -80,37 +80,39 @@ private fun NowPlayingOverlayChip(
     GamepadFocusable(
         onClick = onClick,
         shape = chipShape,
-        modifier = modifier
-            .defaultMinSize(minHeight = WajihaSpacing.touchMin)
-            .widthIn(max = 300.dp)
-            .clip(chipShape)
-            .background(scheme.surfaceContainerHigh)
-            .border(
-                width = 1.dp,
-                color = scheme.outline.copy(alpha = 0.3f),
-                shape = chipShape
-            )
-            .padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.sm)
+        modifier =
+            modifier
+                .defaultMinSize(minHeight = WajihaSpacing.touchMin)
+                .widthIn(max = 300.dp)
+                .clip(chipShape)
+                .background(scheme.surfaceContainerHigh)
+                .border(
+                    width = 1.dp,
+                    color = scheme.outline.copy(alpha = 0.3f),
+                    shape = chipShape,
+                ).padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.sm),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = WajihaSpacing.sm)
+            modifier = Modifier.padding(horizontal = WajihaSpacing.sm),
         ) {
             if (state.boxartPath != null) {
                 AsyncImage(
                     model = state.boxartPath,
                     contentDescription = null,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(WajihaShapes.tile),
-                    contentScale = ContentScale.Crop
+                    modifier =
+                        Modifier
+                            .size(32.dp)
+                            .clip(WajihaShapes.tile),
+                    contentScale = ContentScale.Crop,
                 )
             } else {
                 Box(
-                    modifier = Modifier
-                        .size(width = 4.dp, height = 26.dp)
-                        .clip(WajihaShapes.chip)
-                        .background(scheme.primary.copy(alpha = 0.85f))
+                    modifier =
+                        Modifier
+                            .size(width = 4.dp, height = 26.dp)
+                            .clip(WajihaShapes.chip)
+                            .background(scheme.primary.copy(alpha = 0.85f)),
                 )
             }
             Spacer(modifier = Modifier.size(WajihaSpacing.md))
@@ -119,7 +121,7 @@ private fun NowPlayingOverlayChip(
                 style = MaterialTheme.typography.labelLarge,
                 color = scheme.onSurface,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

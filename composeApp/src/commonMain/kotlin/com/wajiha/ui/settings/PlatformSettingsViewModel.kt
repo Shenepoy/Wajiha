@@ -23,7 +23,7 @@ data class PlatformSettingsUiState(
     val platform: PlatformEntity? = null,
     val emulators: List<EmulatorEntity> = emptyList(),
     val folders: List<RomFolderEntity> = emptyList(),
-    val gameCount: Int = 0
+    val gameCount: Int = 0,
 )
 
 /**
@@ -34,34 +34,33 @@ data class PlatformSettingsUiState(
 class PlatformSettingsViewModel(
     private val platformRepository: PlatformRepository,
     private val gameRepository: GameRepository,
-    private val libraryActions: LibraryActions
+    private val libraryActions: LibraryActions,
 ) : ViewModel() {
-
     private val platformId = MutableStateFlow<String?>(null)
 
-    val uiState: StateFlow<PlatformSettingsUiState> = platformId
-        .flatMapLatest { id ->
-            if (id == null) {
-                flowOf(PlatformSettingsUiState())
-            } else {
-                combine(
-                    platformRepository.observeById(id),
-                    platformRepository.observeEmulators(id),
-                    gameRepository.observeRomFolders().map { list ->
-                        list.filter { it.platformId == id }
-                    },
-                    gameRepository.observeCountForPlatform(id)
-                ) { platform, emulators, folders, gameCount ->
-                    PlatformSettingsUiState(
-                        platform = platform,
-                        emulators = emulators,
-                        folders = folders,
-                        gameCount = gameCount
-                    )
+    val uiState: StateFlow<PlatformSettingsUiState> =
+        platformId
+            .flatMapLatest { id ->
+                if (id == null) {
+                    flowOf(PlatformSettingsUiState())
+                } else {
+                    combine(
+                        platformRepository.observeById(id),
+                        platformRepository.observeEmulators(id),
+                        gameRepository.observeRomFolders().map { list ->
+                            list.filter { it.platformId == id }
+                        },
+                        gameRepository.observeCountForPlatform(id),
+                    ) { platform, emulators, folders, gameCount ->
+                        PlatformSettingsUiState(
+                            platform = platform,
+                            emulators = emulators,
+                            folders = folders,
+                            gameCount = gameCount,
+                        )
+                    }
                 }
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PlatformSettingsUiState())
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PlatformSettingsUiState())
 
     fun open(id: String) {
         platformId.value = id
@@ -78,7 +77,7 @@ class PlatformSettingsViewModel(
         val platform = uiState.value.platform ?: return
         viewModelScope.launch {
             platformRepository.update(
-                platform.copy(shortName = shortName.trim().ifBlank { platform.shortName })
+                platform.copy(shortName = shortName.trim().ifBlank { platform.shortName }),
             )
         }
     }
@@ -96,7 +95,7 @@ class PlatformSettingsViewModel(
             val emulators = platformRepository.emulatorsFor(id)
             if (emulators.isNotEmpty()) {
                 platformRepository.upsertEmulators(
-                    emulators.map { it.copy(isDefault = it.id == emulatorId) }
+                    emulators.map { it.copy(isDefault = it.id == emulatorId) },
                 )
             }
         }
@@ -106,7 +105,7 @@ class PlatformSettingsViewModel(
         val platform = uiState.value.platform ?: return
         viewModelScope.launch {
             platformRepository.update(
-                platform.copy(screenScraperId = value.trim().toIntOrNull())
+                platform.copy(screenScraperId = value.trim().toIntOrNull()),
             )
         }
     }
@@ -115,7 +114,7 @@ class PlatformSettingsViewModel(
         val platform = uiState.value.platform ?: return
         viewModelScope.launch {
             platformRepository.update(
-                platform.copy(raConsoleId = value.trim().toIntOrNull())
+                platform.copy(raConsoleId = value.trim().toIntOrNull()),
             )
         }
     }
@@ -124,7 +123,7 @@ class PlatformSettingsViewModel(
         val platform = uiState.value.platform ?: return
         viewModelScope.launch {
             platformRepository.update(
-                platform.copy(libretroName = value.trim().ifBlank { null })
+                platform.copy(libretroName = value.trim().ifBlank { null }),
             )
         }
     }

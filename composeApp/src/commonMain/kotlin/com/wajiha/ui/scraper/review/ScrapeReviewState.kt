@@ -17,37 +17,42 @@ enum class ReviewSlot {
     Screenshot,
     Fanart,
     Banner,
-    Icon;
+    Icon,
+    ;
 
-    fun mediaType(): MediaType? = when (this) {
-        Metadata -> null
-        Boxart -> MediaType.Boxart
-        Logo -> MediaType.Logo
-        Hero -> MediaType.Hero
-        Screenshot -> MediaType.Screenshot
-        Fanart -> MediaType.Fanart
-        Banner -> MediaType.Banner
-        Icon -> MediaType.Icon
-    }
+    fun mediaType(): MediaType? =
+        when (this) {
+            Metadata -> null
+            Boxart -> MediaType.Boxart
+            Logo -> MediaType.Logo
+            Hero -> MediaType.Hero
+            Screenshot -> MediaType.Screenshot
+            Fanart -> MediaType.Fanart
+            Banner -> MediaType.Banner
+            Icon -> MediaType.Icon
+        }
 
-    fun requireMediaType(): MediaType = mediaType()
-        ?: error("ReviewSlot.Metadata has no media type")
+    fun requireMediaType(): MediaType =
+        mediaType()
+            ?: error("ReviewSlot.Metadata has no media type")
 
-    fun label(): String = when (this) {
-        Metadata -> "Metadata"
-        Boxart -> "Box art"
-        Logo -> "Logo"
-        Hero -> "Hero"
-        Screenshot -> "Screenshots"
-        Fanart -> "Fan art"
-        Banner -> "Banner"
-        Icon -> "Icon"
-    }
+    fun label(): String =
+        when (this) {
+            Metadata -> "Metadata"
+            Boxart -> "Box art"
+            Logo -> "Logo"
+            Hero -> "Hero"
+            Screenshot -> "Screenshots"
+            Fanart -> "Fan art"
+            Banner -> "Banner"
+            Icon -> "Icon"
+        }
 
     companion object {
-        fun forMediaType(type: MediaType): ReviewSlot? = entries.firstOrNull {
-            it.mediaType() == type
-        }
+        fun forMediaType(type: MediaType): ReviewSlot? =
+            entries.firstOrNull {
+                it.mediaType() == type
+            }
     }
 }
 
@@ -55,7 +60,7 @@ enum class ReviewSlot {
 data class SlotOptionsCache(
     val searchName: String,
     val metadataCandidates: List<ScrapeCandidate> = emptyList(),
-    val mediaOptions: List<Pair<String, MediaCandidate>> = emptyList()
+    val mediaOptions: List<Pair<String, MediaCandidate>> = emptyList(),
 )
 
 /** Interactive review picker state for one game (or one queue item). */
@@ -101,11 +106,12 @@ data class ScrapeReviewState(
     /** Per-slot option cache keyed by slot; valid for [searchName]. */
     val slotCache: Map<ReviewSlot, SlotOptionsCache> = emptyMap(),
     val slotError: String? = null,
-    val preferredCandidate: ScrapeCandidate? = null
+    val preferredCandidate: ScrapeCandidate? = null,
 ) {
     val selectedCandidate: ScrapeCandidate?
-        get() = candidates.firstOrNull { it.key() == selectedCandidateKey }
-            ?: metadataFrom
+        get() =
+            candidates.firstOrNull { it.key() == selectedCandidateKey }
+                ?: metadataFrom
 
     val hasChanges: Boolean
         get() = mediaPicks.isNotEmpty() || metadataFrom != null
@@ -115,30 +121,32 @@ data class ScrapeReviewState(
 
     fun mediaOptions(type: MediaType): List<Pair<String, MediaCandidate>> {
         val slot = ReviewSlot.forMediaType(type)
-        val cached = slot?.let { slotCache[it] }
-            ?.takeIf { it.searchName == searchName }
-            ?.mediaOptions
-            .orEmpty()
-        val fromCandidates = candidates.flatMap { c ->
-            c.media.filter { it.type == type }.map { c.sourceId to it }
-        }
+        val cached =
+            slot
+                ?.let { slotCache[it] }
+                ?.takeIf { it.searchName == searchName }
+                ?.mediaOptions
+                .orEmpty()
+        val fromCandidates =
+            candidates.flatMap { c ->
+                c.media.filter { it.type == type }.map { c.sourceId to it }
+            }
         val fromExtra = (extraMedia[type].orEmpty()).map { "steamgriddb" to it }
         return (cached + fromCandidates + fromExtra).distinctBy { it.second.url }
     }
 
     fun metadataOptions(): List<ScrapeCandidate> {
-        val cached = slotCache[ReviewSlot.Metadata]
-            ?.takeIf { it.searchName == searchName }
-            ?.metadataCandidates
-            .orEmpty()
+        val cached =
+            slotCache[ReviewSlot.Metadata]
+                ?.takeIf { it.searchName == searchName }
+                ?.metadataCandidates
+                .orEmpty()
         return (cached + candidates).distinctBy { it.key() }
     }
 
-    fun hasExistingMedia(type: MediaType): Boolean =
-        existingMedia.any { it.type == type.dbName && !it.localPath.isNullOrBlank() }
+    fun hasExistingMedia(type: MediaType): Boolean = existingMedia.any { it.type == type.dbName && !it.localPath.isNullOrBlank() }
 
-    fun existingPath(type: MediaType): String? =
-        existingMedia.firstOrNull { it.type == type.dbName }?.localPath
+    fun existingPath(type: MediaType): String? = existingMedia.firstOrNull { it.type == type.dbName }?.localPath
 
     fun stagedOrExistingUrl(type: MediaType): String? {
         val staged = mediaPicks[type]
@@ -148,21 +156,23 @@ data class ScrapeReviewState(
         return existingPath(type)
     }
 
-    fun toSelection(): ScrapeSelection = ScrapeSelection(
-        metadataFrom = metadataFrom,
-        media = mediaPicks
-    )
+    fun toSelection(): ScrapeSelection =
+        ScrapeSelection(
+            metadataFrom = metadataFrom,
+            media = mediaPicks,
+        )
 }
 
 fun ScrapeCandidate.key(): String = "$sourceId::$sourceGameId"
 
 /** Media types shown as editable slots in the review picker. */
-val ReviewMediaSlots: List<MediaType> = listOf(
-    MediaType.Boxart,
-    MediaType.Logo,
-    MediaType.Hero,
-    MediaType.Screenshot,
-    MediaType.Fanart,
-    MediaType.Banner,
-    MediaType.Icon
-)
+val ReviewMediaSlots: List<MediaType> =
+    listOf(
+        MediaType.Boxart,
+        MediaType.Logo,
+        MediaType.Hero,
+        MediaType.Screenshot,
+        MediaType.Fanart,
+        MediaType.Banner,
+        MediaType.Icon,
+    )

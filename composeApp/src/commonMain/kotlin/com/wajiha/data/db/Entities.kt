@@ -26,7 +26,7 @@ data class PlatformEntity(
     val sortIndex: Int = 0,
     val enabled: Boolean = true,
     /** Default emulator id for this platform (FK into emulators, loose) */
-    val defaultEmulatorId: String? = null
+    val defaultEmulatorId: String? = null,
 )
 
 /**
@@ -35,7 +35,7 @@ data class PlatformEntity(
  */
 @Entity(
     tableName = "emulators",
-    indices = [Index("platformId")]
+    indices = [Index("platformId")],
 )
 data class EmulatorEntity(
     @PrimaryKey val id: String,
@@ -62,7 +62,7 @@ data class EmulatorEntity(
     val libretroCore: String? = null,
     val isDefault: Boolean = false,
     /** true if user-created/edited rather than imported/bundled */
-    val custom: Boolean = false
+    val custom: Boolean = false,
 )
 
 @Entity(
@@ -71,8 +71,8 @@ data class EmulatorEntity(
         Index(value = ["uri"], unique = true),
         Index(value = ["platformId", "displayName"]),
         Index("crc32"),
-        Index("md5")
-    ]
+        Index("md5"),
+    ],
 )
 data class GameEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -110,12 +110,12 @@ data class GameEntity(
     /** RetroAchievements game id once hash-linked */
     val raGameId: Long? = null,
     /** Epoch millis of last successful scrape, null = never scraped */
-    val scrapedAt: Long? = null
+    val scrapedAt: Long? = null,
 )
 
 @Entity(
     tableName = "rom_folders",
-    indices = [Index("platformId")]
+    indices = [Index("platformId")],
 )
 data class RomFolderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -126,12 +126,12 @@ data class RomFolderEntity(
     /** Comma-separated extra extensions to include beyond platform defaults */
     val extraExtensions: String? = null,
     val lastScanAt: Long? = null,
-    val enabled: Boolean = true
+    val enabled: Boolean = true,
 )
 
 @Entity(
     tableName = "game_media",
-    indices = [Index(value = ["gameId", "type"])]
+    indices = [Index(value = ["gameId", "type"])],
 )
 data class GameMediaEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -144,12 +144,12 @@ data class GameMediaEntity(
     val remoteUrl: String? = null,
     val width: Int? = null,
     val height: Int? = null,
-    val updatedAt: Long = 0
+    val updatedAt: Long = 0,
 )
 
 @Entity(
     tableName = "play_sessions",
-    indices = [Index("gameId"), Index("startedAt")]
+    indices = [Index("gameId"), Index("startedAt")],
 )
 data class PlaySessionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -161,7 +161,7 @@ data class PlaySessionEntity(
     val endedAt: Long? = null,
     val durationSec: Long = 0,
     /** launcher | detected — how the session was started */
-    val origin: String = "launcher"
+    val origin: String = "launcher",
 )
 
 @Entity(tableName = "collections")
@@ -169,16 +169,16 @@ data class CollectionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val iconPath: String? = null,
-    val sortIndex: Int = 0
+    val sortIndex: Int = 0,
 )
 
 @Entity(
     tableName = "collection_games",
     primaryKeys = ["collectionId", "gameId"],
-    indices = [Index("gameId")]
+    indices = [Index("gameId")],
 )
 data class CollectionGameCrossRef(
     val collectionId: Long,
     val gameId: Long,
-    val position: Int = 0
+    val position: Int = 0,
 )

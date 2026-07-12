@@ -10,7 +10,7 @@ import com.wajiha.domain.repository.GameRepository
 class RaRepository(
     private val client: RaClient,
     private val gameRepository: GameRepository,
-    private val settingsRepository: ScraperSettingsRepository
+    private val settingsRepository: ScraperSettingsRepository,
 ) {
     private val progressCache = mutableMapOf<Long, RaGameProgress>()
 
@@ -43,7 +43,10 @@ class RaRepository(
     }
 
     /** Achievements + user progress for a library game (hash-links first). */
-    suspend fun progressForGame(gameId: Long, forceRefresh: Boolean = false): RaGameProgress? {
+    suspend fun progressForGame(
+        gameId: Long,
+        forceRefresh: Boolean = false,
+    ): RaGameProgress? {
         val raId = linkGame(gameId) ?: return null
         if (!forceRefresh) progressCache[raId]?.let { return it }
         val (user, key) = credentials() ?: return null

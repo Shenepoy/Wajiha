@@ -20,12 +20,13 @@ import kotlinx.serialization.Serializable
 data class SteamGridDbMediaPage(
     val media: List<MediaCandidate>,
     val page: Int,
-    val hasMore: Boolean
+    val hasMore: Boolean,
 )
 
 /** SteamGridDB — grids (boxart), heroes, logos, icons. Needs a user API key. */
-class SteamGridDbSource(private val http: HttpClient) : ScraperSource {
-
+class SteamGridDbSource(
+    private val http: HttpClient,
+) : ScraperSource {
     override val id = "steamgriddb"
     override val displayName = "SteamGridDB"
 
@@ -33,24 +34,23 @@ class SteamGridDbSource(private val http: HttpClient) : ScraperSource {
     private var cachedSearchAt = 0L
     private var cachedSearchBundle: SourceSearchBundle? = null
 
-    override fun isConfigured(settings: ScraperSettings): Boolean =
-        settings.steamGridDbApiKey.isNotBlank()
+    override fun isConfigured(settings: ScraperSettings): Boolean = settings.steamGridDbApiKey.isNotBlank()
 
     override suspend fun lookupResult(
         query: ScrapeQuery,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ): SourceLookupOutcome = searchWithOutcome(query.displayName, query, settings).toLookupOutcome()
 
     override suspend fun search(
         name: String,
         query: ScrapeQuery,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ): List<ScrapeCandidate> = searchWithOutcome(name, query, settings).candidates
 
     private suspend fun searchWithOutcome(
         name: String,
         query: ScrapeQuery,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ): SourceSearchBundle {
         val cacheKey = "${settings.steamGridDbApiKey}|$name"
         val now = System.currentTimeMillis()
@@ -59,39 +59,48 @@ class SteamGridDbSource(private val http: HttpClient) : ScraperSource {
                 return bundle
             }
         }
-        val result = http.getJsonResult<SgdbEnvelope<SgdbGame>>(
-            "https://www.steamgriddb.com/api/v2/search/autocomplete/${name.encodeURLPathPart()}"
-        ) {
-            steamGridDbAuth(settings)
-        }
-        val games = when (result) {
-            is HttpJsonResult.Failed -> {
-                val bundle = SourceSearchBundle(emptyList(), result.failure)
-                cacheSearch(cacheKey, bundle)
-                return bundle
+        val result =
+            http.getJsonResult<SgdbEnvelope<SgdbGame>>(
+                "https://www.steamgriddb.com/api/v2/search/autocomplete/${name.encodeURLPathPart()}",
+            ) {
+                steamGridDbAuth(settings)
             }
-            is HttpJsonResult.Ok -> result.value.data.orEmpty()
-        }
+        val games =
+            when (result) {
+                is HttpJsonResult.Failed -> {
+                    val bundle = SourceSearchBundle(emptyList(), result.failure)
+                    cacheSearch(cacheKey, bundle)
+                    return bundle
+                }
+
+                is HttpJsonResult.Ok -> {
+                    result.value.data.orEmpty()
+                }
+            }
         if (games.isEmpty()) {
             val bundle = SourceSearchBundle(emptyList())
             cacheSearch(cacheKey, bundle)
             return bundle
         }
         // First page only during search/lookup — review loads more on demand.
-        val candidates = games.take(5).map { game ->
-            ScrapeCandidate(
-                sourceId = id,
-                sourceGameId = game.id.toString(),
-                name = game.name,
-                media = fetchMediaPreview(game.id, settings)
-            )
-        }
+        val candidates =
+            games.take(5).map { game ->
+                ScrapeCandidate(
+                    sourceId = id,
+                    sourceGameId = game.id.toString(),
+                    name = game.name,
+                    media = fetchMediaPreview(game.id, settings),
+                )
+            }
         val bundle = SourceSearchBundle(candidates)
         cacheSearch(cacheKey, bundle)
         return bundle
     }
 
-    private fun cacheSearch(key: String, bundle: SourceSearchBundle) {
+    private fun cacheSearch(
+        key: String,
+        bundle: SourceSearchBundle,
+    ) {
         cachedSearchKey = key
         cachedSearchAt = System.currentTimeMillis()
         cachedSearchBundle = bundle
@@ -101,7 +110,10 @@ class SteamGridDbSource(private val http: HttpClient) : ScraperSource {
      * Preview media for match lists / auto-scrape: one page per type (limit [PageSize]).
      * Review UI calls [fetchMediaTypePage] to page through the rest.
      */
-    private suspend fun fetchMediaPreview(gameId: Int, settings: ScraperSettings): List<MediaCandidate> {
+    private suspend fun fetchMediaPreview(
+        gameId: Int,
+        settings: ScraperSettings,
+    ): List<MediaCandidate> {
         val result = mutableListOf<MediaCandidate>()
         for ((_, type) in Endpoints) {
             val page = fetchMediaTypePage(gameId, type, settings, page = 0)
@@ -118,47 +130,56 @@ class SteamGridDbSource(private val http: HttpClient) : ScraperSource {
         type: MediaType,
         settings: ScraperSettings,
         page: Int,
-        limit: Int = PageSize
+        limit: Int = PageSize,
     ): SteamGridDbMediaPage {
-        val endpoint = Endpoints.entries.firstOrNull { it.value == type }?.key
-            ?: return SteamGridDbMediaPage(emptyList(), page, hasMore = false)
-        val fetch = http.getJsonResult<SgdbEnvelope<SgdbAsset>>(
-            "https://www.steamgriddb.com/api/v2/$endpoint/game/$gameId"
-        ) {
-            steamGridDbAuth(settings)
-            applyGridFilters(endpoint, settings)
-            parameter("limit", limit)
-            parameter("page", page)
-        }
-        val envelope = when (fetch) {
-            is HttpJsonResult.Failed -> return SteamGridDbMediaPage(emptyList(), page, false)
-            is HttpJsonResult.Ok -> fetch.value
-        }
+        val endpoint =
+            Endpoints.entries.firstOrNull { it.value == type }?.key
+                ?: return SteamGridDbMediaPage(emptyList(), page, hasMore = false)
+        val fetch =
+            http.getJsonResult<SgdbEnvelope<SgdbAsset>>(
+                "https://www.steamgriddb.com/api/v2/$endpoint/game/$gameId",
+            ) {
+                steamGridDbAuth(settings)
+                applyGridFilters(endpoint, settings)
+                parameter("limit", limit)
+                parameter("page", page)
+            }
+        val envelope =
+            when (fetch) {
+                is HttpJsonResult.Failed -> return SteamGridDbMediaPage(emptyList(), page, false)
+                is HttpJsonResult.Ok -> fetch.value
+            }
         val assets = envelope.data.orEmpty()
         val styles = stylesForEndpoint(endpoint, settings)
-        val sorted = if (styles.isNotEmpty()) {
-            assets.sortedByStylePreference(styles)
-        } else {
-            assets
-        }
-        val media = sorted.map { asset ->
-            MediaCandidate(
-                type = type,
-                url = asset.url,
-                width = asset.width,
-                height = asset.height,
-                sourceVariant = asset.style
-            )
-        }
+        val sorted =
+            if (styles.isNotEmpty()) {
+                assets.sortedByStylePreference(styles)
+            } else {
+                assets
+            }
+        val media =
+            sorted.map { asset ->
+                MediaCandidate(
+                    type = type,
+                    url = asset.url,
+                    width = asset.width,
+                    height = asset.height,
+                    sourceVariant = asset.style,
+                )
+            }
         val total = envelope.total
-        val hasMore = when {
-            total != null && total > 0 -> (page + 1) * limit < total
-            else -> assets.size >= limit
-        }
+        val hasMore =
+            when {
+                total != null && total > 0 -> (page + 1) * limit < total
+                else -> assets.size >= limit
+            }
         return SteamGridDbMediaPage(media = media, page = page, hasMore = hasMore)
     }
 
-    private fun stylesForEndpoint(endpoint: String, settings: ScraperSettings): List<String> =
+    private fun stylesForEndpoint(
+        endpoint: String,
+        settings: ScraperSettings,
+    ): List<String> =
         when (endpoint) {
             "grids" -> settings.steamGridDbGridStyles
             "heroes" -> settings.steamGridDbHeroStyles
@@ -169,7 +190,7 @@ class SteamGridDbSource(private val http: HttpClient) : ScraperSource {
 
     private fun io.ktor.client.request.HttpRequestBuilder.applyGridFilters(
         endpoint: String,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ) {
         val styles = stylesForEndpoint(endpoint, settings)
         if (styles.isNotEmpty()) {
@@ -196,28 +217,32 @@ class SteamGridDbSource(private val http: HttpClient) : ScraperSource {
         val data: List<T>? = null,
         val page: Int? = null,
         val total: Int? = null,
-        val limit: Int? = null
+        val limit: Int? = null,
     )
 
     @Serializable
-    private data class SgdbGame(val id: Int, val name: String)
+    private data class SgdbGame(
+        val id: Int,
+        val name: String,
+    )
 
     @Serializable
     private data class SgdbAsset(
         val url: String,
         val width: Int? = null,
         val height: Int? = null,
-        val style: String? = null
+        val style: String? = null,
     )
 
     companion object {
         const val PageSize = 50
         private const val SEARCH_CACHE_MS = 5_000L
-        private val Endpoints = mapOf(
-            "grids" to MediaType.Boxart,
-            "heroes" to MediaType.Hero,
-            "logos" to MediaType.Logo,
-            "icons" to MediaType.Icon
-        )
+        private val Endpoints =
+            mapOf(
+                "grids" to MediaType.Boxart,
+                "heroes" to MediaType.Hero,
+                "logos" to MediaType.Logo,
+                "icons" to MediaType.Icon,
+            )
     }
 }

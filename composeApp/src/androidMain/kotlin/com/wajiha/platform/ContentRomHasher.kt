@@ -2,14 +2,18 @@ package com.wajiha.platform
 
 import android.content.Context
 import android.net.Uri
-import java.security.MessageDigest
-import java.util.zip.CRC32
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.security.MessageDigest
+import java.util.zip.CRC32
 
-class ContentRomHasher(private val context: Context) : RomHasher {
-
-    override suspend fun crc32(uri: String, maxBytes: Long): String? =
+class ContentRomHasher(
+    private val context: Context,
+) : RomHasher {
+    override suspend fun crc32(
+        uri: String,
+        maxBytes: Long,
+    ): String? =
         withContext(Dispatchers.IO) {
             runCatching {
                 val crc = CRC32()
@@ -28,7 +32,10 @@ class ContentRomHasher(private val context: Context) : RomHasher {
             }.getOrNull()
         }
 
-    override suspend fun md5(uri: String, maxBytes: Long): String? =
+    override suspend fun md5(
+        uri: String,
+        maxBytes: Long,
+    ): String? =
         withContext(Dispatchers.IO) {
             runCatching {
                 val digest = MessageDigest.getInstance("MD5")

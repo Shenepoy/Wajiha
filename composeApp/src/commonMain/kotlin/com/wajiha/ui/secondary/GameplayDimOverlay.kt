@@ -38,12 +38,13 @@ internal fun shouldDimGameplay(
     mode: SecondaryMode,
     dualState: DualScreenState,
     gameDimEnabled: Boolean,
-    gameDimOnlyOnNowPlaying: Boolean
-): Boolean = nowPlaying != null &&
-    mode != SecondaryMode.Off &&
-    dualState == DualScreenState.GameRunning &&
-    gameDimEnabled &&
-    (!gameDimOnlyOnNowPlaying || mode == SecondaryMode.NowPlaying)
+    gameDimOnlyOnNowPlaying: Boolean,
+): Boolean =
+    nowPlaying != null &&
+        mode != SecondaryMode.Off &&
+        dualState == DualScreenState.GameRunning &&
+        gameDimEnabled &&
+        (!gameDimOnlyOnNowPlaying || mode == SecondaryMode.NowPlaying)
 
 /**
  * Semi-transparent black scrim over secondary content while a game runs on the
@@ -56,26 +57,27 @@ internal fun shouldDimGameplay(
 @Composable
 internal fun rememberGameplayDimAlpha(
     store: DualScreenStore,
-    liftedByInteraction: Boolean
+    liftedByInteraction: Boolean,
 ): Float {
     val nowPlaying by store.nowPlayingUiState.collectAsState()
     val mode by store.secondaryMode.collectAsState()
     val dualState by store.state.collectAsState()
 
-    val shouldDimEventually = shouldDimGameplay(
-        nowPlaying = nowPlaying,
-        mode = mode,
-        dualState = dualState,
-        gameDimEnabled = store.gameDimEnabled,
-        gameDimOnlyOnNowPlaying = store.gameDimOnlyOnNowPlaying
-    )
+    val shouldDimEventually =
+        shouldDimGameplay(
+            nowPlaying = nowPlaying,
+            mode = mode,
+            dualState = dualState,
+            gameDimEnabled = store.gameDimEnabled,
+            gameDimOnlyOnNowPlaying = store.gameDimOnlyOnNowPlaying,
+        )
 
     var delayElapsed by remember { mutableStateOf(false) }
 
     LaunchedEffect(
         shouldDimEventually,
         store.gameplayDimTimeoutSeconds,
-        nowPlaying?.packageName
+        nowPlaying?.packageName,
     ) {
         if (!shouldDimEventually) {
             delayElapsed = false
@@ -91,17 +93,18 @@ internal fun rememberGameplayDimAlpha(
         delayElapsed = true
     }
 
-    val targetAlpha = when {
-        !shouldDimEventually -> 0f
-        liftedByInteraction -> 0f
-        !delayElapsed -> 0f
-        else -> store.gameDimPercent.coerceIn(0, 100) / 100f
-    }
+    val targetAlpha =
+        when {
+            !shouldDimEventually -> 0f
+            liftedByInteraction -> 0f
+            !delayElapsed -> 0f
+            else -> store.gameDimPercent.coerceIn(0, 100) / 100f
+        }
 
     val animatedAlpha by animateFloatAsState(
         targetValue = targetAlpha,
         animationSpec = tween(durationMillis = GAMEPLAY_DIM_FADE_MS),
-        label = "gameplayDimAlpha"
+        label = "gameplayDimAlpha",
     )
 
     return animatedAlpha
@@ -110,14 +113,15 @@ internal fun rememberGameplayDimAlpha(
 @Composable
 fun GameplayDimScrim(
     alpha: Float,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     if (alpha <= 0.001f) return
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = alpha))
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = alpha)),
     )
 }
 
@@ -134,19 +138,20 @@ fun SecondarySurface(
     store: DualScreenStore,
     modifier: Modifier = Modifier,
     foreground: (@Composable BoxScope.(gameplayDimScrimVisible: Boolean) -> Unit)? = null,
-    content: @Composable BoxScope.() -> Unit
+    content: @Composable BoxScope.() -> Unit,
 ) {
     val nowPlaying by store.nowPlayingUiState.collectAsState()
     val mode by store.secondaryMode.collectAsState()
     val dualState by store.state.collectAsState()
 
-    val shouldDimEventually = shouldDimGameplay(
-        nowPlaying = nowPlaying,
-        mode = mode,
-        dualState = dualState,
-        gameDimEnabled = store.gameDimEnabled,
-        gameDimOnlyOnNowPlaying = store.gameDimOnlyOnNowPlaying
-    )
+    val shouldDimEventually =
+        shouldDimGameplay(
+            nowPlaying = nowPlaying,
+            mode = mode,
+            dualState = dualState,
+            gameDimEnabled = store.gameDimEnabled,
+            gameDimOnlyOnNowPlaying = store.gameDimOnlyOnNowPlaying,
+        )
 
     var dimLiftedByInteraction by remember { mutableStateOf(false) }
     var interactionGeneration by remember { mutableIntStateOf(0) }
@@ -173,30 +178,31 @@ fun SecondarySurface(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .pointerInput(shouldDimEventually) {
-                if (!shouldDimEventually) return@pointerInput
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    onInteraction()
-                }
-            }
-            .onPreviewKeyEvent { event ->
-                if (
-                    shouldDimEventually &&
-                    event.type == KeyEventType.KeyDown &&
-                    GamepadKeys.switchesToGamepadMode(event)
-                ) {
-                    onInteraction()
-                }
-                false
-            }
+        modifier =
+            modifier
+                .fillMaxSize()
+                .pointerInput(shouldDimEventually) {
+                    if (!shouldDimEventually) return@pointerInput
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        onInteraction()
+                    }
+                }.onPreviewKeyEvent { event ->
+                    if (
+                        shouldDimEventually &&
+                        event.type == KeyEventType.KeyDown &&
+                        GamepadKeys.switchesToGamepadMode(event)
+                    ) {
+                        onInteraction()
+                    }
+                    false
+                },
     ) {
-        val gameplayDimAlpha = rememberGameplayDimAlpha(
-            store = store,
-            liftedByInteraction = dimLiftedByInteraction
-        )
+        val gameplayDimAlpha =
+            rememberGameplayDimAlpha(
+                store = store,
+                liftedByInteraction = dimLiftedByInteraction,
+            )
         val gameplayDimScrimVisible = gameplayDimAlpha > 0.001f
 
         content()

@@ -17,26 +17,27 @@ fun WajihaEmptyState(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
-    action: @Composable (() -> Unit)? = null
+    action: @Composable (() -> Unit)? = null,
 ) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(WajihaSpacing.lg),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(WajihaSpacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm, Alignment.CenterVertically)
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm, Alignment.CenterVertically),
     ) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
         )
         if (subtitle != null) {
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
             )
         }
         action?.invoke()

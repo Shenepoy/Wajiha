@@ -16,13 +16,16 @@ class ExternalGameResolver(
     private val probes: List<RomPathProbe>,
     private val matcher: RomPathMatcher,
     private val settingsRepository: SettingsRepository,
-    private val reader: EmulatorDataReader
+    private val reader: EmulatorDataReader,
 ) {
     private val mutex = Mutex()
     private val lastProbeAt = mutableMapOf<String, Long>()
     private val lastResolved = mutableMapOf<String, ResolvedGame>()
 
-    suspend fun resolve(packageName: String, sessionStartedAt: Long): ResolvedGame? =
+    suspend fun resolve(
+        packageName: String,
+        sessionStartedAt: Long,
+    ): ResolvedGame? =
         withContext(Dispatchers.IO) {
             val settings = settingsRepository.settings.first()
             if (!settings.romReconciliationEnabled) {
@@ -41,17 +44,19 @@ class ExternalGameResolver(
                 }
                 lastProbeAt[packageName] = now
 
-                val probe = probes
-                    .filter { packageName in it.supportedPackages }
-                    .minByOrNull { it.priority }
-                    ?: run {
-                        WajihaLog.d(WajihaTags.EXTERNAL_RESOLVE, "no probe for $packageName")
-                        return@withContext null
-                    }
+                val probe =
+                    probes
+                        .filter { packageName in it.supportedPackages }
+                        .minByOrNull { it.priority }
+                        ?: run {
+                            WajihaLog.d(WajihaTags.EXTERNAL_RESOLVE, "no probe for $packageName")
+                            return@withContext null
+                        }
 
-                val candidate = runCatching {
-                    probe.probe(packageName, sessionStartedAt)
-                }.getOrNull()
+                val candidate =
+                    runCatching {
+                        probe.probe(packageName, sessionStartedAt)
+                    }.getOrNull()
 
                 if (candidate == null) {
                     WajihaLog.d(WajihaTags.EXTERNAL_RESOLVE, "${probe.probeId}: no candidate for $packageName")
@@ -59,22 +64,24 @@ class ExternalGameResolver(
                 }
 
                 val matched = matcher.match(candidate)
-                val resolved = matched ?: run {
-                    val hint = candidate.rawPath?.let { RomPathMatcher.fileNameFromPath(it) }
-                        ?: candidate.fileNameHint
-                    if (settings.romReconciliationShowFilenameFallback && !hint.isNullOrBlank()) {
-                        matcher.filenameFallback(hint)
-                    } else {
-                        null
+                val resolved =
+                    matched ?: run {
+                        val hint =
+                            candidate.rawPath?.let { RomPathMatcher.fileNameFromPath(it) }
+                                ?: candidate.fileNameHint
+                        if (settings.romReconciliationShowFilenameFallback && !hint.isNullOrBlank()) {
+                            matcher.filenameFallback(hint)
+                        } else {
+                            null
+                        }
                     }
-                }
 
                 if (resolved != null) {
                     lastResolved[packageName] = resolved
                     WajihaLog.i(
                         WajihaTags.EXTERNAL_RESOLVE,
                         "${probe.probeId}: $packageName -> gameId=${resolved.gameId} " +
-                            "(${resolved.confidence}, ${resolved.displayName})"
+                            "(${resolved.confidence}, ${resolved.displayName})",
                     )
                 }
                 resolved

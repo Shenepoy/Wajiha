@@ -1,16 +1,16 @@
 package com.wajiha.android.input
 
-import com.wajiha.state.DualScreenState
-import com.wajiha.state.DualScreenStore
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
+import com.wajiha.state.DualScreenState
+import com.wajiha.state.DualScreenStore
 
 /**
  * Blocks launcher gamepad dispatch while a game/emulator is foreground and
  * applies a short debounce when the launcher regains focus (NeoStation pattern).
  */
 class GamepadGate(
-    private val store: DualScreenStore
+    private val store: DualScreenStore,
 ) {
     private var launcherForegroundedAtMs: Long = 0L
 

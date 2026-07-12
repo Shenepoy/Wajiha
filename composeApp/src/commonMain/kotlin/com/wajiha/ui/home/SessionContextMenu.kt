@@ -133,29 +133,44 @@ private fun offsetForLockedSide(
     val maxY = (containerH - padPx - menuH).coerceAtLeast(minY)
 
     fun clampX(x: Float) = x.coerceIn(minX, maxX)
+
     fun clampY(y: Float) = y.coerceIn(minY, maxY)
 
     return when (side) {
-        SessionMenuSide.Right -> IntOffset(
-            clampX(anchor.right + gapPx).roundToInt(),
-            clampY(anchor.top).roundToInt(),
-        )
-        SessionMenuSide.Left -> IntOffset(
-            clampX(anchor.left - menuW - gapPx).roundToInt(),
-            clampY(anchor.top).roundToInt(),
-        )
-        SessionMenuSide.Below -> IntOffset(
-            clampX(anchor.center.x - menuW / 2f).roundToInt(),
-            clampY(anchor.bottom + gapPx).roundToInt(),
-        )
-        SessionMenuSide.Above -> IntOffset(
-            clampX(anchor.center.x - menuW / 2f).roundToInt(),
-            clampY(anchor.top - menuH - gapPx).roundToInt(),
-        )
+        SessionMenuSide.Right -> {
+            IntOffset(
+                clampX(anchor.right + gapPx).roundToInt(),
+                clampY(anchor.top).roundToInt(),
+            )
+        }
+
+        SessionMenuSide.Left -> {
+            IntOffset(
+                clampX(anchor.left - menuW - gapPx).roundToInt(),
+                clampY(anchor.top).roundToInt(),
+            )
+        }
+
+        SessionMenuSide.Below -> {
+            IntOffset(
+                clampX(anchor.center.x - menuW / 2f).roundToInt(),
+                clampY(anchor.bottom + gapPx).roundToInt(),
+            )
+        }
+
+        SessionMenuSide.Above -> {
+            IntOffset(
+                clampX(anchor.center.x - menuW / 2f).roundToInt(),
+                clampY(anchor.top - menuH - gapPx).roundToInt(),
+            )
+        }
     }
 }
 
-private fun inflateForTileScale(rect: Rect, scale: Float): Rect {
+private fun inflateForTileScale(
+    rect: Rect,
+    scale: Float,
+): Rect {
     if (scale == 1f) return rect
     val cx = rect.center.x
     val cy = rect.center.y
@@ -174,19 +189,21 @@ private fun ContextMenuTitleText(
     val density = LocalDensity.current
 
     BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(WajihaShapes.focus),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(WajihaShapes.focus),
     ) {
         val containerWidthPx = with(density) { maxWidth.toPx() }
-        val textLayoutResult = remember(text, containerWidthPx) {
-            textMeasurer.measure(
-                text = text,
-                style = textStyle.copy(fontWeight = FontWeight.SemiBold),
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
+        val textLayoutResult =
+            remember(text, containerWidthPx) {
+                textMeasurer.measure(
+                    text = text,
+                    style = textStyle.copy(fontWeight = FontWeight.SemiBold),
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
         val textWidthPx = textLayoutResult.size.width.toFloat()
         val scrollDistance = (textWidthPx - containerWidthPx).coerceAtLeast(0f)
         val overflow = scrollDistance > 0f
@@ -197,9 +214,10 @@ private fun ContextMenuTitleText(
                 offsetX.snapTo(0f)
                 return@LaunchedEffect
             }
-            val durationMs = ((scrollDistance / ContextMenuMarqueePxPerSec) * 1000f)
-                .roundToInt()
-                .coerceIn(1500, 10_000)
+            val durationMs =
+                ((scrollDistance / ContextMenuMarqueePxPerSec) * 1000f)
+                    .roundToInt()
+                    .coerceIn(1500, 10_000)
             while (true) {
                 offsetX.snapTo(0f)
                 delay(ContextMenuMarqueeIdleMs.toLong())
@@ -230,31 +248,33 @@ private fun SessionContextMenuRow(
     var focused by remember { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = ContextMenuRowHeight)
-            .clip(WajihaShapes.focus)
-            .wajihaFocusIndicator(highlighted = focused, shape = WajihaShapes.focus)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { focused = it.isFocused }
-            .wajihaGamepadFocus()
-            .onPreviewKeyEvent { event ->
-                if (GamepadKeys.isConfirm(event.type, event.key)) {
-                    onClick()
-                    true
-                } else {
-                    false
-                }
-            }
-            .pointerInput(onClick) { detectTapGestures { onClick() } }
-            .padding(
-                start = WajihaSpacing.sm,
-                end = WajihaSpacing.sm,
-                top = 2.dp,
-                bottom = 2.dp,
-            ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = ContextMenuRowHeight)
+                .clip(WajihaShapes.focus)
+                .wajihaFocusIndicator(highlighted = focused, shape = WajihaShapes.focus)
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .onFocusChanged { focused = it.isFocused }
+                .wajihaGamepadFocus()
+                .onPreviewKeyEvent { event ->
+                    if (GamepadKeys.isConfirm(event.type, event.key)) {
+                        onClick()
+                        true
+                    } else {
+                        false
+                    }
+                }.pointerInput(onClick) { detectTapGestures { onClick() } }
+                .padding(
+                    start = WajihaSpacing.sm,
+                    end = WajihaSpacing.sm,
+                    top = 2.dp,
+                    bottom = 2.dp,
+                ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(WajihaSpacing.xs),
+        horizontalArrangement =
+            androidx.compose.foundation.layout.Arrangement
+                .spacedBy(WajihaSpacing.xs),
     ) {
         Icon(
             imageVector = Icons.Filled.Clear,
@@ -283,36 +303,39 @@ private fun ContextMenuDimScrim(
 ) {
     val scrimColor = Color.Black.copy(alpha = scrimAlpha)
     val density = LocalDensity.current
-    val tileCornerRadiusPx = with(density) {
-        WajihaShapes.tileCornerRadius.toPx() * WajihaFocus.selectedScale
-    }
+    val tileCornerRadiusPx =
+        with(density) {
+            WajihaShapes.tileCornerRadius.toPx() * WajihaFocus.selectedScale
+        }
     var overlayRootBounds by remember { mutableStateOf<Rect?>(null) }
 
-    val localTileCutout = remember(tileCutoutRoot, overlayRootBounds) {
-        val overlay = overlayRootBounds ?: return@remember null
-        val tile = tileCutoutRoot ?: return@remember null
-        val scaled = inflateForTileScale(tile, WajihaFocus.selectedScale)
-        Rect(
-            left = scaled.left - overlay.left,
-            top = scaled.top - overlay.top,
-            right = scaled.right - overlay.left,
-            bottom = scaled.bottom - overlay.top,
-        )
-    }
+    val localTileCutout =
+        remember(tileCutoutRoot, overlayRootBounds) {
+            val overlay = overlayRootBounds ?: return@remember null
+            val tile = tileCutoutRoot ?: return@remember null
+            val scaled = inflateForTileScale(tile, WajihaFocus.selectedScale)
+            Rect(
+                left = scaled.left - overlay.left,
+                top = scaled.top - overlay.top,
+                right = scaled.right - overlay.left,
+                bottom = scaled.bottom - overlay.top,
+            )
+        }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .onGloballyPositioned { overlayRootBounds = it.boundsInRoot() }
-            .pointerInput(localTileCutout, tileCornerRadiusPx) {
-                detectTapGestures { offset ->
-                    val cutout = localTileCutout
-                    if (cutout != null && tileCutoutRoundRect(cutout, tileCornerRadiusPx).contains(offset)) {
-                        return@detectTapGestures
+        modifier =
+            modifier
+                .fillMaxSize()
+                .onGloballyPositioned { overlayRootBounds = it.boundsInRoot() }
+                .pointerInput(localTileCutout, tileCornerRadiusPx) {
+                    detectTapGestures { offset ->
+                        val cutout = localTileCutout
+                        if (cutout != null && tileCutoutRoundRect(cutout, tileCornerRadiusPx).contains(offset)) {
+                            return@detectTapGestures
+                        }
+                        onDismiss()
                     }
-                    onDismiss()
-                }
-            }
+                },
     ) {
         val cutout = localTileCutout
 
@@ -324,21 +347,26 @@ private fun ContextMenuDimScrim(
                 drawRect(scrimColor, topLeft = Offset.Zero, size = Size(w, h))
                 return@Canvas
             }
-            val scrimPath = Path().apply {
-                fillType = PathFillType.EvenOdd
-                addRect(Rect(0f, 0f, w, h))
-                addRoundRect(tileCutoutRoundRect(cutout, tileCornerRadiusPx))
-            }
+            val scrimPath =
+                Path().apply {
+                    fillType = PathFillType.EvenOdd
+                    addRect(Rect(0f, 0f, w, h))
+                    addRoundRect(tileCutoutRoundRect(cutout, tileCornerRadiusPx))
+                }
             drawPath(scrimPath, scrimColor)
         }
     }
 }
 
-private fun tileCutoutRoundRect(cutout: Rect, cornerRadiusPx: Float): RoundRect {
-    val cornerRadius = CornerRadius(
-        x = cornerRadiusPx.coerceAtMost(cutout.width / 2f),
-        y = cornerRadiusPx.coerceAtMost(cutout.height / 2f),
-    )
+private fun tileCutoutRoundRect(
+    cutout: Rect,
+    cornerRadiusPx: Float,
+): RoundRect {
+    val cornerRadius =
+        CornerRadius(
+            x = cornerRadiusPx.coerceAtMost(cutout.width / 2f),
+            y = cornerRadiusPx.coerceAtMost(cutout.height / 2f),
+        )
     return RoundRect(
         left = cutout.left,
         top = cutout.top,
@@ -395,84 +423,90 @@ fun SessionContextMenu(
     BackHandler { handleBack() }
 
     BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                if (GamepadKeys.isBack(event.type, event.key)) handleBack() else false
-            }
+        modifier =
+            modifier
+                .fillMaxSize()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    if (GamepadKeys.isBack(event.type, event.key)) handleBack() else false
+                },
     ) {
         ContextMenuDimScrim(
             tileCutoutRoot = anchorBounds,
             onDismiss = onDismiss,
         )
 
-        val menuOffset = remember(
-            anchorBounds,
-            constraints.maxWidth,
-            constraints.maxHeight,
-            menuSize,
-            lockedSide,
-        ) {
-            with(density) {
-                val menuW = if (menuSize.width > 0) {
-                    menuSize.width.toFloat()
-                } else {
-                    ContextMenuWidth.toPx()
-                }
-                val menuH = if (menuSize.height > 0) {
-                    menuSize.height.toFloat()
-                } else {
-                    96.dp.toPx()
-                }
-                val gapPx = gap.toPx()
-                val padPx = WajihaSpacing.sm.toPx()
-                val cw = constraints.maxWidth.toFloat()
-                val ch = constraints.maxHeight.toFloat()
+        val menuOffset =
+            remember(
+                anchorBounds,
+                constraints.maxWidth,
+                constraints.maxHeight,
+                menuSize,
+                lockedSide,
+            ) {
+                with(density) {
+                    val menuW =
+                        if (menuSize.width > 0) {
+                            menuSize.width.toFloat()
+                        } else {
+                            ContextMenuWidth.toPx()
+                        }
+                    val menuH =
+                        if (menuSize.height > 0) {
+                            menuSize.height.toFloat()
+                        } else {
+                            96.dp.toPx()
+                        }
+                    val gapPx = gap.toPx()
+                    val padPx = WajihaSpacing.sm.toPx()
+                    val cw = constraints.maxWidth.toFloat()
+                    val ch = constraints.maxHeight.toFloat()
 
-                if (anchorBounds != null) {
-                    val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
-                    val side = lockedSide ?: chooseMenuSide(
-                        anchor = anchor,
-                        menuW = menuW,
-                        menuH = menuH,
-                        containerW = cw,
-                        containerH = ch,
-                        gapPx = gapPx,
-                        padPx = padPx,
-                    )
-                    offsetForLockedSide(
-                        side = side,
-                        anchor = anchor,
-                        menuW = menuW,
-                        menuH = menuH,
-                        containerW = cw,
-                        containerH = ch,
-                        gapPx = gapPx,
-                        padPx = padPx,
-                    )
-                } else {
-                    IntOffset(
-                        (cw - menuW - padPx).roundToInt().coerceAtLeast(padPx.roundToInt()),
-                        padPx.roundToInt(),
-                    )
+                    if (anchorBounds != null) {
+                        val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
+                        val side =
+                            lockedSide ?: chooseMenuSide(
+                                anchor = anchor,
+                                menuW = menuW,
+                                menuH = menuH,
+                                containerW = cw,
+                                containerH = ch,
+                                gapPx = gapPx,
+                                padPx = padPx,
+                            )
+                        offsetForLockedSide(
+                            side = side,
+                            anchor = anchor,
+                            menuW = menuW,
+                            menuH = menuH,
+                            containerW = cw,
+                            containerH = ch,
+                            gapPx = gapPx,
+                            padPx = padPx,
+                        )
+                    } else {
+                        IntOffset(
+                            (cw - menuW - padPx).roundToInt().coerceAtLeast(padPx.roundToInt()),
+                            padPx.roundToInt(),
+                        )
+                    }
                 }
             }
-        }
 
         LaunchedEffect(menuSize, anchorBounds, constraints.maxWidth, constraints.maxHeight) {
             if (lockedSide == null && menuSize != IntSize.Zero && anchorBounds != null) {
                 with(density) {
                     val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
-                    lockedSide = chooseMenuSide(
-                        anchor = anchor,
-                        menuW = menuSize.width.toFloat(),
-                        menuH = menuSize.height.toFloat(),
-                        containerW = constraints.maxWidth.toFloat(),
-                        containerH = constraints.maxHeight.toFloat(),
-                        gapPx = gap.toPx(),
-                        padPx = WajihaSpacing.sm.toPx(),
-                    )
+                    lockedSide =
+                        chooseMenuSide(
+                            anchor = anchor,
+                            menuW = menuSize.width.toFloat(),
+                            menuH = menuSize.height.toFloat(),
+                            containerW = constraints.maxWidth.toFloat(),
+                            containerH = constraints.maxHeight.toFloat(),
+                            gapPx = gap.toPx(),
+                            padPx = WajihaSpacing.sm.toPx(),
+                        )
                 }
             }
         }
@@ -480,17 +514,18 @@ fun SessionContextMenu(
         val menuPlaced = menuSize != IntSize.Zero
 
         Box(
-            modifier = Modifier
-                .zIndex(1f)
-                .alpha(if (menuPlaced) 1f else 0f)
-                .offset { menuOffset },
+            modifier =
+                Modifier
+                    .zIndex(1f)
+                    .alpha(if (menuPlaced) 1f else 0f)
+                    .offset { menuOffset },
         ) {
             Column(
-                modifier = Modifier
-                    .onSizeChanged { size ->
-                        if (size != IntSize.Zero) menuSize = size
-                    }
-                    .width(ContextMenuWidth),
+                modifier =
+                    Modifier
+                        .onSizeChanged { size ->
+                            if (size != IntSize.Zero) menuSize = size
+                        }.width(ContextMenuWidth),
             ) {
                 Surface(
                     shape = WajihaShapes.chip,
@@ -500,10 +535,11 @@ fun SessionContextMenu(
                 ) {
                     ContextMenuTitleText(
                         text = target.sessionLabel,
-                        modifier = Modifier.padding(
-                            horizontal = WajihaSpacing.sm,
-                            vertical = WajihaSpacing.xs,
-                        ),
+                        modifier =
+                            Modifier.padding(
+                                horizontal = WajihaSpacing.sm,
+                                vertical = WajihaSpacing.xs,
+                            ),
                     )
                 }
 
@@ -516,7 +552,7 @@ fun SessionContextMenu(
                     shadowElevation = 3.dp,
                 ) {
                     CompositionLocalProvider(
-                        LocalGamepadFocusChromeScope provides GamepadFocusChromeScope.Menu
+                        LocalGamepadFocusChromeScope provides GamepadFocusChromeScope.Menu,
                     ) {
                         Column(modifier = Modifier.padding(vertical = WajihaSpacing.xs)) {
                             SessionContextMenuRow(

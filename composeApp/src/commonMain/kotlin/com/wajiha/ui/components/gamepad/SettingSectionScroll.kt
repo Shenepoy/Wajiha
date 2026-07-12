@@ -22,7 +22,7 @@ import kotlin.math.roundToInt
  * so [MultiChoiceSettingRow] can scroll the row header to the top on expand.
  */
 class SettingSectionScroll(
-    val scrollState: ScrollState
+    val scrollState: ScrollState,
 ) {
     internal var containerCoordinates: LayoutCoordinates? = null
 }
@@ -34,17 +34,18 @@ val LocalSettingSectionScroll = compositionLocalOf<SettingSectionScroll?> { null
 fun SettingSectionScrollColumn(
     modifier: Modifier = Modifier,
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     val scrollState = rememberScrollState()
     val sectionScroll = remember(scrollState) { SettingSectionScroll(scrollState) }
     CompositionLocalProvider(LocalSettingSectionScroll provides sectionScroll) {
         Column(
-            modifier = modifier
-                .verticalScroll(scrollState)
-                .onGloballyPositioned { sectionScroll.containerCoordinates = it },
+            modifier =
+                modifier
+                    .verticalScroll(scrollState)
+                    .onGloballyPositioned { sectionScroll.containerCoordinates = it },
             verticalArrangement = verticalArrangement,
-            content = content
+            content = content,
         )
     }
 }

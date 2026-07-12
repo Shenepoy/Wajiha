@@ -13,7 +13,7 @@ private data class NavSlot(
     val onActivate: () -> Unit,
     val enabled: Boolean,
     val onEnterEdit: (() -> Boolean)?,
-    val onExitEdit: (() -> Boolean)?
+    val onExitEdit: (() -> Boolean)?,
 )
 
 /**
@@ -22,7 +22,7 @@ private data class NavSlot(
  */
 class GamepadNavController(
     val focusState: GamepadFocusState,
-    private val onBack: (() -> Boolean)? = null
+    private val onBack: (() -> Boolean)? = null,
 ) {
     private val slots = mutableListOf<NavSlot>()
     var zoneId: String = ""
@@ -33,7 +33,7 @@ class GamepadNavController(
         onActivate: () -> Unit,
         enabled: Boolean = true,
         onEnterEdit: (() -> Boolean)? = null,
-        onExitEdit: (() -> Boolean)? = null
+        onExitEdit: (() -> Boolean)? = null,
     ): Int {
         val index = slots.indexOfFirst { it.id == id }
         val slot = NavSlot(id, onActivate, enabled, onEnterEdit, onExitEdit)
@@ -156,7 +156,7 @@ class GamepadNavController(
 fun rememberGamepadNavController(
     mode: GamepadNavMode,
     gridRows: Int = 2,
-    onBack: (() -> Boolean)? = null
+    onBack: (() -> Boolean)? = null,
 ): GamepadNavController {
     val focusState = remember(mode, gridRows) { GamepadFocusState(mode, gridRows) }
     return remember(focusState, onBack) { GamepadNavController(focusState, onBack) }

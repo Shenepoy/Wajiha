@@ -27,32 +27,34 @@ import com.wajiha.ui.theme.WajihaSpacing
 @Composable
 fun NowPlayingPanel(
     state: NowPlayingState?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val label = sessionDisplayLabel(state)
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(WajihaSpacing.lg),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(WajihaSpacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         if (state?.boxartPath != null) {
             AsyncImage(
                 model = state.boxartPath,
                 contentDescription = null,
-                modifier = Modifier
-                    .size(120.dp)
-                    .clip(WajihaShapes.card),
-                contentScale = ContentScale.Crop
+                modifier =
+                    Modifier
+                        .size(120.dp)
+                        .clip(WajihaShapes.card),
+                contentScale = ContentScale.Crop,
             )
             Spacer(modifier = Modifier.height(WajihaSpacing.md))
         }
         Text(
             text = "Now Running",
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary
+            color = MaterialTheme.colorScheme.primary,
         )
         Spacer(modifier = Modifier.height(WajihaSpacing.sm))
         Text(
@@ -62,14 +64,14 @@ fun NowPlayingPanel(
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
         )
         if (state?.platformId != null) {
             Spacer(modifier = Modifier.height(WajihaSpacing.xs))
             Text(
                 text = state.platformId.uppercase(),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

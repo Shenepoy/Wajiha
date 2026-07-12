@@ -19,7 +19,7 @@ import com.wajiha.state.SystemNotificationStore
 class TriggerAxisHandler(
     private val store: DualScreenStore,
     private val notifications: SystemNotificationStore,
-    private val appActions: AppActions
+    private val appActions: AppActions,
 ) {
     private val triggers = LauncherTriggerActions(store, notifications, appActions)
     private var l2Pressed = false
@@ -30,7 +30,10 @@ class TriggerAxisHandler(
      * Install before Compose can swallow joystick MOVE events.
      * Uses the decor view listener (survives Compose window.callback swaps).
      */
-    fun installOn(activity: ComponentActivity, gate: GamepadGate) {
+    fun installOn(
+        activity: ComponentActivity,
+        gate: GamepadGate,
+    ) {
         val decor = activity.window?.decorView ?: return
         decor.setOnGenericMotionListener { _, event ->
             !gate.shouldBlockGamepad() && onGenericMotion(event)
@@ -43,7 +46,7 @@ class TriggerAxisHandler(
         }
         WajihaLog.i(
             WajihaTags.GAMEPAD,
-            "TriggerAxisHandler installed on ${activity.javaClass.simpleName}"
+            "TriggerAxisHandler installed on ${activity.javaClass.simpleName}",
         )
     }
 
@@ -51,14 +54,16 @@ class TriggerAxisHandler(
      * @return true when a trigger edge was handled (caller should consume the motion).
      */
     fun onGenericMotion(event: MotionEvent): Boolean {
-        val l2 = maxOf(
-            event.getAxisValue(MotionEvent.AXIS_BRAKE),
-            event.getAxisValue(MotionEvent.AXIS_LTRIGGER)
-        )
-        val r2 = maxOf(
-            event.getAxisValue(MotionEvent.AXIS_GAS),
-            event.getAxisValue(MotionEvent.AXIS_RTRIGGER)
-        )
+        val l2 =
+            maxOf(
+                event.getAxisValue(MotionEvent.AXIS_BRAKE),
+                event.getAxisValue(MotionEvent.AXIS_LTRIGGER),
+            )
+        val r2 =
+            maxOf(
+                event.getAxisValue(MotionEvent.AXIS_GAS),
+                event.getAxisValue(MotionEvent.AXIS_RTRIGGER),
+            )
 
         val hasTriggerSignal = l2 >= 0.05f || r2 >= 0.05f
         if (!hasTriggerSignal && !isJoystickOrGamepad(event)) return false
@@ -73,7 +78,7 @@ class TriggerAxisHandler(
                 WajihaLog.i(
                     WajihaTags.GAMEPAD,
                     "axis: BRAKE/L2=$l2 GAS/R2=$r2 action=${event.actionMasked} " +
-                        "src=0x${Integer.toHexString(event.source)} dev=${event.deviceId}"
+                        "src=0x${Integer.toHexString(event.source)} dev=${event.deviceId}",
                 )
             }
         }
@@ -115,7 +120,7 @@ class TriggerAxisHandler(
 private class TriggerWindowCallback(
     private val original: Window.Callback,
     private val gate: GamepadGate,
-    private val triggers: TriggerAxisHandler
+    private val triggers: TriggerAxisHandler,
 ) : Window.Callback by original {
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         if (!gate.shouldBlockGamepad() && triggers.onGenericMotion(event)) {

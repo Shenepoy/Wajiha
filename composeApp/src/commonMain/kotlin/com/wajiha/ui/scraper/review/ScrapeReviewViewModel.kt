@@ -26,9 +26,8 @@ import kotlinx.coroutines.launch
 class ScrapeReviewViewModel(
     private val engine: ScrapeEngine,
     private val settingsRepository: ScraperSettingsRepository,
-    private val gameRepository: GameRepository
+    private val gameRepository: GameRepository,
 ) : ViewModel() {
-
     private val _state = MutableStateFlow(ScrapeReviewState())
     val state: StateFlow<ScrapeReviewState> = _state.asStateFlow()
 
@@ -52,34 +51,36 @@ class ScrapeReviewViewModel(
         focusMediaType: MediaType? = null,
         preferredCandidate: ScrapeCandidate? = null,
         lockedSlots: Set<ReviewSlot>? = null,
-        openPickerImmediately: Boolean = false
+        openPickerImmediately: Boolean = false,
     ) {
-        val locked = lockedSlots
-            ?: focusMediaType?.let { ReviewSlot.forMediaType(it)?.let { slot -> setOf(slot) } }
+        val locked =
+            lockedSlots
+                ?: focusMediaType?.let { ReviewSlot.forMediaType(it)?.let { slot -> setOf(slot) } }
         queue = listOf(game)
         queueIndex = 0
         onQueueFinished = null
         loadCurrent(
             lockedSlots = locked,
             preferredCandidate = preferredCandidate,
-            openPickerImmediately = openPickerImmediately || locked != null && focusMediaType != null
+            openPickerImmediately = openPickerImmediately || locked != null && focusMediaType != null,
         )
     }
 
     /** Platform review queue. */
     fun openQueue(
         games: List<GameEntity>,
-        onFinished: (() -> Unit)? = null
+        onFinished: (() -> Unit)? = null,
     ) {
         queue = games
         queueIndex = 0
         onQueueFinished = onFinished
         if (games.isEmpty()) {
-            _state.value = ScrapeReviewState(
-                message = "Nothing to review",
-                messageSuccess = null,
-                queueTotal = 0
-            )
+            _state.value =
+                ScrapeReviewState(
+                    message = "Nothing to review",
+                    messageSuccess = null,
+                    queueTotal = 0,
+                )
             onFinished?.invoke()
             return
         }
@@ -94,11 +95,13 @@ class ScrapeReviewViewModel(
      * Applies draft search. Refreshes active/locked slot only; invalidates other caches.
      */
     fun search(name: String? = null) {
-        val query = name?.takeIf { it.isNotBlank() }
-            ?: _state.value.draftSearchName.takeIf { it.isNotBlank() }
-            ?: _state.value.searchName
-        val active = _state.value.activeSlot
-            ?: _state.value.lockedSlots?.singleOrNull()
+        val query =
+            name?.takeIf { it.isNotBlank() }
+                ?: _state.value.draftSearchName.takeIf { it.isNotBlank() }
+                ?: _state.value.searchName
+        val active =
+            _state.value.activeSlot
+                ?: _state.value.lockedSlots?.singleOrNull()
         _state.update {
             it.copy(
                 draftSearchName = query,
@@ -110,7 +113,7 @@ class ScrapeReviewViewModel(
                 mediaHasMore = emptyMap(),
                 error = null,
                 message = null,
-                slotError = null
+                slotError = null,
             )
         }
         if (active != null) {
@@ -129,11 +132,17 @@ class ScrapeReviewViewModel(
         _state.update { it.copy(activeSlot = null, slotError = null) }
     }
 
-    fun ensureSlotLoaded(slot: ReviewSlot, force: Boolean = false) {
+    fun ensureSlotLoaded(
+        slot: ReviewSlot,
+        force: Boolean = false,
+    ) {
         viewModelScope.launch { loadSlotIfNeeded(slot, force) }
     }
 
-    private suspend fun loadSlotIfNeeded(slot: ReviewSlot, force: Boolean = false) {
+    private suspend fun loadSlotIfNeeded(
+        slot: ReviewSlot,
+        force: Boolean = false,
+    ) {
         val state = _state.value
         val game = state.game ?: return
         val query = state.searchName.ifBlank { game.displayName }
@@ -153,21 +162,25 @@ class ScrapeReviewViewModel(
                         cur.copy(
                             slotLoading = false,
                             candidates = candidates,
-                            slotCache = cur.slotCache + (
-                                slot to SlotOptionsCache(
-                                    searchName = query,
-                                    metadataCandidates = candidates
-                                )
+                            slotCache =
+                                cur.slotCache + (
+                                    slot to
+                                        SlotOptionsCache(
+                                            searchName = query,
+                                            metadataCandidates = candidates,
+                                        )
                                 ),
-                            slotError = if (candidates.isEmpty()) {
-                                "No matches found"
-                            } else {
-                                null
-                            },
-                            preferredCandidate = cur.preferredCandidate?.let { preferred ->
-                                candidates.firstOrNull { it.key() == preferred.key() }
-                                    ?: preferred
-                            }
+                            slotError =
+                                if (candidates.isEmpty()) {
+                                    "No matches found"
+                                } else {
+                                    null
+                                },
+                            preferredCandidate =
+                                cur.preferredCandidate?.let { preferred ->
+                                    candidates.firstOrNull { it.key() == preferred.key() }
+                                        ?: preferred
+                                },
                         )
                     }
                     val preferred = _state.value.preferredCandidate
@@ -175,6 +188,7 @@ class ScrapeReviewViewModel(
                         selectCandidate(preferred, fillEmptyMediaOnly = true)
                     }
                 }
+
                 else -> {
                     val type = slot.requireMediaType()
                     val options = engine.gatherReviewMedia(game, type, settings, query)
@@ -184,21 +198,25 @@ class ScrapeReviewViewModel(
                     _state.update { cur ->
                         cur.copy(
                             slotLoading = false,
-                            slotCache = cur.slotCache + (
-                                slot to SlotOptionsCache(
-                                    searchName = query,
-                                    mediaOptions = options
-                                )
+                            slotCache =
+                                cur.slotCache + (
+                                    slot to
+                                        SlotOptionsCache(
+                                            searchName = query,
+                                            mediaOptions = options,
+                                        )
                                 ),
                             mediaNextPage = cur.mediaNextPage + (type to 1),
-                            mediaHasMore = cur.mediaHasMore + (
-                                type to (sgdbCount >= pageSize)
+                            mediaHasMore =
+                                cur.mediaHasMore + (
+                                    type to (sgdbCount >= pageSize)
                                 ),
-                            slotError = if (options.isEmpty()) {
-                                "No ${type.dbName} found"
-                            } else {
-                                null
-                            }
+                            slotError =
+                                if (options.isEmpty()) {
+                                    "No ${type.dbName} found"
+                                } else {
+                                    null
+                                },
                         )
                     }
                 }
@@ -207,42 +225,49 @@ class ScrapeReviewViewModel(
             _state.update {
                 it.copy(
                     slotLoading = false,
-                    slotError = e.message ?: "Failed to load"
+                    slotError = e.message ?: "Failed to load",
                 )
             }
         }
     }
 
-    fun selectCandidate(candidate: ScrapeCandidate, fillEmptyMediaOnly: Boolean = true) {
+    fun selectCandidate(
+        candidate: ScrapeCandidate,
+        fillEmptyMediaOnly: Boolean = true,
+    ) {
         viewModelScope.launch {
             val settings = settingsRepository.current()
             val region = settings.regionPriority
             val variant = settings.mediaVariantIndex
             val locked = _state.value.lockedSlots
             val allowMetadata = locked == null || ReviewSlot.Metadata in locked
-            val typesToFill = when {
-                locked == null -> ReviewMediaSlots
-                else -> locked.mapNotNull { it.mediaType() }
-            }
-            val defaults = typesToFill.mapNotNull { type ->
-                val list = candidate.media.filter { it.type == type }
-                if (list.isEmpty()) return@mapNotNull null
-                val pick = list.pickMedia(region, variant) ?: list.first()
-                type to StagedMediaPick(candidate.sourceId, pick)
-            }.toMap()
-            _state.update { cur ->
-                val mergedMedia = if (fillEmptyMediaOnly) {
-                    cur.mediaPicks + defaults.filterKeys { it !in cur.mediaPicks }
-                } else {
-                    defaults
+            val typesToFill =
+                when {
+                    locked == null -> ReviewMediaSlots
+                    else -> locked.mapNotNull { it.mediaType() }
                 }
+            val defaults =
+                typesToFill
+                    .mapNotNull { type ->
+                        val list = candidate.media.filter { it.type == type }
+                        if (list.isEmpty()) return@mapNotNull null
+                        val pick = list.pickMedia(region, variant) ?: list.first()
+                        type to StagedMediaPick(candidate.sourceId, pick)
+                    }.toMap()
+            _state.update { cur ->
+                val mergedMedia =
+                    if (fillEmptyMediaOnly) {
+                        cur.mediaPicks + defaults.filterKeys { it !in cur.mediaPicks }
+                    } else {
+                        defaults
+                    }
                 cur.copy(
                     selectedCandidateKey = if (allowMetadata) candidate.key() else cur.selectedCandidateKey,
                     metadataFrom = if (allowMetadata) candidate else cur.metadataFrom,
                     mediaPicks = mergedMedia,
                     error = null,
                     message = null,
-                    activeSlot = if (cur.activeSlot == ReviewSlot.Metadata) null else cur.activeSlot
+                    activeSlot = if (cur.activeSlot == ReviewSlot.Metadata) null else cur.activeSlot,
                 )
             }
         }
@@ -259,9 +284,10 @@ class ScrapeReviewViewModel(
                 val options = _state.value.mediaOptions(type)
                 if (options.isEmpty()) return@launch
                 val priority = settings.mediaPriority[type.dbName].orEmpty()
-                val pick = priority.firstNotNullOfOrNull { sourceId ->
-                    options.firstOrNull { it.first == sourceId }
-                } ?: options.first()
+                val pick =
+                    priority.firstNotNullOfOrNull { sourceId ->
+                        options.firstOrNull { it.first == sourceId }
+                    } ?: options.first()
                 selectMedia(type, pick.first, pick.second)
             }
             return
@@ -270,28 +296,32 @@ class ScrapeReviewViewModel(
             loadSlotIfNeeded(ReviewSlot.Metadata, force = false)
             val settings = settingsRepository.current()
             val game = _state.value.game
-            val effective = if (game != null) {
-                settings.forPlatform(game.platformId)
-            } else {
-                settings
-            }
+            val effective =
+                if (game != null) {
+                    settings.forPlatform(game.platformId)
+                } else {
+                    settings
+                }
             var bySource = _state.value.metadataOptions().associateBy { it.sourceId }
             if (bySource.isEmpty() && game != null) {
-                val candidates = engine.gatherReviewCandidates(
-                    game,
-                    settings,
-                    _state.value.searchName
-                )
+                val candidates =
+                    engine.gatherReviewCandidates(
+                        game,
+                        settings,
+                        _state.value.searchName,
+                    )
                 bySource = candidates.associateBy { it.sourceId }
                 _state.update {
                     it.copy(
                         candidates = candidates,
-                        slotCache = it.slotCache + (
-                            ReviewSlot.Metadata to SlotOptionsCache(
-                                searchName = it.searchName,
-                                metadataCandidates = candidates
-                            )
-                            )
+                        slotCache =
+                            it.slotCache + (
+                                ReviewSlot.Metadata to
+                                    SlotOptionsCache(
+                                        searchName = it.searchName,
+                                        metadataCandidates = candidates,
+                                    )
+                            ),
                     )
                 }
             }
@@ -305,7 +335,7 @@ class ScrapeReviewViewModel(
                     mediaPicks = mediaPicks,
                     message = "Auto-filled from source priorities",
                     messageSuccess = true,
-                    error = null
+                    error = null,
                 )
             }
         }
@@ -316,44 +346,50 @@ class ScrapeReviewViewModel(
         if (state.mediaLoadingMore) return
         if (state.mediaHasMore[type] != true) return
         val game = state.game ?: return
-        val sgdbCandidate = state.metadataOptions().firstOrNull { it.sourceId == "steamgriddb" }
-            ?: state.candidates.firstOrNull { it.sourceId == "steamgriddb" }
-            ?: return
+        val sgdbCandidate =
+            state.metadataOptions().firstOrNull { it.sourceId == "steamgriddb" }
+                ?: state.candidates.firstOrNull { it.sourceId == "steamgriddb" }
+                ?: return
         val page = state.mediaNextPage[type] ?: 1
         _state.update { it.copy(mediaLoadingMore = true) }
         viewModelScope.launch {
             try {
-                val result = engine.loadMoreSteamGridDbMedia(
-                    candidate = sgdbCandidate,
-                    type = type,
-                    settings = settingsRepository.current(),
-                    platformId = game.platformId,
-                    page = page
-                )
+                val result =
+                    engine.loadMoreSteamGridDbMedia(
+                        candidate = sgdbCandidate,
+                        type = type,
+                        settings = settingsRepository.current(),
+                        platformId = game.platformId,
+                        page = page,
+                    )
                 _state.update { cur ->
-                    val merged = (cur.extraMedia[type].orEmpty() + result.media)
-                        .distinctBy { it.url }
+                    val merged =
+                        (cur.extraMedia[type].orEmpty() + result.media)
+                            .distinctBy { it.url }
                     val slot = ReviewSlot.forMediaType(type)
-                    val updatedCache = if (slot != null) {
-                        val prev = cur.slotCache[slot]
-                        val morePairs = result.media.map { "steamgriddb" to it }
-                        cur.slotCache + (
-                            slot to SlotOptionsCache(
-                                searchName = cur.searchName,
-                                mediaOptions = (
-                                    (prev?.mediaOptions.orEmpty()) + morePairs
-                                    ).distinctBy { it.second.url }
+                    val updatedCache =
+                        if (slot != null) {
+                            val prev = cur.slotCache[slot]
+                            val morePairs = result.media.map { "steamgriddb" to it }
+                            cur.slotCache + (
+                                slot to
+                                    SlotOptionsCache(
+                                        searchName = cur.searchName,
+                                        mediaOptions =
+                                            (
+                                                (prev?.mediaOptions.orEmpty()) + morePairs
+                                            ).distinctBy { it.second.url },
+                                    )
                             )
-                            )
-                    } else {
-                        cur.slotCache
-                    }
+                        } else {
+                            cur.slotCache
+                        }
                     cur.copy(
                         mediaLoadingMore = false,
                         extraMedia = cur.extraMedia + (type to merged),
                         mediaNextPage = cur.mediaNextPage + (type to page + 1),
                         mediaHasMore = cur.mediaHasMore + (type to result.hasMore),
-                        slotCache = updatedCache
+                        slotCache = updatedCache,
                     )
                 }
             } catch (e: Exception) {
@@ -361,7 +397,7 @@ class ScrapeReviewViewModel(
                     it.copy(
                         mediaLoadingMore = false,
                         mediaHasMore = it.mediaHasMore + (type to false),
-                        slotError = e.message ?: "Failed to load more media"
+                        slotError = e.message ?: "Failed to load more media",
                     )
                 }
             }
@@ -374,11 +410,15 @@ class ScrapeReviewViewModel(
         }
     }
 
-    fun selectMedia(type: MediaType, sourceId: String, candidate: MediaCandidate?) {
+    fun selectMedia(
+        type: MediaType,
+        sourceId: String,
+        candidate: MediaCandidate?,
+    ) {
         _state.update {
             it.copy(
                 mediaPicks = it.mediaPicks + (type to StagedMediaPick(sourceId, candidate)),
-                activeSlot = null
+                activeSlot = null,
             )
         }
     }
@@ -401,7 +441,7 @@ class ScrapeReviewViewModel(
                 metadataFrom = null,
                 selectedCandidateKey = null,
                 message = null,
-                error = null
+                error = null,
             )
         }
     }
@@ -412,17 +452,18 @@ class ScrapeReviewViewModel(
         _state.update { it.copy(applying = true, error = null, message = null) }
         viewModelScope.launch {
             try {
-                val result = engine.applySelection(
-                    game,
-                    selection,
-                    settingsRepository.current()
-                )
+                val result =
+                    engine.applySelection(
+                        game,
+                        selection,
+                        settingsRepository.current(),
+                    )
                 val (msg, ok) = result.userMessage(verb = "Applied")
                 _state.update {
                     it.copy(
                         applying = false,
                         message = msg,
-                        messageSuccess = ok
+                        messageSuccess = ok,
                     )
                 }
                 advanceOrFinish(onDone)
@@ -431,7 +472,7 @@ class ScrapeReviewViewModel(
                     it.copy(
                         applying = false,
                         error = e.message ?: "Apply failed",
-                        messageSuccess = false
+                        messageSuccess = false,
                     )
                 }
             }
@@ -445,7 +486,7 @@ class ScrapeReviewViewModel(
     fun scrapeOneShot(
         game: GameEntity,
         policy: ScrapeRunPolicy,
-        onDone: ((String, Boolean) -> Unit)? = null
+        onDone: ((String, Boolean) -> Unit)? = null,
     ) {
         viewModelScope.launch {
             try {
@@ -453,7 +494,7 @@ class ScrapeReviewViewModel(
                 val (msg, ok) = result.userMessage(verb = "Scraped")
                 onDone?.invoke(
                     msg,
-                    ok || result.outcome == com.wajiha.data.scraper.GameScrapeOutcome.Partial
+                    ok || result.outcome == com.wajiha.data.scraper.GameScrapeOutcome.Partial,
                 )
             } catch (e: Exception) {
                 onDone?.invoke(e.message ?: "Scrape failed", false)
@@ -474,25 +515,27 @@ class ScrapeReviewViewModel(
     private fun loadCurrent(
         lockedSlots: Set<ReviewSlot>? = null,
         preferredCandidate: ScrapeCandidate? = null,
-        openPickerImmediately: Boolean = false
+        openPickerImmediately: Boolean = false,
     ) {
         val game = queue.getOrNull(queueIndex) ?: return
         val locked = lockedSlots
-        _state.value = ScrapeReviewState(
-            game = game,
-            searchName = game.displayName,
-            draftSearchName = game.displayName,
-            loading = true,
-            queueIndex = queueIndex,
-            queueTotal = queue.size,
-            lockedSlots = locked,
-            preferredCandidate = preferredCandidate,
-            activeSlot = if (openPickerImmediately) {
-                locked?.firstOrNull()
-            } else {
-                null
-            }
-        )
+        _state.value =
+            ScrapeReviewState(
+                game = game,
+                searchName = game.displayName,
+                draftSearchName = game.displayName,
+                loading = true,
+                queueIndex = queueIndex,
+                queueTotal = queue.size,
+                lockedSlots = locked,
+                preferredCandidate = preferredCandidate,
+                activeSlot =
+                    if (openPickerImmediately) {
+                        locked?.firstOrNull()
+                    } else {
+                        null
+                    },
+            )
         viewModelScope.launch {
             try {
                 val existing = gameRepository.media(game.id)
@@ -500,7 +543,7 @@ class ScrapeReviewViewModel(
                     it.copy(
                         game = gameRepository.byId(game.id) ?: game,
                         existingMedia = existing,
-                        loading = false
+                        loading = false,
                     )
                 }
                 if (preferredCandidate != null &&
@@ -515,7 +558,7 @@ class ScrapeReviewViewModel(
                     it.copy(
                         loading = false,
                         error = e.message ?: "Failed to load game",
-                        game = game
+                        game = game,
                     )
                 }
             }
@@ -524,7 +567,7 @@ class ScrapeReviewViewModel(
 
     private fun pickMetadataCandidate(
         bySource: Map<String, ScrapeCandidate>,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ): ScrapeCandidate? {
         for (sourceId in settings.metadataPriority) {
             val c = bySource[sourceId] ?: continue
@@ -536,18 +579,20 @@ class ScrapeReviewViewModel(
 
     private fun pickMediaFromPriorities(
         bySource: Map<String, ScrapeCandidate>,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ): Map<MediaType, StagedMediaPick?> {
         val picks = mutableMapOf<MediaType, StagedMediaPick?>()
         for (type in ReviewMediaSlots) {
             val priority = settings.mediaPriority[type.dbName] ?: continue
-            val pick = priority.firstNotNullOfOrNull { sourceId ->
-                val list = bySource[sourceId]?.media?.filter { it.type == type }.orEmpty()
-                if (list.isEmpty()) return@firstNotNullOfOrNull null
-                val media = list.pickMedia(settings.regionPriority, settings.mediaVariantIndex)
-                    ?: list.first()
-                StagedMediaPick(sourceId, media)
-            }
+            val pick =
+                priority.firstNotNullOfOrNull { sourceId ->
+                    val list = bySource[sourceId]?.media?.filter { it.type == type }.orEmpty()
+                    if (list.isEmpty()) return@firstNotNullOfOrNull null
+                    val media =
+                        list.pickMedia(settings.regionPriority, settings.mediaVariantIndex)
+                            ?: list.first()
+                    StagedMediaPick(sourceId, media)
+                }
             if (pick != null) picks[type] = pick
         }
         return picks

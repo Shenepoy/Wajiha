@@ -14,8 +14,11 @@ import kotlin.math.roundToInt
  * alpha media (logos/icons), JPEG for everything else.
  */
 class AndroidImageProcessor : ImageProcessor {
-
-    override fun process(bytes: ByteArray, maxEdge: Int, preferAlpha: Boolean): ProcessedImage? {
+    override fun process(
+        bytes: ByteArray,
+        maxEdge: Int,
+        preferAlpha: Boolean,
+    ): ProcessedImage? {
         try {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
@@ -29,23 +32,28 @@ class AndroidImageProcessor : ImageProcessor {
 
             var sampleSize = 1
             while (longest / (sampleSize * 2) >= maxEdge) sampleSize *= 2
-            val decoded = BitmapFactory.decodeByteArray(
-                bytes, 0, bytes.size,
-                BitmapFactory.Options().apply { inSampleSize = sampleSize }
-            ) ?: return null
+            val decoded =
+                BitmapFactory.decodeByteArray(
+                    bytes,
+                    0,
+                    bytes.size,
+                    BitmapFactory.Options().apply { inSampleSize = sampleSize },
+                ) ?: return null
 
             val decodedLongest = max(decoded.width, decoded.height)
-            val bitmap = if (decodedLongest > maxEdge) {
-                val scale = maxEdge.toFloat() / decodedLongest
-                Bitmap.createScaledBitmap(
-                    decoded,
-                    (decoded.width * scale).roundToInt().coerceAtLeast(1),
-                    (decoded.height * scale).roundToInt().coerceAtLeast(1),
-                    true
-                ).also { if (it !== decoded) decoded.recycle() }
-            } else {
-                decoded
-            }
+            val bitmap =
+                if (decodedLongest > maxEdge) {
+                    val scale = maxEdge.toFloat() / decodedLongest
+                    Bitmap
+                        .createScaledBitmap(
+                            decoded,
+                            (decoded.width * scale).roundToInt().coerceAtLeast(1),
+                            (decoded.height * scale).roundToInt().coerceAtLeast(1),
+                            true,
+                        ).also { if (it !== decoded) decoded.recycle() }
+                } else {
+                    decoded
+                }
 
             val out = ByteArrayOutputStream()
             val extension: String

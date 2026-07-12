@@ -6,7 +6,6 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ScraperSettingsTest {
-
     @Test
     fun forPlatform_withoutOverride_returnsSameSettings() {
         val settings = ScraperSettings()
@@ -15,19 +14,22 @@ class ScraperSettingsTest {
 
     @Test
     fun forPlatform_appliesOverriddenFieldsOnly() {
-        val settings = ScraperSettings(
-            enabledSources = listOf("screenscraper", "steamgriddb"),
-            regionPriority = listOf("us", "eu"),
-            screenScraperBoxType = "prefer_2d",
-            platformOverrides = mapOf(
-                "psx" to PlatformScraperOverride(
-                    enabledSources = listOf("romm"),
-                    regionPriority = listOf("jp"),
-                    screenScraperBoxType = "3d_only",
-                    mediaVariantIndex = 1
-                )
+        val settings =
+            ScraperSettings(
+                enabledSources = listOf("screenscraper", "steamgriddb"),
+                regionPriority = listOf("us", "eu"),
+                screenScraperBoxType = "prefer_2d",
+                platformOverrides =
+                    mapOf(
+                        "psx" to
+                            PlatformScraperOverride(
+                                enabledSources = listOf("romm"),
+                                regionPriority = listOf("jp"),
+                                screenScraperBoxType = "3d_only",
+                                mediaVariantIndex = 1,
+                            ),
+                    ),
             )
-        )
         val effective = settings.forPlatform("psx")
         assertEquals(listOf("romm"), effective.enabledSources)
         assertEquals(listOf("jp"), effective.regionPriority)
@@ -44,15 +46,16 @@ class ScraperSettingsTest {
 
     @Test
     fun pickMedia_respectsVariantIndex() {
-        val candidates = listOf(
-            MediaCandidate(type = MediaType.Boxart, url = "a", region = "us"),
-            MediaCandidate(
-                type = MediaType.Boxart,
-                url = "b",
-                region = "us",
-                sourceVariant = "alternate"
+        val candidates =
+            listOf(
+                MediaCandidate(type = MediaType.Boxart, url = "a", region = "us"),
+                MediaCandidate(
+                    type = MediaType.Boxart,
+                    url = "b",
+                    region = "us",
+                    sourceVariant = "alternate",
+                ),
             )
-        )
         assertEquals("a", candidates.pickMedia(listOf("us"), 0)?.url)
         assertEquals("b", candidates.pickMedia(listOf("us"), 1)?.url)
     }
@@ -65,11 +68,16 @@ class ScraperSettingsTest {
 
     @Test
     fun settingsRoundTripsThroughJson_withOverrides() {
-        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; encodeDefaults = true }
-        val settings = ScraperSettings(
-            maxImageResolution = 512,
-            platformOverrides = mapOf("n64" to PlatformScraperOverride(enabledSources = listOf("libretro")))
-        )
+        val json =
+            kotlinx.serialization.json.Json {
+                ignoreUnknownKeys = true
+                encodeDefaults = true
+            }
+        val settings =
+            ScraperSettings(
+                maxImageResolution = 512,
+                platformOverrides = mapOf("n64" to PlatformScraperOverride(enabledSources = listOf("libretro"))),
+            )
         val decoded = json.decodeFromString<ScraperSettings>(json.encodeToString(ScraperSettings.serializer(), settings))
         assertEquals(settings, decoded)
     }

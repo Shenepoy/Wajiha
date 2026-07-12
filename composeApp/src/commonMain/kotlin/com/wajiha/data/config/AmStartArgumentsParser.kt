@@ -15,7 +15,6 @@ package com.wajiha.data.config
  * output; the launcher substitutes them at launch time.
  */
 object AmStartArgumentsParser {
-
     data class ParsedCommand(
         val packageName: String?,
         val activityName: String?,
@@ -23,7 +22,7 @@ object AmStartArgumentsParser {
         val dataUri: String?,
         val mimeType: String?,
         val extras: List<IntentExtra>,
-        val activityFlags: List<String>
+        val activityFlags: List<String>,
     )
 
     fun parse(arguments: String): ParsedCommand {
@@ -56,55 +55,72 @@ object AmStartArgumentsParser {
                     }
                     i += 2
                 }
+
                 token == "-a" -> {
-                    action = tokens.getOrNull(i + 1); i += 2
+                    action = tokens.getOrNull(i + 1)
+                    i += 2
                 }
+
                 token == "-d" -> {
-                    data = tokens.getOrNull(i + 1); i += 2
+                    data = tokens.getOrNull(i + 1)
+                    i += 2
                 }
+
                 token == "-t" -> {
-                    mime = tokens.getOrNull(i + 1); i += 2
+                    mime = tokens.getOrNull(i + 1)
+                    i += 2
                 }
+
                 token == "-e" || token == "--es" -> {
                     val key = tokens.getOrNull(i + 1)
                     val value = tokens.getOrNull(i + 2)
                     if (key != null && value != null) extras += IntentExtra(key, value, "string")
                     i += 3
                 }
+
                 token == "--ei" -> {
                     val key = tokens.getOrNull(i + 1)
                     val value = tokens.getOrNull(i + 2)
                     if (key != null && value != null) extras += IntentExtra(key, value, "int")
                     i += 3
                 }
+
                 token == "--el" -> {
                     val key = tokens.getOrNull(i + 1)
                     val value = tokens.getOrNull(i + 2)
                     if (key != null && value != null) extras += IntentExtra(key, value, "long")
                     i += 3
                 }
+
                 token == "--ez" -> {
                     val key = tokens.getOrNull(i + 1)
                     val value = tokens.getOrNull(i + 2)
                     if (key != null && value != null) extras += IntentExtra(key, value, "boolean")
                     i += 3
                 }
+
                 token == "--ef" -> {
                     val key = tokens.getOrNull(i + 1)
                     val value = tokens.getOrNull(i + 2)
                     if (key != null && value != null) extras += IntentExtra(key, value, "float")
                     i += 3
                 }
+
                 token.startsWith("--activity-") -> {
                     flags += token.removePrefix("--activity-")
                     i += 1
                 }
+
                 token == "-f" -> {
                     // raw numeric flags — keep as flag token for the launcher
                     tokens.getOrNull(i + 1)?.let { flags += "raw:$it" }
                     i += 2
                 }
-                token == "-W" || token == "-D" || token == "--turn-screen-on" -> i += 1
+
+                token == "-W" || token == "-D" || token == "--turn-screen-on" -> {
+                    i += 1
+                }
+
                 else -> {
                     // Unknown switch with likely value — skip conservatively
                     i += if (token.startsWith("-")) 2 else 1
@@ -119,7 +135,7 @@ object AmStartArgumentsParser {
             dataUri = data,
             mimeType = mime,
             extras = extras,
-            activityFlags = flags
+            activityFlags = flags,
         )
     }
 
@@ -131,9 +147,15 @@ object AmStartArgumentsParser {
         return pkg to activity
     }
 
-    private fun expandActivity(pkg: String?, activity: String): String =
-        if (activity.startsWith(".") && pkg != null && !pkg.contains('%')) pkg + activity
-        else activity
+    private fun expandActivity(
+        pkg: String?,
+        activity: String,
+    ): String =
+        if (activity.startsWith(".") && pkg != null && !pkg.contains('%')) {
+            pkg + activity
+        } else {
+            activity
+        }
 
     /** Splits on whitespace/newlines, honoring single and double quotes. */
     internal fun tokenize(input: String): List<String> {
@@ -145,14 +167,21 @@ object AmStartArgumentsParser {
                 quote != null -> {
                     if (c == quote) quote = null else current.append(c)
                 }
-                c == '\'' || c == '"' -> quote = c
+
+                c == '\'' || c == '"' -> {
+                    quote = c
+                }
+
                 c.isWhitespace() -> {
                     if (current.isNotEmpty()) {
                         tokens += current.toString()
                         current.clear()
                     }
                 }
-                else -> current.append(c)
+
+                else -> {
+                    current.append(c)
+                }
             }
         }
         if (current.isNotEmpty()) tokens += current.toString()

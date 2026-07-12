@@ -12,17 +12,21 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 
 @Composable
-actual fun VideoPreview(path: String, modifier: Modifier) {
+actual fun VideoPreview(
+    path: String,
+    modifier: Modifier,
+) {
     val context = LocalContext.current
-    val player = remember(path) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(path))
-            repeatMode = Player.REPEAT_MODE_ONE
-            volume = 0f
-            playWhenReady = true
-            prepare()
+    val player =
+        remember(path) {
+            ExoPlayer.Builder(context).build().apply {
+                setMediaItem(MediaItem.fromUri(path))
+                repeatMode = Player.REPEAT_MODE_ONE
+                volume = 0f
+                playWhenReady = true
+                prepare()
+            }
         }
-    }
     DisposableEffect(path) {
         onDispose { player.release() }
     }
@@ -34,6 +38,6 @@ actual fun VideoPreview(path: String, modifier: Modifier) {
             }
         },
         update = { it.player = player },
-        modifier = modifier
+        modifier = modifier,
     )
 }

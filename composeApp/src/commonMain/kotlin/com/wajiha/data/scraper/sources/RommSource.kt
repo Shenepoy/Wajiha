@@ -21,52 +21,58 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /** RomM server (self-hosted library manager) — remote metadata/media sync. */
-class RommSource(private val http: HttpClient) : ScraperSource {
-
+class RommSource(
+    private val http: HttpClient,
+) : ScraperSource {
     override val id = "romm"
     override val displayName = "RomM"
 
-    override fun isConfigured(settings: ScraperSettings): Boolean =
-        settings.rommUrl.isNotBlank()
+    override fun isConfigured(settings: ScraperSettings): Boolean = settings.rommUrl.isNotBlank()
 
     override suspend fun lookupResult(
         query: ScrapeQuery,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ): SourceLookupOutcome = searchWithOutcome(query.fileName, query, settings).toLookupOutcome()
 
     override suspend fun search(
         name: String,
         query: ScrapeQuery,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ): List<ScrapeCandidate> = searchWithOutcome(name, query, settings).candidates
 
     private suspend fun searchWithOutcome(
         name: String,
         query: ScrapeQuery,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ): SourceSearchBundle {
         val base = settings.rommUrl.trimEnd('/')
-        val result = http.getStringResult("$base/api/roms") {
-            rommAuth(settings)
-            parameter("search_term", name)
-            parameter("limit", 10)
-        }
-        val body = when (result) {
-            is HttpJsonResult.Failed -> return SourceSearchBundle(emptyList(), result.failure)
-            is HttpJsonResult.Ok -> result.value
-        }
-        val roms = try {
-            try {
-                WajihaJson.Lenient.decodeFromString<RommPage>(body).items.orEmpty()
-            } catch (_: Exception) {
-                WajihaJson.Lenient.decodeFromString<List<RommRom>>(body)
+        val result =
+            http.getStringResult("$base/api/roms") {
+                rommAuth(settings)
+                parameter("search_term", name)
+                parameter("limit", 10)
             }
-        } catch (e: Exception) {
-            return SourceSearchBundle(
-                emptyList(),
-                ScrapeFailure(ScrapeFailureKind.Parse, e.message ?: "Parse failed")
-            )
-        }
+        val body =
+            when (result) {
+                is HttpJsonResult.Failed -> return SourceSearchBundle(emptyList(), result.failure)
+                is HttpJsonResult.Ok -> result.value
+            }
+        val roms =
+            try {
+                try {
+                    WajihaJson.Lenient
+                        .decodeFromString<RommPage>(body)
+                        .items
+                        .orEmpty()
+                } catch (_: Exception) {
+                    WajihaJson.Lenient.decodeFromString<List<RommRom>>(body)
+                }
+            } catch (e: Exception) {
+                return SourceSearchBundle(
+                    emptyList(),
+                    ScrapeFailure(ScrapeFailureKind.Parse, e.message ?: "Parse failed"),
+                )
+            }
         return SourceSearchBundle(
             roms.map { rom ->
                 val cover = rom.urlCover?.let { absolutize(base, it) }
@@ -74,34 +80,40 @@ class RommSource(private val http: HttpClient) : ScraperSource {
                     sourceId = id,
                     sourceGameId = rom.id.toString(),
                     name = rom.name ?: rom.fileName ?: "?",
-                    metadata = ScrapedMetadata(
-                        name = rom.name,
-                        description = rom.summary,
-                        genre = rom.genres?.joinToString(),
-                        rating = rom.rating?.toFloatOrNull()
-                    ),
-                    media = buildList {
-                        cover?.let { add(MediaCandidate(type = MediaType.Boxart, url = it)) }
-                        rom.urlScreenshots.orEmpty().forEach {
-                            add(
-                                MediaCandidate(
-                                    type = MediaType.Screenshot,
-                                    url = absolutize(base, it)
+                    metadata =
+                        ScrapedMetadata(
+                            name = rom.name,
+                            description = rom.summary,
+                            genre = rom.genres?.joinToString(),
+                            rating = rom.rating?.toFloatOrNull(),
+                        ),
+                    media =
+                        buildList {
+                            cover?.let { add(MediaCandidate(type = MediaType.Boxart, url = it)) }
+                            rom.urlScreenshots.orEmpty().forEach {
+                                add(
+                                    MediaCandidate(
+                                        type = MediaType.Screenshot,
+                                        url = absolutize(base, it),
+                                    ),
                                 )
-                            )
-                        }
-                    },
-                    thumbnailUrl = cover
+                            }
+                        },
+                    thumbnailUrl = cover,
                 )
-            }
+            },
         )
     }
 
-    private fun absolutize(base: String, path: String): String =
-        if (path.startsWith("http")) path else "$base/${path.trimStart('/')}"
+    private fun absolutize(
+        base: String,
+        path: String,
+    ): String = if (path.startsWith("http")) path else "$base/${path.trimStart('/')}"
 
     @Serializable
-    private data class RommPage(val items: List<RommRom>? = null)
+    private data class RommPage(
+        val items: List<RommRom>? = null,
+    )
 
     @Serializable
     private data class RommRom(
@@ -112,6 +124,6 @@ class RommSource(private val http: HttpClient) : ScraperSource {
         val genres: List<String>? = null,
         val rating: String? = null,
         @SerialName("url_cover") val urlCover: String? = null,
-        @SerialName("url_screenshots") val urlScreenshots: List<String>? = null
+        @SerialName("url_screenshots") val urlScreenshots: List<String>? = null,
     )
 }

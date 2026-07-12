@@ -34,7 +34,7 @@ fun GamepadNumberStepper(
     range: IntRange = 0..100,
     step: Int = 1,
     valueLabel: (Int) -> String = { it.toString() },
-    enabled: Boolean = true
+    enabled: Boolean = true,
 ) {
     val canDecrease = enabled && value > range.first
     val canIncrease = enabled && value < range.last
@@ -48,46 +48,51 @@ fun GamepadNumberStepper(
     }
 
     Row(
-        modifier = modifier
-            .clip(WajihaShapes.chip)
-            .background(containerColor),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            modifier
+                .clip(WajihaShapes.chip)
+                .background(containerColor),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         StepperSegment(
             text = "−",
             enabled = canDecrease,
             shape = segmentShape,
-            modifier = Modifier.pointerInput(canDecrease, value, step) {
-                if (canDecrease) detectTapGestures { adjust(-step) }
-            }
+            modifier =
+                Modifier.pointerInput(canDecrease, value, step) {
+                    if (canDecrease) detectTapGestures { adjust(-step) }
+                },
         )
         Box(
-            modifier = Modifier
-                .widthIn(min = 44.dp)
-                .defaultMinSize(minHeight = WajihaSpacing.touchMin - WajihaSpacing.xs)
-                .padding(horizontal = WajihaSpacing.sm),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .widthIn(min = 44.dp)
+                    .defaultMinSize(minHeight = WajihaSpacing.touchMin - WajihaSpacing.xs)
+                    .padding(horizontal = WajihaSpacing.sm),
+            contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = valueLabel(value),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = if (enabled) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                },
+                color =
+                    if (enabled) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    },
                 textAlign = TextAlign.Center,
-                maxLines = 1
+                maxLines = 1,
             )
         }
         StepperSegment(
             text = "+",
             enabled = canIncrease,
             shape = segmentShape,
-            modifier = Modifier.pointerInput(canIncrease, value, step) {
-                if (canIncrease) detectTapGestures { adjust(step) }
-            }
+            modifier =
+                Modifier.pointerInput(canIncrease, value, step) {
+                    if (canIncrease) detectTapGestures { adjust(step) }
+                },
         )
     }
 }
@@ -97,32 +102,35 @@ private fun StepperSegment(
     text: String,
     enabled: Boolean,
     shape: androidx.compose.ui.graphics.Shape,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val bg = if (enabled) {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-    } else {
-        Color.Transparent
-    }
-    val fg = if (enabled) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-    }
+    val bg =
+        if (enabled) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        } else {
+            Color.Transparent
+        }
+    val fg =
+        if (enabled) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+        }
     Box(
-        modifier = modifier
-            .defaultMinSize(minWidth = 36.dp, minHeight = WajihaSpacing.touchMin - WajihaSpacing.xs)
-            .clip(shape)
-            .background(bg)
-            .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs / 2),
-        contentAlignment = Alignment.Center
+        modifier =
+            modifier
+                .defaultMinSize(minWidth = 36.dp, minHeight = WajihaSpacing.touchMin - WajihaSpacing.xs)
+                .clip(shape)
+                .background(bg)
+                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs / 2),
+        contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = fg,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
         )
     }
 }

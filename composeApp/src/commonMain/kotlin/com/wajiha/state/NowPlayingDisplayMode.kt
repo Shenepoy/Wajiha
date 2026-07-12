@@ -5,7 +5,8 @@ enum class NowPlayingDisplayMode {
     None,
     GridTiles,
     FloatingChip,
-    Both;
+    Both,
+    ;
 
     val showsGridTiles: Boolean
         get() = this == GridTiles || this == Both
@@ -14,7 +15,6 @@ enum class NowPlayingDisplayMode {
         get() = this == FloatingChip || this == Both
 
     companion object {
-        fun fromName(value: String?): NowPlayingDisplayMode =
-            entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: Both
+        fun fromName(value: String?): NowPlayingDisplayMode = entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: Both
     }
 }

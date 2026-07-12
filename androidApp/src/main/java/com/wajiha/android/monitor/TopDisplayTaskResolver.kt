@@ -16,11 +16,10 @@ import com.wajiha.log.WajihaTags
  * switch and alive checks on Thor.
  */
 internal object TopDisplayTaskResolver {
-
     fun taskIdForPackage(
         context: Context,
         packageName: String,
-        displayId: Int = Display.DEFAULT_DISPLAY
+        displayId: Int = Display.DEFAULT_DISPLAY,
     ): Int? {
         tasksOnDisplay(context, displayId)
             .firstOrNull { task -> taskPackage(task) == packageName }
@@ -33,19 +32,17 @@ internal object TopDisplayTaskResolver {
     fun taskIdForActivityClass(
         context: Context,
         activityClass: Class<*>,
-        displayId: Int = Display.DEFAULT_DISPLAY
+        displayId: Int = Display.DEFAULT_DISPLAY,
     ): Int? {
         val name = activityClass.name
         tasksOnDisplay(context, displayId)
             .firstOrNull { task ->
                 task.topActivity?.className == name || task.baseActivity?.className == name
-            }
-            ?.let { return taskId(it) }
+            }?.let { return taskId(it) }
         return allRunningTasks(context)
             .firstOrNull { task ->
                 task.topActivity?.className == name || task.baseActivity?.className == name
-            }
-            ?.let { taskId(it) }
+            }?.let { taskId(it) }
     }
 
     /** All packages with a running task (any visibility / display). */
@@ -55,39 +52,49 @@ internal object TopDisplayTaskResolver {
             .toSet()
 
     /** Bring an existing emulation activity back without cold-starting. */
-    fun reorderPackageToFront(context: Context, packageName: String): Boolean {
-        val task = allRunningTasks(context).firstOrNull { taskPackage(it) == packageName }
-            ?: return false
+    fun reorderPackageToFront(
+        context: Context,
+        packageName: String,
+    ): Boolean {
+        val task =
+            allRunningTasks(context).firstOrNull { taskPackage(it) == packageName }
+                ?: return false
         val component = task.topActivity ?: task.baseActivity ?: return false
         return reorderComponentToFront(context, component)
     }
 
-    fun reorderComponentToFront(context: Context, component: ComponentName): Boolean =
+    fun reorderComponentToFront(
+        context: Context,
+        component: ComponentName,
+    ): Boolean =
         try {
-            val intent = Intent().setComponent(component).addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
-            )
-            val options = ActivityOptions.makeBasic()
-                .setLaunchDisplayId(Display.DEFAULT_DISPLAY)
+            val intent =
+                Intent().setComponent(component).addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                )
+            val options =
+                ActivityOptions
+                    .makeBasic()
+                    .setLaunchDisplayId(Display.DEFAULT_DISPLAY)
             context.startActivity(intent, options.toBundle())
             WajihaLog.i(
                 WajihaTags.DISPLAY,
-                "reorderComponentToFront: ${component.flattenToShortString()}"
+                "reorderComponentToFront: ${component.flattenToShortString()}",
             )
             true
         } catch (e: Exception) {
             WajihaLog.w(
                 WajihaTags.DISPLAY,
-                "reorderComponentToFront: failed ${component.packageName} — ${e.message}"
+                "reorderComponentToFront: failed ${component.packageName} — ${e.message}",
             )
             false
         }
 
     fun tasksOnDisplay(
         context: Context,
-        displayId: Int = Display.DEFAULT_DISPLAY
+        displayId: Int = Display.DEFAULT_DISPLAY,
     ): List<ActivityManager.RunningTaskInfo> {
         val fromAtm = queryViaActivityTaskManager(displayId)
         if (fromAtm.isNotEmpty()) return fromAtm
@@ -103,24 +110,26 @@ internal object TopDisplayTaskResolver {
             emptyList()
         }
 
-    private fun queryViaActivityTaskManager(
-        displayId: Int
-    ): List<ActivityManager.RunningTaskInfo> = try {
-        val atmClass = Class.forName("android.app.ActivityTaskManager")
-        val service = atmClass.getMethod("getService").invoke(null)
-        val getTasks = service.javaClass.getMethod(
-            "getTasks",
-            Int::class.javaPrimitiveType,
-            Boolean::class.javaPrimitiveType,
-            Boolean::class.javaPrimitiveType,
-            Int::class.javaPrimitiveType
-        )
-        @Suppress("UNCHECKED_CAST")
-        (getTasks.invoke(service, 100, false, false, displayId)
-            as? List<ActivityManager.RunningTaskInfo>).orEmpty()
-    } catch (_: Exception) {
-        emptyList()
-    }
+    private fun queryViaActivityTaskManager(displayId: Int): List<ActivityManager.RunningTaskInfo> =
+        try {
+            val atmClass = Class.forName("android.app.ActivityTaskManager")
+            val service = atmClass.getMethod("getService").invoke(null)
+            val getTasks =
+                service.javaClass.getMethod(
+                    "getTasks",
+                    Int::class.javaPrimitiveType,
+                    Boolean::class.javaPrimitiveType,
+                    Boolean::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                )
+            @Suppress("UNCHECKED_CAST")
+            (
+                getTasks.invoke(service, 100, false, false, displayId)
+                    as? List<ActivityManager.RunningTaskInfo>
+            ).orEmpty()
+        } catch (_: Exception) {
+            emptyList()
+        }
 
     private fun taskPackage(task: ActivityManager.RunningTaskInfo): String? =
         task.topActivity?.packageName ?: task.baseActivity?.packageName

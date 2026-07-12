@@ -11,11 +11,13 @@ import androidx.compose.runtime.staticCompositionLocalOf
 
 enum class InputMode {
     Gamepad,
-    Touch
+    Touch,
 }
 
 @Stable
-class InputModeController(initial: InputMode = InputMode.Gamepad) {
+class InputModeController(
+    initial: InputMode = InputMode.Gamepad,
+) {
     var mode by mutableStateOf(initial)
         private set
 
@@ -29,8 +31,7 @@ class InputModeController(initial: InputMode = InputMode.Gamepad) {
 }
 
 @Composable
-fun rememberInputModeController(initial: InputMode = InputMode.Gamepad): InputModeController =
-    remember { InputModeController(initial) }
+fun rememberInputModeController(initial: InputMode = InputMode.Gamepad): InputModeController = remember { InputModeController(initial) }
 
 val LocalInputMode = compositionLocalOf { InputMode.Touch }
 
@@ -40,8 +41,10 @@ val LocalInputModeController = staticCompositionLocalOf<InputModeController?> { 
 enum class GamepadFocusChromeScope {
     /** Hide focus chrome while touch mode is active; restore on gamepad key. */
     Default,
+
     /** Game grid tiles — always show nav/selection chrome. */
     GameGrid,
+
     /** Context menus — always show item focus while navigating. */
     Menu,
 }
@@ -57,7 +60,9 @@ fun showGamepadChrome(highlighted: Boolean = true): Boolean {
     if (!highlighted) return false
     return when (LocalGamepadFocusChromeScope.current) {
         GamepadFocusChromeScope.GameGrid,
-        GamepadFocusChromeScope.Menu -> true
+        GamepadFocusChromeScope.Menu,
+        -> true
+
         GamepadFocusChromeScope.Default -> LocalInputMode.current == InputMode.Gamepad
     }
 }

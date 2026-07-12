@@ -32,7 +32,6 @@ import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
-
     private val sessionTracker: PlaySessionTracker by inject()
     private val dualScreenStore: DualScreenStore by inject()
     private val displayCoordinator: DisplayCoordinator by inject()
@@ -65,7 +64,7 @@ class MainActivity : ComponentActivity() {
         WajihaLog.i(
             WajihaTags.DISPLAY,
             "onCreate: displayId=$displayId taskId=$taskId " +
-                "intent=${intent?.action ?: intent?.categories?.joinToString()}"
+                "intent=${intent?.action ?: intent?.categories?.joinToString()}",
         )
 
         // Drawer/HOME can land singleTask MainActivity on the bottom display;
@@ -111,7 +110,7 @@ class MainActivity : ComponentActivity() {
             owner = GamepadOwner.Primary,
             event = event,
             gamepadGate = gamepadGate,
-            gamepadKeyRouter = gamepadKeyRouter
+            gamepadKeyRouter = gamepadKeyRouter,
         ) { super.dispatchKeyEvent(it) }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
@@ -136,7 +135,7 @@ class MainActivity : ComponentActivity() {
         WajihaLog.i(
             WajihaTags.DISPLAY,
             "onNewIntent: displayId=$displayId taskId=$taskId " +
-                "intent=${intent.action ?: intent.categories?.joinToString()}"
+                "intent=${intent.action ?: intent.categories?.joinToString()}",
         )
         // singleTask can deliver LAUNCHER/HOME while the task sits on the
         // wrong display — re-hop to display 0.

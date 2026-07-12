@@ -12,29 +12,45 @@ interface ScraperSource {
     fun isConfigured(settings: ScraperSettings): Boolean
 
     /** Best automatic match for a query (hit / miss / failed). */
-    suspend fun lookupResult(query: ScrapeQuery, settings: ScraperSettings): SourceLookupOutcome
+    suspend fun lookupResult(
+        query: ScrapeQuery,
+        settings: ScraperSettings,
+    ): SourceLookupOutcome
 
     /** Convenience unwrap of [lookupResult] for callers that only need a candidate. */
-    suspend fun lookup(query: ScrapeQuery, settings: ScraperSettings): ScrapeCandidate? =
-        (lookupResult(query, settings) as? SourceLookupOutcome.Hit)?.candidate
+    suspend fun lookup(
+        query: ScrapeQuery,
+        settings: ScraperSettings,
+    ): ScrapeCandidate? = (lookupResult(query, settings) as? SourceLookupOutcome.Hit)?.candidate
 
     /** Manual search by name for the match UI. */
     suspend fun search(
         name: String,
         query: ScrapeQuery,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ): List<ScrapeCandidate>
 }
 
 /** Local media file resolution (ES-DE layout), implemented per platform. */
 interface LocalMediaFiles {
     /** Returns an existing local path for the game/type or null. */
-    fun find(mediaRoot: String, platformShortName: String, romBaseName: String, type: MediaType): String?
+    fun find(
+        mediaRoot: String,
+        platformShortName: String,
+        romBaseName: String,
+        type: MediaType,
+    ): String?
 }
 
 /** Persisted media file storage for downloaded assets. */
 interface MediaStorage {
     /** Saves bytes, returns the absolute path. */
-    suspend fun save(gameId: Long, type: MediaType, extension: String, bytes: ByteArray): String
+    suspend fun save(
+        gameId: Long,
+        type: MediaType,
+        extension: String,
+        bytes: ByteArray,
+    ): String
+
     suspend fun delete(path: String)
 }

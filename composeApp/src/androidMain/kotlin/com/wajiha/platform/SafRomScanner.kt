@@ -10,19 +10,21 @@ import kotlinx.coroutines.withContext
  * Walks a persisted SAF tree with DocumentsContract child queries (much
  * faster than DocumentFile). Depth-limited, extension-filtered.
  */
-class SafRomScanner(private val context: Context) : RomScanner {
-
+class SafRomScanner(
+    private val context: Context,
+) : RomScanner {
     override suspend fun scan(
         treeUri: String,
         extensions: Set<String>,
-        maxDepth: Int
-    ): List<ScannedRom> = withContext(Dispatchers.IO) {
-        val tree = Uri.parse(treeUri)
-        val rootDocId = DocumentsContract.getTreeDocumentId(tree)
-        val results = mutableListOf<ScannedRom>()
-        walk(tree, rootDocId, extensions, maxDepth, 0, results)
-        results
-    }
+        maxDepth: Int,
+    ): List<ScannedRom> =
+        withContext(Dispatchers.IO) {
+            val tree = Uri.parse(treeUri)
+            val rootDocId = DocumentsContract.getTreeDocumentId(tree)
+            val results = mutableListOf<ScannedRom>()
+            walk(tree, rootDocId, extensions, maxDepth, 0, results)
+            results
+        }
 
     private fun walk(
         tree: Uri,
@@ -30,22 +32,24 @@ class SafRomScanner(private val context: Context) : RomScanner {
         extensions: Set<String>,
         maxDepth: Int,
         depth: Int,
-        out: MutableList<ScannedRom>
+        out: MutableList<ScannedRom>,
     ) {
         if (depth > maxDepth) return
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentDocId)
-        val projection = arrayOf(
-            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-            DocumentsContract.Document.COLUMN_MIME_TYPE,
-            DocumentsContract.Document.COLUMN_SIZE,
-            DocumentsContract.Document.COLUMN_LAST_MODIFIED
-        )
-        val cursor = try {
-            context.contentResolver.query(childrenUri, projection, null, null, null)
-        } catch (_: Exception) {
-            null
-        } ?: return
+        val projection =
+            arrayOf(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE,
+                DocumentsContract.Document.COLUMN_SIZE,
+                DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+            )
+        val cursor =
+            try {
+                context.contentResolver.query(childrenUri, projection, null, null, null)
+            } catch (_: Exception) {
+                null
+            } ?: return
 
         cursor.use { c ->
             while (c.moveToNext()) {
@@ -61,13 +65,14 @@ class SafRomScanner(private val context: Context) : RomScanner {
                 val ext = name.substringAfterLast('.', "").lowercase()
                 if (ext.isEmpty() || ext !in extensions) continue
                 val uri = DocumentsContract.buildDocumentUriUsingTree(tree, docId)
-                out += ScannedRom(
-                    uri = uri.toString(),
-                    fileName = name,
-                    size = if (c.isNull(3)) 0 else c.getLong(3),
-                    lastModified = if (c.isNull(4)) 0 else c.getLong(4),
-                    parentId = parentDocId
-                )
+                out +=
+                    ScannedRom(
+                        uri = uri.toString(),
+                        fileName = name,
+                        size = if (c.isNull(3)) 0 else c.getLong(3),
+                        lastModified = if (c.isNull(4)) 0 else c.getLong(4),
+                        parentId = parentDocId,
+                    )
             }
         }
     }

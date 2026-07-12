@@ -1,17 +1,26 @@
 package com.wajiha.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -26,78 +35,71 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import com.wajiha.data.prefs.AppSettings
-import com.wajiha.data.prefs.SettingsRepository
-import com.wajiha.data.db.PlatformEntity
-import com.wajiha.data.db.RomFolderEntity
-import com.wajiha.platform.PermissionStates
-import com.wajiha.platform.SystemControls
-import com.wajiha.input.GamepadKeys
-import com.wajiha.input.GamepadLayers
-import com.wajiha.input.requestContentFocus
-import com.wajiha.ui.components.FolderTabRow
-import com.wajiha.ui.components.WajihaEmptyState
-import com.wajiha.ui.components.WajihaScreen
-import com.wajiha.ui.components.WajihaToolbar
-import com.wajiha.ui.components.LocalUiFeedback
-import com.wajiha.state.GamepadOwner
-import com.wajiha.state.DualScreenStore
-import org.koin.compose.koinInject
-import com.wajiha.ui.components.gamepad.GamepadButton
-import com.wajiha.ui.components.gamepad.GamepadFocusable
-import com.wajiha.ui.components.gamepad.GamepadSettingRow
-import com.wajiha.ui.components.gamepad.MultiChoiceOption
-import com.wajiha.ui.components.gamepad.SettingType
-import com.wajiha.ui.components.gamepad.SettingSectionScrollColumn
-import com.wajiha.ui.components.gamepad.settingsGamepadHints
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import com.wajiha.data.db.PlatformEntity
+import com.wajiha.data.db.RomFolderEntity
+import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.FocusIndicatorPreferenceValues
-import com.wajiha.ui.components.gamepad.GamepadSafeTextField
-import com.wajiha.ui.components.gamepad.LocalSettingSectionScroll
-import com.wajiha.ui.components.gamepad.scrollHeaderToTop
-import com.wajiha.ui.theme.FocusIndicatorDefaults
-import com.wajiha.ui.theme.focusColorDisplayLabel
-import com.wajiha.ui.theme.focusColorPreview
+import com.wajiha.data.prefs.SettingsRepository
+import com.wajiha.input.GamepadKeys
+import com.wajiha.input.GamepadLayers
+import com.wajiha.input.requestContentFocus
 import com.wajiha.input.wajihaGamepadFocus
+import com.wajiha.platform.PermissionStates
+import com.wajiha.platform.SystemControls
+import com.wajiha.state.DualScreenStore
+import com.wajiha.state.GamepadOwner
+import com.wajiha.ui.components.FolderTabRow
+import com.wajiha.ui.components.LocalUiFeedback
+import com.wajiha.ui.components.WajihaEmptyState
+import com.wajiha.ui.components.WajihaScreen
+import com.wajiha.ui.components.WajihaToolbar
+import com.wajiha.ui.components.gamepad.GamepadButton
+import com.wajiha.ui.components.gamepad.GamepadFocusable
+import com.wajiha.ui.components.gamepad.GamepadSafeTextField
+import com.wajiha.ui.components.gamepad.GamepadSettingRow
+import com.wajiha.ui.components.gamepad.LocalSettingSectionScroll
+import com.wajiha.ui.components.gamepad.MultiChoiceOption
+import com.wajiha.ui.components.gamepad.SettingSectionScrollColumn
+import com.wajiha.ui.components.gamepad.SettingType
+import com.wajiha.ui.components.gamepad.scrollHeaderToTop
+import com.wajiha.ui.components.gamepad.settingsGamepadHints
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
-import kotlinx.coroutines.delay
 import com.wajiha.ui.scraper.ScraperPageContent
 import com.wajiha.ui.scraper.ScraperViewModel
+import com.wajiha.ui.theme.FocusIndicatorDefaults
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
+import com.wajiha.ui.theme.focusColorDisplayLabel
+import com.wajiha.ui.theme.focusColorPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import org.koin.compose.koinInject
 
-private enum class SettingsSection(val label: String) {
+private enum class SettingsSection(
+    val label: String,
+) {
     Library("Library"),
     Scraper("Scraper"),
     DualScreen("Dual screen"),
     Appearance("Appearance"),
-    System("System")
+    System("System"),
 }
 
 /**
@@ -113,7 +115,7 @@ fun SettingsScreen(
     onSectionChange: (String) -> Unit = {},
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val inUsePlatforms by settingsViewModel.inUsePlatforms.collectAsState()
     val folders by settingsViewModel.folders.collectAsState()
@@ -164,48 +166,59 @@ fun SettingsScreen(
                     if (selectedSectionIndex > 0) {
                         selectSection(selectedSectionIndex - 1)
                         true
-                    } else false
+                    } else {
+                        false
+                    }
                 }
+
                 GamepadKeys.isR1(event.type, event.key) -> {
                     if (selectedSectionIndex < sections.lastIndex) {
                         selectSection(selectedSectionIndex + 1)
                         true
-                    } else false
+                    } else {
+                        false
+                    }
                 }
-                else -> false
+
+                else -> {
+                    false
+                }
             }
-        }
+        },
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             WajihaToolbar(title = "Wajiha Settings", onBack = onBack, backFocusable = false)
 
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = WajihaSpacing.md)
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = WajihaSpacing.md),
             ) {
                 FolderTabRow(
                     tabs = sections.map { it.label },
                     selectedIndex = selectedSectionIndex,
                     onSelect = ::selectSection,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusProperties { canFocus = false }
-                        .padding(
-                            top = WajihaSpacing.sm,
-                            bottom = 0.dp
-                        )
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .focusProperties { canFocus = false }
+                            .padding(
+                                top = WajihaSpacing.sm,
+                                bottom = 0.dp,
+                            ),
                 )
 
                 val selectedSection = sections[selectedSectionIndex]
                 SettingsSectionCard(
                     folderPanel = true,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .offset(y = (-1).dp)
-                        .padding(bottom = WajihaSpacing.md)
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .offset(y = (-1).dp)
+                            .padding(bottom = WajihaSpacing.md),
                 ) {
                     when (selectedSection) {
                         SettingsSection.Library -> {
@@ -216,38 +229,42 @@ fun SettingsScreen(
                                 onOpenPlatform = onOpenPlatform,
                                 onRescanLibrary = settingsViewModel::rescanLibrary,
                                 onRescanPlatform = settingsViewModel::rescanPlatform,
-                                firstFocusRequester = sectionFocus
+                                firstFocusRequester = sectionFocus,
                             )
                         }
+
                         SettingsSection.Scraper -> {
                             ScraperSectionContent(
                                 scraperViewModel = scraperViewModel,
-                                firstFocusRequester = sectionFocus
+                                firstFocusRequester = sectionFocus,
                             )
                         }
+
                         SettingsSection.DualScreen -> {
                             DualScreenSectionContent(
                                 settings = settings,
                                 settingsViewModel = settingsViewModel,
                                 perms = perms,
                                 systemControls = systemControls,
-                                firstFocusRequester = sectionFocus
+                                firstFocusRequester = sectionFocus,
                             )
                         }
+
                         SettingsSection.Appearance -> {
                             AppearanceSectionContent(
                                 settings = settings,
                                 settingsViewModel = settingsViewModel,
-                                firstFocusRequester = sectionFocus
+                                firstFocusRequester = sectionFocus,
                             )
                         }
+
                         SettingsSection.System -> {
                             SystemSectionContent(
                                 settings = settings,
                                 settingsViewModel = settingsViewModel,
                                 perms = perms,
                                 systemControls = systemControls,
-                                firstFocusRequester = sectionFocus
+                                firstFocusRequester = sectionFocus,
                             )
                         }
                     }
@@ -265,27 +282,27 @@ private fun LibrarySectionContent(
     onOpenPlatform: (String) -> Unit,
     onRescanLibrary: () -> Unit,
     onRescanPlatform: (String) -> Unit,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     SettingsSectionBlurb(
         "Manage platforms, ROM folders, and emulators. " +
-            "Only systems you've added appear here."
+            "Only systems you've added appear here.",
     )
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
         GamepadButton(
             text = "Add platform",
             onClick = onAddPlatform,
             modifier = Modifier.weight(1f),
-            focusRequester = firstFocusRequester
+            focusRequester = firstFocusRequester,
         )
         GamepadButton(
             text = "Rescan all",
             onClick = onRescanLibrary,
             outlined = true,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
     }
     if (inUsePlatforms.isEmpty()) {
@@ -296,13 +313,13 @@ private fun LibrarySectionContent(
                 GamepadButton(
                     text = "Add platform",
                     onClick = onAddPlatform,
-                    focusRequester = firstFocusRequester
+                    focusRequester = firstFocusRequester,
                 )
-            }
+            },
         )
     } else {
         Column(
-            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             inUsePlatforms.forEach { platform ->
                 val platformFolders = folders.filter { it.platformId == platform.id }
@@ -310,7 +327,7 @@ private fun LibrarySectionContent(
                     platform = platform,
                     folders = platformFolders,
                     onOpen = { onOpenPlatform(platform.id) },
-                    onRescan = { onRescanPlatform(platform.id) }
+                    onRescan = { onRescanPlatform(platform.id) },
                 )
             }
         }
@@ -320,7 +337,7 @@ private fun LibrarySectionContent(
 @Composable
 private fun ScraperSectionContent(
     scraperViewModel: ScraperViewModel,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     ScraperPageContent(scraperViewModel, firstFocusRequester)
 }
@@ -331,10 +348,10 @@ private fun DualScreenSectionContent(
     settingsViewModel: SettingsViewModel,
     perms: PermissionStates,
     systemControls: SystemControls,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     SettingsSectionBlurb(
-        "Control how Wajiha uses the top and bottom displays on clamshell handhelds."
+        "Control how Wajiha uses the top and bottom displays on clamshell handhelds.",
     )
     SettingsToggleRow(
         label = "Black out unused display when a game starts",
@@ -343,38 +360,41 @@ private fun DualScreenSectionContent(
         onCheckedChange = settingsViewModel::setBlackoutOnLaunch,
         defaultChecked = false,
         onReset = { settingsViewModel.setBlackoutOnLaunch(false) },
-        focusRequester = firstFocusRequester
+        focusRequester = firstFocusRequester,
     )
     SettingsGroupDivider()
     SettingsToggleRow(
         label = "Show Now Playing for games launched outside Wajiha",
-        description = "Detect when another app launches a game and " +
-            "show Now Playing on the secondary display.",
+        description =
+            "Detect when another app launches a game and " +
+                "show Now Playing on the secondary display.",
         checked = settings.detectManualLaunches,
         onCheckedChange = settingsViewModel::setDetectManualLaunches,
         defaultChecked = true,
-        onReset = { settingsViewModel.setDetectManualLaunches(true) }
+        onReset = { settingsViewModel.setDetectManualLaunches(true) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
         label = "Close runaway games when memory is low",
-        description = "Force-stop emulator sessions that balloon RAM so the " +
-            "device stays responsive. May lose unsaved progress.",
+        description =
+            "Force-stop emulator sessions that balloon RAM so the " +
+                "device stays responsive. May lose unsaved progress.",
         checked = settings.memoryGuardEnabled,
         onCheckedChange = settingsViewModel::setMemoryGuardEnabled,
         defaultChecked = true,
-        onReset = { settingsViewModel.setMemoryGuardEnabled(true) }
+        onReset = { settingsViewModel.setMemoryGuardEnabled(true) },
     )
     if (settings.detectManualLaunches) {
         SettingsGroupDivider()
         SettingsToggleRow(
             label = "Identify game from emulator files",
-            description = if (perms.allFilesAccess) {
-                "Read emulator config to match externally launched games to your library. " +
-                    "Does not access your ROM folders."
-            } else {
-                "Requires All files access (System section). Reads emulator config only."
-            },
+            description =
+                if (perms.allFilesAccess) {
+                    "Read emulator config to match externally launched games to your library. " +
+                        "Does not access your ROM folders."
+                } else {
+                    "Requires All files access (System section). Reads emulator config only."
+                },
             checked = settings.romReconciliationEnabled && perms.allFilesAccess,
             onCheckedChange = { enabled ->
                 if (enabled && !perms.allFilesAccess) {
@@ -384,7 +404,7 @@ private fun DualScreenSectionContent(
                 }
             },
             defaultChecked = false,
-            onReset = { settingsViewModel.setRomReconciliationEnabled(false) }
+            onReset = { settingsViewModel.setRomReconciliationEnabled(false) },
         )
     }
     SettingsGroupDivider()
@@ -394,68 +414,74 @@ private fun DualScreenSectionContent(
         checked = settings.swapScreenRoles,
         onCheckedChange = settingsViewModel::setSwapScreenRoles,
         defaultChecked = false,
-        onReset = { settingsViewModel.setSwapScreenRoles(false) }
+        onReset = { settingsViewModel.setSwapScreenRoles(false) },
     )
     SettingsGroupDivider()
     SettingsMultiChoiceRow(
         label = "Bottom screen while a game runs",
-        description = "Choose what the secondary display shows after you launch a game. " +
-            "Blackout turns the bottom screen off until you tap it.",
-        choiceOptions = listOf(
-            MultiChoiceOption("NowPlaying", "Now Running", icon = "▶"),
-            MultiChoiceOption("QuickSettings", "Quick Settings", icon = "⚙"),
-            MultiChoiceOption("RunningApps", "Running Apps", icon = "▣"),
-            MultiChoiceOption("Achievements", "Achievements", icon = "★"),
-            MultiChoiceOption("Clock", "Clock", icon = "◷"),
-            MultiChoiceOption(
-                value = "Off",
-                label = "Blackout",
-                description = "Screen off until you tap it.",
-                icon = "◼"
-            )
-        ),
+        description =
+            "Choose what the secondary display shows after you launch a game. " +
+                "Blackout turns the bottom screen off until you tap it.",
+        choiceOptions =
+            listOf(
+                MultiChoiceOption("NowPlaying", "Now Running", icon = "▶"),
+                MultiChoiceOption("QuickSettings", "Quick Settings", icon = "⚙"),
+                MultiChoiceOption("RunningApps", "Running Apps", icon = "▣"),
+                MultiChoiceOption("Achievements", "Achievements", icon = "★"),
+                MultiChoiceOption("Clock", "Clock", icon = "◷"),
+                MultiChoiceOption(
+                    value = "Off",
+                    label = "Blackout",
+                    description = "Screen off until you tap it.",
+                    icon = "◼",
+                ),
+            ),
         selected = settings.gameSecondaryMode,
         onSelect = settingsViewModel::setGameSecondaryMode,
         defaultValue = "NowPlaying",
-        onReset = { settingsViewModel.setGameSecondaryMode("NowPlaying") }
+        onReset = { settingsViewModel.setGameSecondaryMode("NowPlaying") },
     )
     SettingsGroupDivider()
     SettingsMultiChoiceRow(
         label = "Show active sessions",
-        description = "Choose how running games appear on the bottom screen while you play. " +
-            "None hides session indicators; grid tiles sit in the game strip; " +
-            "the floating chip stays above the action bar.",
-        choiceOptions = listOf(
-            MultiChoiceOption("None", "None", icon = "○"),
-            MultiChoiceOption("GridTiles", "Grid tiles", icon = "▦"),
-            MultiChoiceOption("FloatingChip", "Floating chip", icon = "◉"),
-            MultiChoiceOption("Both", "Both", icon = "⊞")
-        ),
+        description =
+            "Choose how running games appear on the bottom screen while you play. " +
+                "None hides session indicators; grid tiles sit in the game strip; " +
+                "the floating chip stays above the action bar.",
+        choiceOptions =
+            listOf(
+                MultiChoiceOption("None", "None", icon = "○"),
+                MultiChoiceOption("GridTiles", "Grid tiles", icon = "▦"),
+                MultiChoiceOption("FloatingChip", "Floating chip", icon = "◉"),
+                MultiChoiceOption("Both", "Both", icon = "⊞"),
+            ),
         selected = settings.nowPlayingDisplay,
         onSelect = settingsViewModel::setNowPlayingDisplay,
         defaultValue = "Both",
-        onReset = { settingsViewModel.setNowPlayingDisplay("Both") }
+        onReset = { settingsViewModel.setNowPlayingDisplay("Both") },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
         label = "Dim bottom screen while a game runs",
-        description = "Darken the secondary display during gameplay. " +
-            "Blackout (Off) still turns the screen fully off.",
+        description =
+            "Darken the secondary display during gameplay. " +
+                "Blackout (Off) still turns the screen fully off.",
         checked = settings.gameDimEnabled,
         onCheckedChange = settingsViewModel::setGameDimEnabled,
         defaultChecked = false,
-        onReset = { settingsViewModel.setGameDimEnabled(false) }
+        onReset = { settingsViewModel.setGameDimEnabled(false) },
     )
     if (settings.gameDimEnabled) {
         SettingsGroupDivider()
         SettingsToggleRow(
             label = "Dim only on Now Playing page",
-            description = "When on, the dim scrim applies only while the bottom screen shows Now Playing. " +
-                "When off, dim applies on any secondary screen except Blackout.",
+            description =
+                "When on, the dim scrim applies only while the bottom screen shows Now Playing. " +
+                    "When off, dim applies on any secondary screen except Blackout.",
             checked = settings.gameDimOnlyOnNowPlaying,
             onCheckedChange = settingsViewModel::setGameDimOnlyOnNowPlaying,
             defaultChecked = true,
-            onReset = { settingsViewModel.setGameDimOnlyOnNowPlaying(true) }
+            onReset = { settingsViewModel.setGameDimOnlyOnNowPlaying(true) },
         )
         SettingsGroupDivider()
         SettingsNumberRow(
@@ -467,26 +493,27 @@ private fun DualScreenSectionContent(
             step = 10,
             valueLabel = { "$it%" },
             defaultValue = 90,
-            onReset = { settingsViewModel.setGameDimPercent(90) }
+            onReset = { settingsViewModel.setGameDimPercent(90) },
         )
         SettingsGroupDivider()
         SettingsNumberRow(
             label = "Dim after (seconds)",
-            description = "Wait before dimming after gameplay starts. Lifts while you use the bottom screen; " +
-                "fades back after the same idle time. 0 = immediate dim, stay lifted on interaction.",
+            description =
+                "Wait before dimming after gameplay starts. Lifts while you use the bottom screen; " +
+                    "fades back after the same idle time. 0 = immediate dim, stay lifted on interaction.",
             value = settings.gameplayDimTimeoutSeconds,
             onValueChange = settingsViewModel::setGameplayDimTimeoutSeconds,
             range = 0..120,
             step = 1,
             valueLabel = { if (it == 0) "0 (immediate)" else "$it s" },
             defaultValue = 10,
-            onReset = { settingsViewModel.setGameplayDimTimeoutSeconds(10) }
+            onReset = { settingsViewModel.setGameplayDimTimeoutSeconds(10) },
         )
     }
     SettingsGroupDivider()
     SettingsSectionBlurb(
         "Show or hide individual pieces of the top-screen game preview " +
-            "(library focus and game Info)."
+            "(library focus and game Info).",
     )
     SettingsToggleRow(
         label = "Backdrop / hero art",
@@ -494,7 +521,7 @@ private fun DualScreenSectionContent(
         checked = settings.topHeroBackdrop,
         onCheckedChange = settingsViewModel::setTopHeroBackdrop,
         defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroBackdrop(true) }
+        onReset = { settingsViewModel.setTopHeroBackdrop(true) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
@@ -503,7 +530,7 @@ private fun DualScreenSectionContent(
         checked = settings.topHeroCover,
         onCheckedChange = settingsViewModel::setTopHeroCover,
         defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroCover(true) }
+        onReset = { settingsViewModel.setTopHeroCover(true) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
@@ -512,7 +539,7 @@ private fun DualScreenSectionContent(
         checked = settings.topHeroCoverBorder,
         onCheckedChange = settingsViewModel::setTopHeroCoverBorder,
         defaultChecked = false,
-        onReset = { settingsViewModel.setTopHeroCoverBorder(false) }
+        onReset = { settingsViewModel.setTopHeroCoverBorder(false) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
@@ -521,7 +548,7 @@ private fun DualScreenSectionContent(
         checked = settings.topHeroLogo,
         onCheckedChange = settingsViewModel::setTopHeroLogo,
         defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroLogo(true) }
+        onReset = { settingsViewModel.setTopHeroLogo(true) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
@@ -530,7 +557,7 @@ private fun DualScreenSectionContent(
         checked = settings.topHeroPlatformIcon,
         onCheckedChange = settingsViewModel::setTopHeroPlatformIcon,
         defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroPlatformIcon(true) }
+        onReset = { settingsViewModel.setTopHeroPlatformIcon(true) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
@@ -539,7 +566,7 @@ private fun DualScreenSectionContent(
         checked = settings.topHeroPlatform,
         onCheckedChange = settingsViewModel::setTopHeroPlatform,
         defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroPlatform(true) }
+        onReset = { settingsViewModel.setTopHeroPlatform(true) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
@@ -548,17 +575,18 @@ private fun DualScreenSectionContent(
         checked = settings.topHeroTitle,
         onCheckedChange = settingsViewModel::setTopHeroTitle,
         defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroTitle(true) }
+        onReset = { settingsViewModel.setTopHeroTitle(true) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
         label = "Metadata line",
-        description = "Developer, year, genre, region, and age rating on the library hero; " +
-            "full metadata panel on Info.",
+        description =
+            "Developer, year, genre, region, and age rating on the library hero; " +
+                "full metadata panel on Info.",
         checked = settings.topHeroMetadata,
         onCheckedChange = settingsViewModel::setTopHeroMetadata,
         defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroMetadata(true) }
+        onReset = { settingsViewModel.setTopHeroMetadata(true) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
@@ -567,7 +595,7 @@ private fun DualScreenSectionContent(
         checked = settings.topHeroDescription,
         onCheckedChange = settingsViewModel::setTopHeroDescription,
         defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroDescription(true) }
+        onReset = { settingsViewModel.setTopHeroDescription(true) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
@@ -576,7 +604,7 @@ private fun DualScreenSectionContent(
         checked = settings.topHeroPlayStats,
         onCheckedChange = settingsViewModel::setTopHeroPlayStats,
         defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroPlayStats(true) }
+        onReset = { settingsViewModel.setTopHeroPlayStats(true) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
@@ -585,17 +613,18 @@ private fun DualScreenSectionContent(
         checked = settings.topHeroFavorite,
         onCheckedChange = settingsViewModel::setTopHeroFavorite,
         defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroFavorite(true) }
+        onReset = { settingsViewModel.setTopHeroFavorite(true) },
     )
     SettingsGroupDivider()
     SettingsToggleRow(
         label = "Section hint",
-        description = "Controller / navigation hint under the title on Info " +
-            "(\"Launch, emulator… on the bottom screen\").",
+        description =
+            "Controller / navigation hint under the title on Info " +
+                "(\"Launch, emulator… on the bottom screen\").",
         checked = settings.topHeroSectionHint,
         onCheckedChange = settingsViewModel::setTopHeroSectionHint,
         defaultChecked = false,
-        onReset = { settingsViewModel.setTopHeroSectionHint(false) }
+        onReset = { settingsViewModel.setTopHeroSectionHint(false) },
     )
 }
 
@@ -603,22 +632,23 @@ private fun DualScreenSectionContent(
 private fun AppearanceSectionContent(
     settings: AppSettings,
     settingsViewModel: SettingsViewModel,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     SettingsSectionBlurb("Tune the home grid look, color theme, and gamepad focus ring.")
     SettingsChoiceRow(
         label = "Theme",
         description = "Follow the system setting or lock dark or light mode.",
-        options = listOf(
-            "system" to "System",
-            "dark" to "Dark",
-            "light" to "Light"
-        ),
+        options =
+            listOf(
+                "system" to "System",
+                "dark" to "Dark",
+                "light" to "Light",
+            ),
         selected = settings.theme,
         onSelect = settingsViewModel::setTheme,
         defaultValue = "dark",
         onReset = { settingsViewModel.setTheme("dark") },
-        focusRequester = firstFocusRequester
+        focusRequester = firstFocusRequester,
     )
     SettingsGroupDivider()
     SettingsNumberRow(
@@ -630,35 +660,36 @@ private fun AppearanceSectionContent(
         step = 1,
         valueLabel = { "$it rows" },
         defaultValue = 2,
-        onReset = { settingsViewModel.setGridRows(2) }
+        onReset = { settingsViewModel.setGridRows(2) },
     )
     SettingsGroupDivider()
     SettingsMultiChoiceRow(
         label = "Focus ring style",
         description = "How the gamepad focus outline is drawn around tiles and settings rows.",
-        choiceOptions = listOf(
-            MultiChoiceOption("Solid", "Solid", icon = "▭"),
-            MultiChoiceOption("Dotted", "Dotted", icon = "⋯"),
-            MultiChoiceOption("Dashed", "Dashed", icon = "╌"),
-            MultiChoiceOption("MarchingAnts", "Marching ants", icon = "▤"),
-            MultiChoiceOption("Pulsing", "Pulsing", icon = "◎"),
-            MultiChoiceOption("Double", "Double", icon = "▢"),
-            MultiChoiceOption("Glow", "Glow", icon = "◉"),
-            MultiChoiceOption("CornerBrackets", "Corner brackets", icon = "⌜"),
-            MultiChoiceOption("GradientPulse", "Gradient pulse", icon = "◑"),
-            MultiChoiceOption("Neon", "Neon", icon = "✦")
-        ),
+        choiceOptions =
+            listOf(
+                MultiChoiceOption("Solid", "Solid", icon = "▭"),
+                MultiChoiceOption("Dotted", "Dotted", icon = "⋯"),
+                MultiChoiceOption("Dashed", "Dashed", icon = "╌"),
+                MultiChoiceOption("MarchingAnts", "Marching ants", icon = "▤"),
+                MultiChoiceOption("Pulsing", "Pulsing", icon = "◎"),
+                MultiChoiceOption("Double", "Double", icon = "▢"),
+                MultiChoiceOption("Glow", "Glow", icon = "◉"),
+                MultiChoiceOption("CornerBrackets", "Corner brackets", icon = "⌜"),
+                MultiChoiceOption("GradientPulse", "Gradient pulse", icon = "◑"),
+                MultiChoiceOption("Neon", "Neon", icon = "✦"),
+            ),
         selected = settings.focusBorderStyle,
         onSelect = settingsViewModel::setFocusBorderStyle,
         defaultValue = FocusIndicatorDefaults.BORDER_STYLE,
-        onReset = { settingsViewModel.setFocusBorderStyle(FocusIndicatorDefaults.BORDER_STYLE) }
+        onReset = { settingsViewModel.setFocusBorderStyle(FocusIndicatorDefaults.BORDER_STYLE) },
     )
     SettingsGroupDivider()
     SettingsFocusColorRow(
         selected = settings.focusColor,
         onSelect = settingsViewModel::setFocusColor,
         defaultValue = FocusIndicatorDefaults.COLOR,
-        onReset = { settingsViewModel.setFocusColor(FocusIndicatorDefaults.COLOR) }
+        onReset = { settingsViewModel.setFocusColor(FocusIndicatorDefaults.COLOR) },
     )
     SettingsGroupDivider()
     SettingsNumberRow(
@@ -670,7 +701,7 @@ private fun AppearanceSectionContent(
         step = 1,
         valueLabel = { "$it dp" },
         defaultValue = FocusIndicatorDefaults.THICKNESS,
-        onReset = { settingsViewModel.setFocusThickness(FocusIndicatorDefaults.THICKNESS) }
+        onReset = { settingsViewModel.setFocusThickness(FocusIndicatorDefaults.THICKNESS) },
     )
     SettingsGroupDivider()
     SettingsChoiceRow(
@@ -680,7 +711,7 @@ private fun AppearanceSectionContent(
         selected = settings.focusPlacement,
         onSelect = settingsViewModel::setFocusPlacement,
         defaultValue = FocusIndicatorDefaults.PLACEMENT,
-        onReset = { settingsViewModel.setFocusPlacement(FocusIndicatorDefaults.PLACEMENT) }
+        onReset = { settingsViewModel.setFocusPlacement(FocusIndicatorDefaults.PLACEMENT) },
     )
 }
 
@@ -690,10 +721,10 @@ private fun SystemSectionContent(
     settingsViewModel: SettingsViewModel,
     perms: PermissionStates,
     systemControls: SystemControls,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     SettingsSectionBlurb(
-        "Permissions, launcher role, navigation feedback, and build info."
+        "Permissions, launcher role, navigation feedback, and build info.",
     )
     SettingsVersionRow(versionLabel = systemControls.appVersionLabel())
     SettingsGroupDivider()
@@ -704,45 +735,45 @@ private fun SystemSectionContent(
         onCheckedChange = settingsViewModel::setSoundsEnabled,
         defaultChecked = true,
         onReset = { settingsViewModel.setSoundsEnabled(true) },
-        focusRequester = firstFocusRequester
+        focusRequester = firstFocusRequester,
     )
     SettingsGroupDivider()
     SettingsPermissionRow(
         label = "Usage access",
         description = "Follow games launched outside Wajiha on the bottom screen.",
         granted = perms.usageAccess,
-        onRequest = systemControls::requestUsageAccess
+        onRequest = systemControls::requestUsageAccess,
     )
     SettingsGroupDivider()
     SettingsPermissionRow(
         label = "All files access",
         description = "Read emulator data to identify games launched outside Wajiha.",
         granted = perms.allFilesAccess,
-        onRequest = systemControls::requestAllFilesAccess
+        onRequest = systemControls::requestAllFilesAccess,
     )
     SettingsGroupDivider()
     SettingsPermissionRow(
         label = "Notifications",
         description = "Progress while scanning and scraping your library.",
         granted = perms.notifications,
-        onRequest = systemControls::requestNotifications
+        onRequest = systemControls::requestNotifications,
     )
     SettingsGroupDivider()
     SettingsLauncherRow(
         isDefaultLauncher = perms.isDefaultLauncher,
-        onSetDefault = systemControls::openHomeSettings
+        onSetDefault = systemControls::openHomeSettings,
     )
     SettingsGroupDivider()
     IgnoreFileNamePatternsSection(
         settings = settings,
-        settingsViewModel = settingsViewModel
+        settingsViewModel = settingsViewModel,
     )
 }
 
 @Composable
 private fun IgnoreFileNamePatternsSection(
     settings: AppSettings,
-    settingsViewModel: SettingsViewModel
+    settingsViewModel: SettingsViewModel,
 ) {
     val patterns = settings.ignoreFileNamePatterns
     val patternsAtDefault = SettingsRepository.ignoreFileNamePatternsAtDefault(patterns)
@@ -755,7 +786,7 @@ private fun IgnoreFileNamePatternsSection(
         checked = settings.ignorePatternFilesEnabled,
         onCheckedChange = settingsViewModel::setIgnorePatternFilesEnabled,
         defaultChecked = false,
-        onReset = { settingsViewModel.setIgnorePatternFilesEnabled(false) }
+        onReset = { settingsViewModel.setIgnorePatternFilesEnabled(false) },
     )
 
     if (!settings.ignorePatternFilesEnabled) return
@@ -764,7 +795,7 @@ private fun IgnoreFileNamePatternsSection(
         text = "Matched files are excluded from scan and removed from the library on the next full rescan.",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = WajihaSpacing.sm)
+        modifier = Modifier.padding(horizontal = WajihaSpacing.sm),
     )
 
     if (patterns.isEmpty()) {
@@ -772,7 +803,7 @@ private fun IgnoreFileNamePatternsSection(
             text = "No patterns — add keywords below.",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs)
+            modifier = Modifier.padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
         )
     } else {
         patterns.forEach { pattern ->
@@ -786,9 +817,9 @@ private fun IgnoreFileNamePatternsSection(
                         text = "Remove",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.error
+                        color = MaterialTheme.colorScheme.error,
                     )
-                }
+                },
             )
         }
     }
@@ -798,7 +829,7 @@ private fun IgnoreFileNamePatternsSection(
             value = newPatternDraft,
             onValueChange = { newPatternDraft = it },
             label = "New keyword",
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
         GamepadSettingRow(
             label = "Add keyword",
@@ -812,7 +843,7 @@ private fun IgnoreFileNamePatternsSection(
                     showAddField = false
                 }
             },
-            isAtDefault = true
+            isAtDefault = true,
         )
         GamepadSettingRow(
             label = "Cancel",
@@ -821,7 +852,7 @@ private fun IgnoreFileNamePatternsSection(
                 newPatternDraft = ""
                 showAddField = false
             },
-            isAtDefault = true
+            isAtDefault = true,
         )
     } else {
         GamepadSettingRow(
@@ -830,7 +861,7 @@ private fun IgnoreFileNamePatternsSection(
             type = SettingType.WithReset,
             onActivate = { showAddField = true },
             onReset = settingsViewModel::resetIgnoreFileNamePatterns,
-            isAtDefault = patternsAtDefault
+            isAtDefault = patternsAtDefault,
         )
     }
 }
@@ -839,36 +870,38 @@ private fun IgnoreFileNamePatternsSection(
 private fun SettingsSectionCard(
     modifier: Modifier = Modifier,
     folderPanel: Boolean = false,
-    sectionContent: @Composable () -> Unit
+    sectionContent: @Composable () -> Unit,
 ) {
     val shape = if (folderPanel) WajihaShapes.folderPanel else WajihaShapes.card
     val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
 
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .then(
-                if (folderPanel) {
-                    Modifier.border(
-                        width = 1.dp,
-                        color = outlineColor,
-                        shape = shape
-                    )
-                } else {
-                    Modifier
-                }
-            ),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .then(
+                    if (folderPanel) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = outlineColor,
+                            shape = shape,
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(WajihaSpacing.md)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(WajihaSpacing.md),
         ) {
             SettingSectionScrollColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
             ) {
                 sectionContent()
             }
@@ -882,7 +915,7 @@ private fun SettingsSectionBlurb(text: String) {
         text = text,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(bottom = WajihaSpacing.xs)
+        modifier = Modifier.padding(bottom = WajihaSpacing.xs),
     )
 }
 
@@ -890,7 +923,7 @@ private fun SettingsSectionBlurb(text: String) {
 private fun SettingsGroupDivider() {
     HorizontalDivider(
         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-        modifier = Modifier.padding(vertical = WajihaSpacing.xs)
+        modifier = Modifier.padding(vertical = WajihaSpacing.xs),
     )
 }
 
@@ -902,7 +935,7 @@ private fun SettingsToggleRow(
     onCheckedChange: (Boolean) -> Unit,
     defaultChecked: Boolean,
     onReset: () -> Unit,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
     GamepadSettingRow(
         label = label,
@@ -912,7 +945,7 @@ private fun SettingsToggleRow(
         onCheckedChange = onCheckedChange,
         focusRequester = focusRequester,
         onReset = onReset,
-        isAtDefault = checked == defaultChecked
+        isAtDefault = checked == defaultChecked,
     )
 }
 
@@ -927,7 +960,7 @@ private fun SettingsNumberRow(
     valueLabel: (Int) -> String = { it.toString() },
     defaultValue: Int,
     onReset: () -> Unit,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
     GamepadSettingRow(
         label = label,
@@ -940,7 +973,7 @@ private fun SettingsNumberRow(
         numberLabel = valueLabel,
         focusRequester = focusRequester,
         onReset = onReset,
-        isAtDefault = value == defaultValue
+        isAtDefault = value == defaultValue,
     )
 }
 
@@ -953,7 +986,7 @@ private fun SettingsChoiceRow(
     onSelect: (String) -> Unit,
     defaultValue: String,
     onReset: () -> Unit,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
     GamepadSettingRow(
         label = label,
@@ -964,7 +997,7 @@ private fun SettingsChoiceRow(
         onSelect = onSelect,
         focusRequester = focusRequester,
         onReset = onReset,
-        isAtDefault = selected == defaultValue
+        isAtDefault = selected == defaultValue,
     )
 }
 
@@ -977,7 +1010,7 @@ private fun SettingsMultiChoiceRow(
     onSelect: (String) -> Unit,
     defaultValue: String,
     onReset: () -> Unit,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
     GamepadSettingRow(
         label = label,
@@ -988,7 +1021,7 @@ private fun SettingsMultiChoiceRow(
         onSelect = onSelect,
         focusRequester = focusRequester,
         onReset = onReset,
-        isAtDefault = selected == defaultValue
+        isAtDefault = selected == defaultValue,
     )
 }
 
@@ -999,7 +1032,7 @@ private fun SettingsFocusColorRow(
     onSelect: (String) -> Unit,
     defaultValue: String,
     onReset: () -> Unit,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var headerFocused by remember { mutableStateOf(false) }
@@ -1021,7 +1054,7 @@ private fun SettingsFocusColorRow(
 
     var customHexDraft by remember(selected) {
         mutableStateOf(
-            if (isCustomSelected) selected.removePrefix("#") else "FF5722"
+            if (isCustomSelected) selected.removePrefix("#") else "FF5722",
         )
     }
     var showCustomField by remember { mutableStateOf(isCustomSelected) }
@@ -1059,12 +1092,19 @@ private fun SettingsFocusColorRow(
             sectionScroll.scrollHeaderToTop(header)
         }
         delay(50)
-        val focusIndex = when {
-            isCustomSelected -> presetIds.size
-            else -> presetIds.indexOfFirst {
-                it.equals(FocusIndicatorPreferenceValues.normalizeColor(selected), ignoreCase = true)
-            }.coerceAtLeast(0)
-        }
+        val focusIndex =
+            when {
+                isCustomSelected -> {
+                    presetIds.size
+                }
+
+                else -> {
+                    presetIds
+                        .indexOfFirst {
+                            it.equals(FocusIndicatorPreferenceValues.normalizeColor(selected), ignoreCase = true)
+                        }.coerceAtLeast(0)
+                }
+            }
         try {
             swatchFocusRequesters[focusIndex].requestFocus()
         } catch (_: Exception) {
@@ -1076,57 +1116,61 @@ private fun SettingsFocusColorRow(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = WajihaSpacing.touchMin)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = WajihaSpacing.touchMin),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .onGloballyPositioned { headerCoordinates = it }
-                .clip(WajihaShapes.focus)
-                .wajihaFocusIndicator(highlighted = headerHighlight)
-                .focusRequester(headerFocusRequester)
-                .then(
-                    if (!useCustomNav) {
-                        Modifier
-                            .onFocusChanged { headerFocused = it.isFocused }
-                            .wajihaGamepadFocus()
-                            .onPreviewKeyEvent { event ->
-                                when {
-                                    GamepadKeys.isConfirm(event.type, event.key) -> {
-                                        if (expanded) collapse() else expand()
-                                        true
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { headerCoordinates = it }
+                    .clip(WajihaShapes.focus)
+                    .wajihaFocusIndicator(highlighted = headerHighlight)
+                    .focusRequester(headerFocusRequester)
+                    .then(
+                        if (!useCustomNav) {
+                            Modifier
+                                .onFocusChanged { headerFocused = it.isFocused }
+                                .wajihaGamepadFocus()
+                                .onPreviewKeyEvent { event ->
+                                    when {
+                                        GamepadKeys.isConfirm(event.type, event.key) -> {
+                                            if (expanded) collapse() else expand()
+                                            true
+                                        }
+
+                                        GamepadKeys.isY(event.type, event.key) && canReset -> {
+                                            onReset()
+                                            true
+                                        }
+
+                                        else -> {
+                                            false
+                                        }
                                     }
-                                    GamepadKeys.isY(event.type, event.key) && canReset -> {
-                                        onReset()
-                                        true
-                                    }
-                                    else -> false
                                 }
-                            }
-                    } else {
-                        Modifier
-                    }
-                )
-                .pointerInput(expanded) {
-                    detectTapGestures {
-                        if (expanded) collapse() else expand()
-                    }
-                }
-                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+                        } else {
+                            Modifier
+                        },
+                    ).pointerInput(expanded) {
+                        detectTapGestures {
+                            if (expanded) collapse() else expand()
+                        }
+                    }.padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             Row(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
             ) {
                 Text(
                     text = "Focus ring color",
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
                 )
                 if (canReset) {
                     Text(
@@ -1134,18 +1178,20 @@ private fun SettingsFocusColorRow(
                         style = MaterialTheme.typography.titleMedium,
                         color = Color(0xFFFFC107).copy(alpha = 0.55f),
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.pointerInput(onReset) {
-                            detectTapGestures { onReset() }
-                        }
+                        modifier =
+                            Modifier.pointerInput(onReset) {
+                                detectTapGestures { onReset() }
+                            },
                     )
                 }
             }
             Box(
-                modifier = Modifier
-                    .size(18.dp)
-                    .clip(CircleShape)
-                    .background(previewColor)
-                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f), CircleShape)
+                modifier =
+                    Modifier
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(previewColor)
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f), CircleShape),
             )
             Text(
                 text = selectedLabel,
@@ -1153,13 +1199,13 @@ private fun SettingsFocusColorRow(
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.End,
-                maxLines = 1
+                maxLines = 1,
             )
             Text(
                 text = if (expanded) "˅" else "›",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
             )
         }
 
@@ -1167,63 +1213,67 @@ private fun SettingsFocusColorRow(
             text = "Theme accent follows light or dark mode. Pick a swatch or enter a custom #RRGGBB hex.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(
-                start = WajihaSpacing.sm,
-                end = WajihaSpacing.sm,
-                top = WajihaSpacing.xs / 2
-            )
+            modifier =
+                Modifier.padding(
+                    start = WajihaSpacing.sm,
+                    end = WajihaSpacing.sm,
+                    top = WajihaSpacing.xs / 2,
+                ),
         )
 
         AnimatedVisibility(
             visible = expanded,
             enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
+            exit = shrinkVertically() + fadeOut(),
         ) {
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = WajihaSpacing.xs / 2),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = WajihaSpacing.xs / 2),
                 shape = androidx.compose.ui.graphics.RectangleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 2.dp
+                tonalElevation = 2.dp,
             ) {
                 Column(
                     modifier = Modifier.padding(WajihaSpacing.sm),
-                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
                 ) {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-                        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+                        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
                     ) {
                         presetIds.forEachIndexed { index, presetId ->
-                            val isSelected = !isCustomSelected &&
-                                presetId.equals(
-                                    FocusIndicatorPreferenceValues.normalizeColor(selected),
-                                    ignoreCase = true
-                                )
+                            val isSelected =
+                                !isCustomSelected &&
+                                    presetId.equals(
+                                        FocusIndicatorPreferenceValues.normalizeColor(selected),
+                                        ignoreCase = true,
+                                    )
                             FocusColorSwatch(
                                 label = FocusIndicatorPreferenceValues.displayColorLabel(presetId),
                                 color = focusColorPreview(presetId),
                                 selected = isSelected,
                                 focusRequester = swatchFocusRequesters[index],
                                 useCustomNav = useCustomNav,
-                                onSelect = { selectPreset(presetId) }
+                                onSelect = { selectPreset(presetId) },
                             )
                         }
                         FocusColorSwatch(
                             label = "Custom",
-                            color = if (isCustomSelected) {
-                                focusColorPreview(selected)
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            },
+                            color =
+                                if (isCustomSelected) {
+                                    focusColorPreview(selected)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
                             selected = isCustomSelected || showCustomField,
                             focusRequester = swatchFocusRequesters[presetIds.size],
                             useCustomNav = useCustomNav,
                             showPlusGlyph = !isCustomSelected,
                             onSelect = {
                                 showCustomField = true
-                            }
+                            },
                         )
                     }
 
@@ -1231,18 +1281,20 @@ private fun SettingsFocusColorRow(
                         GamepadSafeTextField(
                             value = customHexDraft,
                             onValueChange = { raw ->
-                                customHexDraft = raw.filter { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }
-                                    .take(6)
-                                    .uppercase()
+                                customHexDraft =
+                                    raw
+                                        .filter { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }
+                                        .take(6)
+                                        .uppercase()
                             },
                             label = "Hex color (#RRGGBB)",
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         )
                         GamepadSettingRow(
                             label = "Apply custom color",
                             type = SettingType.WithReset,
                             onActivate = ::applyCustomHex,
-                            isAtDefault = true
+                            isAtDefault = true,
                         )
                     }
                 }
@@ -1259,7 +1311,7 @@ private fun FocusColorSwatch(
     focusRequester: FocusRequester,
     useCustomNav: Boolean,
     showPlusGlyph: Boolean = false,
-    onSelect: () -> Unit
+    onSelect: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val highlight = !useCustomNav && focused
@@ -1267,67 +1319,69 @@ private fun FocusColorSwatch(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = Modifier
-            .clip(WajihaShapes.focus)
-            .wajihaFocusIndicator(highlighted = highlight, shape = CircleShape)
-            .focusRequester(focusRequester)
-            .then(
-                if (!useCustomNav) {
-                    Modifier
-                        .onFocusChanged { focused = it.isFocused }
-                        .wajihaGamepadFocus()
-                        .onPreviewKeyEvent { event ->
-                            if (GamepadKeys.isConfirm(event.type, event.key)) {
-                                onSelect()
-                                true
-                            } else {
-                                false
+        modifier =
+            Modifier
+                .clip(WajihaShapes.focus)
+                .wajihaFocusIndicator(highlighted = highlight, shape = CircleShape)
+                .focusRequester(focusRequester)
+                .then(
+                    if (!useCustomNav) {
+                        Modifier
+                            .onFocusChanged { focused = it.isFocused }
+                            .wajihaGamepadFocus()
+                            .onPreviewKeyEvent { event ->
+                                if (GamepadKeys.isConfirm(event.type, event.key)) {
+                                    onSelect()
+                                    true
+                                } else {
+                                    false
+                                }
                             }
-                        }
-                } else {
-                    Modifier
-                }
-            )
-            .pointerInput(label) {
-                detectTapGestures { onSelect() }
-            }
-            .padding(WajihaSpacing.xs / 2)
+                    } else {
+                        Modifier
+                    },
+                ).pointerInput(label) {
+                    detectTapGestures { onSelect() }
+                }.padding(WajihaSpacing.xs / 2),
     ) {
         Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(color)
-                .border(
-                    width = if (selected) 2.dp else 1.dp,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                    },
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(color)
+                    .border(
+                        width = if (selected) 2.dp else 1.dp,
+                        color =
+                            if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                            },
+                        shape = CircleShape,
+                    ),
+            contentAlignment = Alignment.Center,
         ) {
             if (showPlusGlyph) {
                 Text(
                     text = "+",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
             }
         }
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color =
+                if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             maxLines = 1,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
         )
     }
 }
@@ -1337,63 +1391,66 @@ private fun PlatformCard(
     platform: PlatformEntity,
     folders: List<RomFolderEntity>,
     onOpen: () -> Unit,
-    onRescan: () -> Unit
+    onRescan: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = WajihaShapes.card,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = WajihaSpacing.touchMin)
-                    .padding(
-                        start = WajihaSpacing.sm,
-                        end = WajihaSpacing.sm,
-                        top = WajihaSpacing.sm,
-                        bottom = WajihaSpacing.sm
-                    ),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = WajihaSpacing.touchMin)
+                        .padding(
+                            start = WajihaSpacing.sm,
+                            end = WajihaSpacing.sm,
+                            top = WajihaSpacing.sm,
+                            bottom = WajihaSpacing.sm,
+                        ),
                 horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 GamepadFocusable(
                     onClick = onOpen,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = WajihaSpacing.xs),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = WajihaSpacing.xs),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = platform.name,
                                 style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
                             )
                             Text(
-                                text = "${folders.size} folder(s)" +
-                                    if (!platform.enabled) " · disabled" else "",
+                                text =
+                                    "${folders.size} folder(s)" +
+                                        if (!platform.enabled) " · disabled" else "",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Text(
                             text = "Edit",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
                 GamepadButton(
                     text = "Rescan",
                     onClick = onRescan,
-                    outlined = true
+                    outlined = true,
                 )
             }
         }
@@ -1411,9 +1468,9 @@ private fun SettingsVersionRow(versionLabel: String) {
                 text = versionLabel.removePrefix("Wajiha ").ifBlank { versionLabel },
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
             )
-        }
+        },
     )
 }
 
@@ -1422,7 +1479,7 @@ private fun SettingsPermissionRow(
     label: String,
     description: String,
     granted: Boolean,
-    onRequest: () -> Unit
+    onRequest: () -> Unit,
 ) {
     GamepadSettingRow(
         label = label,
@@ -1432,47 +1489,50 @@ private fun SettingsPermissionRow(
         content = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(WajihaSpacing.sm)
-                        .clip(CircleShape)
-                        .background(
-                            if (granted) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)
-                            }
-                        )
+                    modifier =
+                        Modifier
+                            .size(WajihaSpacing.sm)
+                            .clip(CircleShape)
+                            .background(
+                                if (granted) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)
+                                },
+                            ),
                 )
                 Text(
                     text = if (granted) "Granted" else "Grant ›",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (granted) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                    color =
+                        if (granted) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                 )
             }
-        }
+        },
     )
 }
 
 @Composable
 private fun SettingsLauncherRow(
     isDefaultLauncher: Boolean,
-    onSetDefault: () -> Unit
+    onSetDefault: () -> Unit,
 ) {
     GamepadSettingRow(
         label = "Default launcher",
-        description = if (isDefaultLauncher) {
-            "Wajiha is your home screen on both displays."
-        } else {
-            "Set Wajiha as the default launcher so HOME always returns here."
-        },
+        description =
+            if (isDefaultLauncher) {
+                "Wajiha is your home screen on both displays."
+            } else {
+                "Set Wajiha as the default launcher so HOME always returns here."
+            },
         type = SettingType.WithReset,
         onActivate = if (!isDefaultLauncher) onSetDefault else null,
         content = {
@@ -1480,12 +1540,13 @@ private fun SettingsLauncherRow(
                 text = if (isDefaultLauncher) "Active" else "Set ›",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = if (isDefaultLauncher) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                color =
+                    if (isDefaultLauncher) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
             )
-        }
+        },
     )
 }

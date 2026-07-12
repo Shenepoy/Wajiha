@@ -104,27 +104,32 @@ fun ScraperScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     gamepadOwner: GamepadOwner? = null,
-    onClaimGamepad: ((GamepadOwner) -> Unit)? = null
+    onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
 ) {
-    val navController = rememberGamepadNavController(
-        mode = GamepadNavMode.Vertical,
-        onBack = { onBack(); true }
-    )
+    val navController =
+        rememberGamepadNavController(
+            mode = GamepadNavMode.Vertical,
+            onBack = {
+                onBack()
+                true
+            },
+        )
     WajihaScreen(
         layerId = "scraper",
         modifier = modifier,
         onBack = onBack,
         showActionBar = true,
-        gamepadHints = listOf(
-            "A" to "Confirm",
-            "B" to "Back",
-            "L2" to "Focus screen"
-        ),
+        gamepadHints =
+            listOf(
+                "A" to "Confirm",
+                "B" to "Back",
+                "L2" to "Focus screen",
+            ),
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onOwnerGainedFocus = {
             navController.focusState.focusedIndex = 0
-        }
+        },
     ) {
         GamepadNavHost(controller = navController) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -141,49 +146,49 @@ fun ScraperScreen(
 @Composable
 fun ScraperPageContent(
     viewModel: ScraperViewModel,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
         Text(
             text = "Scrape artwork and metadata, configure sources, and run batch or manual matches.",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         ScraperExpandableSection(
             title = "Batch scrape",
             summary = "Run across all platforms or per system",
             initiallyExpanded = true,
-            focusRequester = firstFocusRequester
+            focusRequester = firstFocusRequester,
         ) {
             ScraperBatchBlock(viewModel, firstFocusRequester)
         }
         ScraperExpandableSection(
             title = "Manual match",
-            summary = "Pick a game and apply artwork from sources"
+            summary = "Pick a game and apply artwork from sources",
         ) {
             ScraperManualBlock(viewModel)
         }
         ScraperExpandableSection(
             title = "Sources",
-            summary = "Enable or disable scraper backends"
+            summary = "Enable or disable scraper backends",
         ) {
             ScraperSourcesSection(viewModel)
         }
         ScraperExpandableSection(
             title = "Accounts",
-            summary = "Credentials per source"
+            summary = "Credentials per source",
         ) {
             ScraperAccountsSection(viewModel)
         }
         ScraperExpandableSection(
             title = "Media defaults",
-            summary = "Resolution, variants, and per-source media options"
+            summary = "Resolution, variants, and per-source media options",
         ) {
             ScraperMediaDefaultsSection(viewModel)
         }
         ScraperExpandableSection(
             title = "Batch options",
-            summary = "Wi-Fi, skip rules, and region/language priority"
+            summary = "Wi-Fi, skip rules, and region/language priority",
         ) {
             ScraperBatchOptionsSection(viewModel)
         }
@@ -194,7 +199,7 @@ fun ScraperPageContent(
 fun PlatformScraperSettingsSection(
     platformId: String,
     viewModel: ScraperViewModel,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     val settings by viewModel.settings.collectAsState()
     val override = settings.platformOverrides[platformId]
@@ -203,14 +208,14 @@ fun PlatformScraperSettingsSection(
     Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
         Text(
             text = "Sources for this platform",
-            style = MaterialTheme.typography.labelMedium
+            style = MaterialTheme.typography.labelMedium,
         )
         allSourceIds.forEachIndexed { index, sourceId ->
             SourceToggle(
                 label = sourceId,
                 checked = sourceId in effectiveSources,
                 overridden = isPlatformSourceOverridden(override, sourceId, settings.enabledSources),
-                focusRequester = if (index == 0) firstFocusRequester else null
+                focusRequester = if (index == 0) firstFocusRequester else null,
             ) { enabled ->
                 viewModel.togglePlatformSource(platformId, sourceId, enabled)
             }
@@ -220,11 +225,11 @@ fun PlatformScraperSettingsSection(
             CredentialField(
                 label = "Region priority",
                 value = override?.regionPriority?.joinToString(",") ?: "",
-                overridden = override?.regionPriority != null
+                overridden = override?.regionPriority != null,
             ) { v ->
                 viewModel.setPlatformRegionPriority(
                     platformId,
-                    v.split(',').map(String::trim).filter(String::isNotEmpty)
+                    v.split(',').map(String::trim).filter(String::isNotEmpty),
                 )
             }
             HorizontalDivider(Modifier.padding(vertical = WajihaSpacing.xs))
@@ -242,16 +247,16 @@ fun PlatformScraperSettingsSection(
                 Text(
                     text = "Remove per-platform scraper settings and inherit global defaults.",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.End,
                 ) {
                     GamepadButton(
                         text = "Clear",
                         onClick = { viewModel.clearPlatformOverride(platformId) },
-                        outlined = true
+                        outlined = true,
                     )
                 }
             }
@@ -266,7 +271,7 @@ private fun ScraperExpandableSection(
     summary: String? = null,
     initiallyExpanded: Boolean = false,
     focusRequester: FocusRequester? = null,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(initiallyExpanded) }
     var headerFocused by remember { mutableStateOf(false) }
@@ -294,57 +299,60 @@ private fun ScraperExpandableSection(
         modifier = Modifier.fillMaxWidth(),
         shape = WajihaShapes.card,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = 0.dp
+        tonalElevation = 0.dp,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = WajihaSpacing.touchMin)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = WajihaSpacing.touchMin),
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(WajihaShapes.focus)
-                    .wajihaFocusIndicator(highlighted = headerHighlight)
-                    .focusRequester(headerFocusRequester)
-                    .then(
-                        if (!useCustomNav) {
-                            Modifier
-                                .onFocusChanged { headerFocused = it.isFocused }
-                                .wajihaGamepadFocus()
-                                .onPreviewKeyEvent { event ->
-                                    when {
-                                        GamepadKeys.isConfirm(event.type, event.key) -> {
-                                            if (expanded) collapse() else expand()
-                                            true
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(WajihaShapes.focus)
+                        .wajihaFocusIndicator(highlighted = headerHighlight)
+                        .focusRequester(headerFocusRequester)
+                        .then(
+                            if (!useCustomNav) {
+                                Modifier
+                                    .onFocusChanged { headerFocused = it.isFocused }
+                                    .wajihaGamepadFocus()
+                                    .onPreviewKeyEvent { event ->
+                                        when {
+                                            GamepadKeys.isConfirm(event.type, event.key) -> {
+                                                if (expanded) collapse() else expand()
+                                                true
+                                            }
+
+                                            else -> {
+                                                false
+                                            }
                                         }
-                                        else -> false
                                     }
-                                }
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .pointerInput(expanded) {
-                        detectTapGestures {
-                            if (expanded) collapse() else expand()
-                        }
-                    }
-                    .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+                            } else {
+                                Modifier
+                            },
+                        ).pointerInput(expanded) {
+                            detectTapGestures {
+                                if (expanded) collapse() else expand()
+                            }
+                        }.padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                     if (!summary.isNullOrBlank()) {
                         Text(
                             text = summary,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -352,24 +360,25 @@ private fun ScraperExpandableSection(
                     text = if (expanded) "˅" else "›",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
             }
 
             AnimatedVisibility(
                 visible = expanded,
                 enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
+                exit = shrinkVertically() + fadeOut(),
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            start = WajihaSpacing.sm,
-                            end = WajihaSpacing.sm,
-                            bottom = WajihaSpacing.sm
-                        ),
-                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = WajihaSpacing.sm,
+                                end = WajihaSpacing.sm,
+                                bottom = WajihaSpacing.sm,
+                            ),
+                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
                 ) {
                     content()
                 }
@@ -386,7 +395,7 @@ private fun ScraperAccountSubsection(
     sourceId: String? = null,
     onTest: (() -> Unit)? = null,
     viewModel: ScraperViewModel? = null,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var headerFocused by remember { mutableStateOf(false) }
@@ -408,83 +417,85 @@ private fun ScraperAccountSubsection(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(WajihaShapes.chip)
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
-                shape = WajihaShapes.chip
-            )
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(WajihaShapes.chip)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                    shape = WajihaShapes.chip,
+                ),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(WajihaShapes.focus)
-                .wajihaFocusIndicator(highlighted = headerHighlight)
-                .focusRequester(headerFocusRequester)
-                .then(
-                    if (!useCustomNav) {
-                        Modifier
-                            .onFocusChanged { headerFocused = it.isFocused }
-                            .wajihaGamepadFocus()
-                            .onPreviewKeyEvent { event ->
-                                if (GamepadKeys.isConfirm(event.type, event.key)) {
-                                    expanded = !expanded
-                                    true
-                                } else {
-                                    false
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(WajihaShapes.focus)
+                    .wajihaFocusIndicator(highlighted = headerHighlight)
+                    .focusRequester(headerFocusRequester)
+                    .then(
+                        if (!useCustomNav) {
+                            Modifier
+                                .onFocusChanged { headerFocused = it.isFocused }
+                                .wajihaGamepadFocus()
+                                .onPreviewKeyEvent { event ->
+                                    if (GamepadKeys.isConfirm(event.type, event.key)) {
+                                        expanded = !expanded
+                                        true
+                                    } else {
+                                        false
+                                    }
                                 }
-                            }
-                    } else {
-                        Modifier
-                    }
-                )
-                .pointerInput(Unit) {
-                    detectTapGestures { expanded = !expanded }
-                }
-                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+                        } else {
+                            Modifier
+                        },
+                    ).pointerInput(Unit) {
+                        detectTapGestures { expanded = !expanded }
+                    }.padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
             Text(
                 text = statusLabel,
                 style = MaterialTheme.typography.labelSmall,
-                color = if (configured) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                color =
+                    if (configured) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
             )
             Text(
                 text = if (expanded) "˅" else "›",
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
         AnimatedVisibility(
             visible = expanded,
             enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
+            exit = shrinkVertically() + fadeOut(),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
-                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
             ) {
                 content()
                 if (onTest != null && sourceId != null && viewModel != null) {
                     SourceTestLoginRow(
                         sourceId = sourceId,
                         onTest = onTest,
-                        viewModel = viewModel
+                        viewModel = viewModel,
                     )
                 }
             }
@@ -498,27 +509,27 @@ private fun ScraperSourcesSection(viewModel: ScraperViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)) {
         SourceToggle(
             label = "ScreenScraper",
-            checked = "screenscraper" in settings.enabledSources
+            checked = "screenscraper" in settings.enabledSources,
         ) { viewModel.toggleSource("screenscraper", it) }
         SourceToggle(
             label = "SteamGridDB",
-            checked = "steamgriddb" in settings.enabledSources
+            checked = "steamgriddb" in settings.enabledSources,
         ) { viewModel.toggleSource("steamgriddb", it) }
         SourceToggle(
             label = "Libretro thumbnails (no account)",
-            checked = "libretro" in settings.enabledSources
+            checked = "libretro" in settings.enabledSources,
         ) { viewModel.toggleSource("libretro", it) }
         SourceToggle(
             label = "RetroAchievements",
-            checked = "ra" in settings.enabledSources
+            checked = "ra" in settings.enabledSources,
         ) { viewModel.toggleSource("ra", it) }
         SourceToggle(
             label = "RomM server",
-            checked = "romm" in settings.enabledSources
+            checked = "romm" in settings.enabledSources,
         ) { viewModel.toggleSource("romm", it) }
         SourceToggle(
             label = "Local media",
-            checked = "local" in settings.enabledSources
+            checked = "local" in settings.enabledSources,
         ) { viewModel.toggleSource("local", it) }
     }
 }
@@ -532,11 +543,12 @@ private fun ScraperAccountsSection(viewModel: ScraperViewModel) {
         if ("screenscraper" in enabled) {
             ScraperAccountSubsection(
                 title = "ScreenScraper",
-                configured = settings.screenScraperUser.isNotBlank() &&
-                    settings.screenScraperPassword.isNotBlank(),
+                configured =
+                    settings.screenScraperUser.isNotBlank() &&
+                        settings.screenScraperPassword.isNotBlank(),
                 sourceId = "screenscraper",
                 onTest = { viewModel.testSourceCredentials("screenscraper") },
-                viewModel = viewModel
+                viewModel = viewModel,
             ) {
                 CompactCredentialField("Username", settings.screenScraperUser) { v ->
                     viewModel.update { it.copy(screenScraperUser = v) }
@@ -552,7 +564,7 @@ private fun ScraperAccountsSection(viewModel: ScraperViewModel) {
                 configured = settings.steamGridDbApiKey.isNotBlank(),
                 sourceId = "steamgriddb",
                 onTest = { viewModel.testSourceCredentials("steamgriddb") },
-                viewModel = viewModel
+                viewModel = viewModel,
             ) {
                 CompactCredentialField("API key", settings.steamGridDbApiKey, secret = true) { v ->
                     viewModel.update { it.copy(steamGridDbApiKey = v) }
@@ -565,7 +577,7 @@ private fun ScraperAccountsSection(viewModel: ScraperViewModel) {
                 configured = settings.raUsername.isNotBlank() && settings.raApiKey.isNotBlank(),
                 sourceId = "ra",
                 onTest = { viewModel.testSourceCredentials("ra") },
-                viewModel = viewModel
+                viewModel = viewModel,
             ) {
                 CompactCredentialField("Username", settings.raUsername) { v ->
                     viewModel.update { it.copy(raUsername = v) }
@@ -581,7 +593,7 @@ private fun ScraperAccountsSection(viewModel: ScraperViewModel) {
                 configured = settings.rommUrl.isNotBlank(),
                 sourceId = "romm",
                 onTest = { viewModel.testSourceCredentials("romm") },
-                viewModel = viewModel
+                viewModel = viewModel,
             ) {
                 CompactCredentialField("Server URL", settings.rommUrl) { v ->
                     viewModel.update { it.copy(rommUrl = v) }
@@ -597,7 +609,7 @@ private fun ScraperAccountsSection(viewModel: ScraperViewModel) {
         if ("local" in enabled) {
             ScraperAccountSubsection(
                 title = "Local media",
-                configured = settings.localMediaPath.isNotBlank()
+                configured = settings.localMediaPath.isNotBlank(),
             ) {
                 CompactCredentialField("Media folder (ES-DE layout)", settings.localMediaPath) { v ->
                     viewModel.update { it.copy(localMediaPath = v) }
@@ -608,7 +620,7 @@ private fun ScraperAccountsSection(viewModel: ScraperViewModel) {
             Text(
                 text = "Enable a source above to configure its account.",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -628,7 +640,7 @@ private fun ScraperMediaDefaultsSection(viewModel: ScraperViewModel) {
             },
             numberRange = 0..8192,
             numberStep = 256,
-            numberLabel = { if (it == 0) "Original" else "${it}px" }
+            numberLabel = { if (it == 0) "Original" else "${it}px" },
         )
         GamepadSettingRow(
             label = "Cover variant index",
@@ -639,24 +651,24 @@ private fun ScraperMediaDefaultsSection(viewModel: ScraperViewModel) {
                 viewModel.update { it.copy(mediaVariantIndex = idx.coerceAtLeast(0)) }
             },
             numberRange = 0..99,
-            numberStep = 1
+            numberStep = 1,
         )
         HorizontalDivider(Modifier.padding(vertical = WajihaSpacing.xs))
         ScraperSourceOptionsBlock(viewModel)
         HorizontalDivider(Modifier.padding(vertical = WajihaSpacing.xs))
         Text(
             "Media priority (tap a source to promote it)",
-            style = MaterialTheme.typography.labelLarge
+            style = MaterialTheme.typography.labelLarge,
         )
         settings.mediaPriority.entries.forEach { (mediaType, chain) ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = mediaType,
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.width(96.dp)
+                    modifier = Modifier.width(96.dp),
                 )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)) {
                     items(chain) { sourceId ->
@@ -664,7 +676,7 @@ private fun ScraperMediaDefaultsSection(viewModel: ScraperViewModel) {
                             label = sourceId,
                             selected = false,
                             onClick = { viewModel.promoteMediaSource(mediaType, sourceId) },
-                            sound = UiSound.Open
+                            sound = UiSound.Open,
                         )
                     }
                 }
@@ -682,7 +694,7 @@ private fun ScraperBatchOptionsSection(viewModel: ScraperViewModel) {
         }
         CompactCredentialField(
             "Region priority (comma separated)",
-            settings.regionPriority.joinToString(",")
+            settings.regionPriority.joinToString(","),
         ) { v ->
             viewModel.update {
                 it.copy(regionPriority = v.split(',').map(String::trim).filter(String::isNotEmpty))
@@ -690,7 +702,7 @@ private fun ScraperBatchOptionsSection(viewModel: ScraperViewModel) {
         }
         CompactCredentialField(
             "Language priority (comma separated)",
-            settings.languagePriority.joinToString(",")
+            settings.languagePriority.joinToString(","),
         ) { v ->
             viewModel.update {
                 it.copy(languagePriority = v.split(',').map(String::trim).filter(String::isNotEmpty))
@@ -702,31 +714,35 @@ private fun ScraperBatchOptionsSection(viewModel: ScraperViewModel) {
 private val allSourceIds =
     listOf("screenscraper", "steamgriddb", "libretro", "ra", "romm", "local")
 
-private val screenScraperBoxOptions = listOf(
-    MultiChoiceOption("prefer_2d", "Prefer 2D", "Use 2D box art when available"),
-    MultiChoiceOption("prefer_3d", "Prefer 3D", "Use 3D box art when available"),
-    MultiChoiceOption("2d_only", "2D only"),
-    MultiChoiceOption("3d_only", "3D only")
-)
+private val screenScraperBoxOptions =
+    listOf(
+        MultiChoiceOption("prefer_2d", "Prefer 2D", "Use 2D box art when available"),
+        MultiChoiceOption("prefer_3d", "Prefer 3D", "Use 3D box art when available"),
+        MultiChoiceOption("2d_only", "2D only"),
+        MultiChoiceOption("3d_only", "3D only"),
+    )
 
-private val screenScraperScreenshotOptions = listOf(
-    MultiChoiceOption("screenshot", "In-game", "ScreenScraper ss"),
-    MultiChoiceOption("title", "Title screen", "ScreenScraper ss-title"),
-    MultiChoiceOption("both", "Both")
-)
+private val screenScraperScreenshotOptions =
+    listOf(
+        MultiChoiceOption("screenshot", "In-game", "ScreenScraper ss"),
+        MultiChoiceOption("title", "Title screen", "ScreenScraper ss-title"),
+        MultiChoiceOption("both", "Both"),
+    )
 
-private val screenScraperLogoOptions = listOf(
-    MultiChoiceOption("wheel", "Wheel"),
-    MultiChoiceOption("wheel_hd", "Wheel HD"),
-    MultiChoiceOption("marquee", "Marquee"),
-    MultiChoiceOption("screenmarquee", "Screen marquee")
-)
+private val screenScraperLogoOptions =
+    listOf(
+        MultiChoiceOption("wheel", "Wheel"),
+        MultiChoiceOption("wheel_hd", "Wheel HD"),
+        MultiChoiceOption("marquee", "Marquee"),
+        MultiChoiceOption("screenmarquee", "Screen marquee"),
+    )
 
-private val steamGridDbAnimationOptions = listOf(
-    MultiChoiceOption("static", "Static"),
-    MultiChoiceOption("animated", "Animated"),
-    MultiChoiceOption("both", "Both")
-)
+private val steamGridDbAnimationOptions =
+    listOf(
+        MultiChoiceOption("static", "Static"),
+        MultiChoiceOption("animated", "Animated"),
+        MultiChoiceOption("both", "Both"),
+    )
 
 @Composable
 private fun ScraperSourceOptionsBlock(viewModel: ScraperViewModel) {
@@ -738,28 +754,28 @@ private fun ScraperSourceOptionsBlock(viewModel: ScraperViewModel) {
         Text(
             text = "Box art, screenshot, and logo types returned by ScreenScraper API.",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         GamepadSettingRow(
             label = "Box art type",
             type = SettingType.MultiChoice,
             multiChoiceOptions = screenScraperBoxOptions,
             selected = settings.screenScraperBoxType,
-            onSelect = { viewModel.update { s -> s.copy(screenScraperBoxType = it) } }
+            onSelect = { viewModel.update { s -> s.copy(screenScraperBoxType = it) } },
         )
         GamepadSettingRow(
             label = "Screenshot type",
             type = SettingType.MultiChoice,
             multiChoiceOptions = screenScraperScreenshotOptions,
             selected = settings.screenScraperScreenshotType,
-            onSelect = { viewModel.update { s -> s.copy(screenScraperScreenshotType = it) } }
+            onSelect = { viewModel.update { s -> s.copy(screenScraperScreenshotType = it) } },
         )
         GamepadSettingRow(
             label = "Logo / marquee type",
             type = SettingType.MultiChoice,
             multiChoiceOptions = screenScraperLogoOptions,
             selected = settings.screenScraperLogoType,
-            onSelect = { viewModel.update { s -> s.copy(screenScraperLogoType = it) } }
+            onSelect = { viewModel.update { s -> s.copy(screenScraperLogoType = it) } },
         )
         SourceToggle("Map fanart as hero", settings.screenScraperFanartAsHero) { v ->
             viewModel.update { it.copy(screenScraperFanartAsHero = v) }
@@ -772,33 +788,33 @@ private fun ScraperSourceOptionsBlock(viewModel: ScraperViewModel) {
         Text(
             text = "Per photo-type style filters. ${SteamGridDbStyleHints.EmptyMeansAll}",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         SteamGridDbStyleField(
             label = "Grid styles (boxart)",
             hint = SteamGridDbStyleHints.Grid,
-            value = settings.steamGridDbGridStyles
+            value = settings.steamGridDbGridStyles,
         ) { styles ->
             viewModel.update { it.copy(steamGridDbGridStyles = styles) }
         }
         SteamGridDbStyleField(
             label = "Hero styles",
             hint = SteamGridDbStyleHints.Hero,
-            value = settings.steamGridDbHeroStyles
+            value = settings.steamGridDbHeroStyles,
         ) { styles ->
             viewModel.update { it.copy(steamGridDbHeroStyles = styles) }
         }
         SteamGridDbStyleField(
             label = "Logo styles",
             hint = SteamGridDbStyleHints.Logo,
-            value = settings.steamGridDbLogoStyles
+            value = settings.steamGridDbLogoStyles,
         ) { styles ->
             viewModel.update { it.copy(steamGridDbLogoStyles = styles) }
         }
         SteamGridDbStyleField(
             label = "Icon styles",
             hint = SteamGridDbStyleHints.Icon,
-            value = settings.steamGridDbIconStyles
+            value = settings.steamGridDbIconStyles,
         ) { styles ->
             viewModel.update { it.copy(steamGridDbIconStyles = styles) }
         }
@@ -807,7 +823,7 @@ private fun ScraperSourceOptionsBlock(viewModel: ScraperViewModel) {
             type = SettingType.MultiChoice,
             multiChoiceOptions = steamGridDbAnimationOptions,
             selected = settings.steamGridDbAnimation,
-            onSelect = { viewModel.update { s -> s.copy(steamGridDbAnimation = it) } }
+            onSelect = { viewModel.update { s -> s.copy(steamGridDbAnimation = it) } },
         )
         SourceToggle("Include NSFW grids", settings.steamGridDbIncludeNsfw) { v ->
             viewModel.update { it.copy(steamGridDbIncludeNsfw = v) }
@@ -852,7 +868,7 @@ private fun PlatformSourceOptionsBlock(
     platformId: String,
     global: ScraperSettings,
     override: PlatformScraperOverride?,
-    effectiveSources: Set<String>
+    effectiveSources: Set<String>,
 ) {
     val effective = global.forPlatform(platformId)
 
@@ -869,9 +885,9 @@ private fun PlatformSourceOptionsBlock(
                     platformId,
                     global.screenScraperBoxType,
                     { o, v -> o.copy(screenScraperBoxType = v) },
-                    it
+                    it,
                 )
-            }
+            },
         )
         GamepadSettingRow(
             label = "Screenshot type",
@@ -884,9 +900,9 @@ private fun PlatformSourceOptionsBlock(
                     platformId,
                     global.screenScraperScreenshotType,
                     { o, v -> o.copy(screenScraperScreenshotType = v) },
-                    it
+                    it,
                 )
-            }
+            },
         )
         GamepadSettingRow(
             label = "Logo type",
@@ -899,20 +915,20 @@ private fun PlatformSourceOptionsBlock(
                     platformId,
                     global.screenScraperLogoType,
                     { o, v -> o.copy(screenScraperLogoType = v) },
-                    it
+                    it,
                 )
-            }
+            },
         )
         SourceToggle(
             label = "Map fanart as hero",
             checked = effective.screenScraperFanartAsHero,
-            overridden = override?.screenScraperFanartAsHero != null
+            overridden = override?.screenScraperFanartAsHero != null,
         ) { v ->
             viewModel.setPlatformBooleanOption(
                 platformId,
                 global.screenScraperFanartAsHero,
                 { o, value -> o.copy(screenScraperFanartAsHero = value) },
-                v
+                v,
             )
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -923,13 +939,13 @@ private fun PlatformSourceOptionsBlock(
         Text(
             text = SteamGridDbStyleHints.EmptyMeansAll,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         SteamGridDbStyleField(
             label = "Grid styles (boxart)",
             hint = SteamGridDbStyleHints.Grid,
             value = override?.steamGridDbGridStyles ?: global.steamGridDbGridStyles,
-            overridden = override?.steamGridDbGridStyles != null
+            overridden = override?.steamGridDbGridStyles != null,
         ) { styles ->
             viewModel.setPlatformGridStyles(platformId, styles)
         }
@@ -937,7 +953,7 @@ private fun PlatformSourceOptionsBlock(
             label = "Hero styles",
             hint = SteamGridDbStyleHints.Hero,
             value = override?.steamGridDbHeroStyles ?: global.steamGridDbHeroStyles,
-            overridden = override?.steamGridDbHeroStyles != null
+            overridden = override?.steamGridDbHeroStyles != null,
         ) { styles ->
             viewModel.setPlatformHeroStyles(platformId, styles)
         }
@@ -945,7 +961,7 @@ private fun PlatformSourceOptionsBlock(
             label = "Logo styles",
             hint = SteamGridDbStyleHints.Logo,
             value = override?.steamGridDbLogoStyles ?: global.steamGridDbLogoStyles,
-            overridden = override?.steamGridDbLogoStyles != null
+            overridden = override?.steamGridDbLogoStyles != null,
         ) { styles ->
             viewModel.setPlatformLogoStyles(platformId, styles)
         }
@@ -953,7 +969,7 @@ private fun PlatformSourceOptionsBlock(
             label = "Icon styles",
             hint = SteamGridDbStyleHints.Icon,
             value = override?.steamGridDbIconStyles ?: global.steamGridDbIconStyles,
-            overridden = override?.steamGridDbIconStyles != null
+            overridden = override?.steamGridDbIconStyles != null,
         ) { styles ->
             viewModel.setPlatformIconStyles(platformId, styles)
         }
@@ -968,32 +984,32 @@ private fun PlatformSourceOptionsBlock(
                     platformId,
                     global.steamGridDbAnimation,
                     { o, v -> o.copy(steamGridDbAnimation = v) },
-                    it
+                    it,
                 )
-            }
+            },
         )
         SourceToggle(
             label = "Include NSFW grids",
             checked = effective.steamGridDbIncludeNsfw,
-            overridden = override?.steamGridDbIncludeNsfw != null
+            overridden = override?.steamGridDbIncludeNsfw != null,
         ) { v ->
             viewModel.setPlatformBooleanOption(
                 platformId,
                 global.steamGridDbIncludeNsfw,
                 { o, value -> o.copy(steamGridDbIncludeNsfw = value) },
-                v
+                v,
             )
         }
         SourceToggle(
             label = "Include humor grids",
             checked = effective.steamGridDbIncludeHumor,
-            overridden = override?.steamGridDbIncludeHumor != null
+            overridden = override?.steamGridDbIncludeHumor != null,
         ) { v ->
             viewModel.setPlatformBooleanOption(
                 platformId,
                 global.steamGridDbIncludeHumor,
                 { o, value -> o.copy(steamGridDbIncludeHumor = value) },
-                v
+                v,
             )
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -1004,37 +1020,37 @@ private fun PlatformSourceOptionsBlock(
         SourceToggle(
             label = "Fetch box art",
             checked = effective.libretroFetchBoxart,
-            overridden = override?.libretroFetchBoxart != null
+            overridden = override?.libretroFetchBoxart != null,
         ) { v ->
             viewModel.setPlatformBooleanOption(
                 platformId,
                 global.libretroFetchBoxart,
                 { o, value -> o.copy(libretroFetchBoxart = value) },
-                v
+                v,
             )
         }
         SourceToggle(
             label = "Fetch snaps",
             checked = effective.libretroFetchSnaps,
-            overridden = override?.libretroFetchSnaps != null
+            overridden = override?.libretroFetchSnaps != null,
         ) { v ->
             viewModel.setPlatformBooleanOption(
                 platformId,
                 global.libretroFetchSnaps,
                 { o, value -> o.copy(libretroFetchSnaps = value) },
-                v
+                v,
             )
         }
         SourceToggle(
             label = "Fetch titles",
             checked = effective.libretroFetchTitles,
-            overridden = override?.libretroFetchTitles != null
+            overridden = override?.libretroFetchTitles != null,
         ) { v ->
             viewModel.setPlatformBooleanOption(
                 platformId,
                 global.libretroFetchTitles,
                 { o, value -> o.copy(libretroFetchTitles = value) },
-                v
+                v,
             )
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -1045,37 +1061,37 @@ private fun PlatformSourceOptionsBlock(
         SourceToggle(
             label = "Fetch icon",
             checked = effective.raFetchIcon,
-            overridden = override?.raFetchIcon != null
+            overridden = override?.raFetchIcon != null,
         ) { v ->
             viewModel.setPlatformBooleanOption(
                 platformId,
                 global.raFetchIcon,
                 { o, value -> o.copy(raFetchIcon = value) },
-                v
+                v,
             )
         }
         SourceToggle(
             label = "Fetch box art",
             checked = effective.raFetchBoxArt,
-            overridden = override?.raFetchBoxArt != null
+            overridden = override?.raFetchBoxArt != null,
         ) { v ->
             viewModel.setPlatformBooleanOption(
                 platformId,
                 global.raFetchBoxArt,
                 { o, value -> o.copy(raFetchBoxArt = value) },
-                v
+                v,
             )
         }
         SourceToggle(
             label = "Fetch title screen",
             checked = effective.raFetchTitle,
-            overridden = override?.raFetchTitle != null
+            overridden = override?.raFetchTitle != null,
         ) { v ->
             viewModel.setPlatformBooleanOption(
                 platformId,
                 global.raFetchTitle,
                 { o, value -> o.copy(raFetchTitle = value) },
-                v
+                v,
             )
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -1093,11 +1109,11 @@ private fun PlatformSourceOptionsBlock(
                 platformId,
                 global.mediaVariantIndex,
                 { o, value -> o.copy(mediaVariantIndex = value) },
-                idx.coerceAtLeast(0)
+                idx.coerceAtLeast(0),
             )
         },
         numberRange = 0..99,
-        numberStep = 1
+        numberStep = 1,
     )
 }
 
@@ -1105,20 +1121,20 @@ private fun PlatformSourceOptionsBlock(
 private fun SourceTestLoginRow(
     sourceId: String,
     onTest: () -> Unit,
-    viewModel: ScraperViewModel
+    viewModel: ScraperViewModel,
 ) {
     val tests by viewModel.sourceTests.collectAsState()
     val state = tests[sourceId] ?: SourceTestState()
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         GamepadButton(
             text = "Test login",
             onClick = onTest,
             enabled = !state.loading,
-            modifier = Modifier.heightIn(max = 40.dp)
+            modifier = Modifier.heightIn(max = 40.dp),
         )
         if (state.loading) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -1127,11 +1143,12 @@ private fun SourceTestLoginRow(
             Text(
                 text = msg,
                 style = MaterialTheme.typography.labelMedium,
-                color = when (state.success) {
-                    true -> MaterialTheme.colorScheme.primary
-                    false -> MaterialTheme.colorScheme.error
-                    null -> MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                color =
+                    when (state.success) {
+                        true -> MaterialTheme.colorScheme.primary
+                        false -> MaterialTheme.colorScheme.error
+                        null -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
             )
         }
     }
@@ -1143,7 +1160,7 @@ private fun SourceToggle(
     checked: Boolean,
     focusRequester: FocusRequester? = null,
     overridden: Boolean = false,
-    onChecked: (Boolean) -> Unit
+    onChecked: (Boolean) -> Unit,
 ) {
     val navId = remember(label) { "toggle_$label" }
     val row = @Composable {
@@ -1153,13 +1170,13 @@ private fun SourceToggle(
             checked = checked,
             onCheckedChange = onChecked,
             overridden = overridden,
-            focusRequester = focusRequester
+            focusRequester = focusRequester,
         )
     }
     if (LocalGamepadNavController.current != null) {
         GamepadNavItem(
             onActivate = { onChecked(!checked) },
-            itemId = navId
+            itemId = navId,
         ) {
             row()
         }
@@ -1173,7 +1190,7 @@ private fun CompactCredentialField(
     label: String,
     value: String,
     secret: Boolean = false,
-    onChange: (String) -> Unit
+    onChange: (String) -> Unit,
 ) {
     var text by remember(value) { mutableStateOf(value) }
     GamepadSafeTextField(
@@ -1185,9 +1202,10 @@ private fun CompactCredentialField(
         label = label,
         secret = secret,
         navItemId = "field_$label",
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
     )
 }
 
@@ -1197,13 +1215,13 @@ private fun SteamGridDbStyleField(
     hint: String,
     value: List<String>,
     overridden: Boolean = false,
-    onChange: (List<String>) -> Unit
+    onChange: (List<String>) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         CredentialField(
             label = label,
             value = value.joinToString(","),
-            overridden = overridden
+            overridden = overridden,
         ) { raw ->
             onChange(parseSteamGridDbStyles(raw))
         }
@@ -1211,7 +1229,7 @@ private fun SteamGridDbStyleField(
             text = "e.g. $hint — empty = all",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
         )
     }
 }
@@ -1222,7 +1240,7 @@ private fun CredentialField(
     value: String,
     secret: Boolean = false,
     overridden: Boolean = false,
-    onChange: (String) -> Unit
+    onChange: (String) -> Unit,
 ) {
     var text by remember(value) { mutableStateOf(value) }
     GamepadSafeTextField(
@@ -1235,7 +1253,7 @@ private fun CredentialField(
         secret = secret,
         overridden = overridden,
         navItemId = "field_$label",
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 
@@ -1243,7 +1261,7 @@ private fun CredentialField(
 private fun isPlatformSourceOverridden(
     override: PlatformScraperOverride?,
     sourceId: String,
-    globalSources: List<String>
+    globalSources: List<String>,
 ): Boolean {
     val platformSources = override?.enabledSources ?: return false
     return (sourceId in platformSources) != (sourceId in globalSources)
@@ -1252,7 +1270,7 @@ private fun isPlatformSourceOverridden(
 @Composable
 private fun ScraperBatchBlock(
     viewModel: ScraperViewModel,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     val progress by viewModel.progress.collectAsState()
     val inUsePlatforms by viewModel.inUsePlatforms.collectAsState()
@@ -1266,41 +1284,43 @@ private fun ScraperBatchBlock(
             Text(
                 text = feedback,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.error,
             )
         }
         if (!sourcesReady && !progress.running) {
             Text(
                 text = "No scraper sources configured — enable and sign in under Sources / Accounts.",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.error,
             )
         }
         if (progress.running) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = when {
-                        progress.paused -> "Paused"
-                        progress.statusMessage != null -> progress.statusMessage!!
-                        progress.currentGameName != null -> "Scraping: ${progress.currentGameName}"
-                        else -> "Scraping…"
-                    },
+                    text =
+                        when {
+                            progress.paused -> "Paused"
+                            progress.statusMessage != null -> progress.statusMessage!!
+                            progress.currentGameName != null -> "Scraping: ${progress.currentGameName}"
+                            else -> "Scraping…"
+                        },
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (progress.paused) {
-                        MaterialTheme.colorScheme.tertiary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    }
+                    color =
+                        if (progress.paused) {
+                            MaterialTheme.colorScheme.tertiary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
                 )
                 LinearProgressIndicator(
                     progress = {
                         if (progress.total == 0) 0f else progress.done.toFloat() / progress.total
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
                     text = "${progress.done} / ${progress.total} — ${progress.summaryLine()}",
-                    style = MaterialTheme.typography.labelMedium
+                    style = MaterialTheme.typography.labelMedium,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (progress.paused) {
@@ -1318,19 +1338,20 @@ private fun ScraperBatchBlock(
                     onSelect = { mode = it },
                     showReview = false,
                     firstFocusRequester = firstFocusRequester,
-                    enabled = !progress.running
+                    enabled = !progress.running,
                 )
                 GamepadButton(
-                    text = when (mode) {
-                        ScrapeUiMode.Force -> "Force scrape all platforms"
-                        else -> "Fill gaps — all platforms"
-                    },
+                    text =
+                        when (mode) {
+                            ScrapeUiMode.Force -> "Force scrape all platforms"
+                            else -> "Fill gaps — all platforms"
+                        },
                     onClick = {
                         viewModel.dismissBatchFeedback()
                         viewModel.startBatch(null, mode.toPolicy())
                     },
                     enabled = sourcesReady,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 if (viewModel.canRetryFailed(null)) {
                     TextButton(onClick = { viewModel.retryFailedBatch(null) }) {
@@ -1340,7 +1361,7 @@ private fun ScraperBatchBlock(
                 if (progress.done > 0) {
                     Text(
                         text = "Last run: ${progress.summaryLine()}",
-                        style = MaterialTheme.typography.labelMedium
+                        style = MaterialTheme.typography.labelMedium,
                     )
                 }
             }
@@ -1352,7 +1373,7 @@ private fun ScraperBatchBlock(
                         "Hide issues (${progress.issues.size})"
                     } else {
                         "Show issues (${progress.issues.size})"
-                    }
+                    },
                 )
             }
             if (issuesExpanded) {
@@ -1361,14 +1382,14 @@ private fun ScraperBatchBlock(
                         Text(
                             text = "${issue.gameName} — ${issue.kind.displayLabel()}: ${issue.message}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     if (progress.issues.size > 40) {
                         Text(
                             text = "…and ${progress.issues.size - 40} more",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -1381,19 +1402,20 @@ private fun ScraperBatchBlock(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(platform.name, style = MaterialTheme.typography.bodyMedium)
                     GamepadButton(
-                        text = when (mode) {
-                            ScrapeUiMode.Force -> "Force"
-                            else -> "Fill gaps"
-                        },
+                        text =
+                            when (mode) {
+                                ScrapeUiMode.Force -> "Force"
+                                else -> "Fill gaps"
+                            },
                         onClick = {
                             viewModel.startBatch(platform.id, mode.toPolicy())
                         },
                         enabled = !progress.running && sourcesReady,
-                        outlined = true
+                        outlined = true,
                     )
                 }
             }
@@ -1401,7 +1423,7 @@ private fun ScraperBatchBlock(
             Text(
                 text = "Add a platform to scrape per-system batches.",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -1411,7 +1433,7 @@ private fun ScraperBatchBlock(
 private fun ScraperManualBlock(
     viewModel: ScraperViewModel,
     reviewViewModel: ScrapeReviewViewModel = koinInject(),
-    dualStore: DualScreenStore = koinInject()
+    dualStore: DualScreenStore = koinInject(),
 ) {
     val manual by viewModel.manual.collectAsState()
     val results by viewModel.gameResults.collectAsState()
@@ -1429,7 +1451,7 @@ private fun ScraperManualBlock(
             },
             showSkip = false,
             dualDisplay = dualDisplay,
-            hostGamepadOwner = if (dualDisplay) dualStore.menuGamepadOwner() else null
+            hostGamepadOwner = if (dualDisplay) dualStore.menuGamepadOwner() else null,
         )
     }
 
@@ -1443,20 +1465,22 @@ private fun ScraperManualBlock(
                     viewModel.searchLibrary(it)
                 },
                 label = "Search your library",
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             )
             GamepadList(
                 items = results,
                 key = { it.id },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 280.dp)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 280.dp),
             ) { g ->
                 ScraperGamePickRow(
                     title = g.displayName,
-                    subtitle = "${g.platformId} — ${g.fileName}" +
-                        if (g.scrapedAt != null) " — scraped" else "",
-                    onActivate = { viewModel.selectGame(g) }
+                    subtitle =
+                        "${g.platformId} — ${g.fileName}" +
+                            if (g.scrapedAt != null) " — scraped" else "",
+                    onActivate = { viewModel.selectGame(g) },
                 )
             }
         }
@@ -1468,14 +1492,14 @@ private fun ScraperManualBlock(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(game.displayName, style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = game.fileName,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             TextButton(onClick = viewModel::clearSelection) { Text("Change game") }
@@ -1491,18 +1515,19 @@ private fun ScraperManualBlock(
                     reviewViewModel.openGame(game)
                 },
                 outlined = true,
-                enabled = !manual.applying
+                enabled = !manual.applying,
             )
         }
         manual.message?.let { msg ->
             Text(
                 msg,
                 style = MaterialTheme.typography.labelMedium,
-                color = when (manual.messageSuccess) {
-                    true -> MaterialTheme.colorScheme.primary
-                    false -> MaterialTheme.colorScheme.error
-                    null -> MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                color =
+                    when (manual.messageSuccess) {
+                        true -> MaterialTheme.colorScheme.primary
+                        false -> MaterialTheme.colorScheme.error
+                        null -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
             )
         }
         if (manual.applying || manual.searching) {
@@ -1515,20 +1540,20 @@ private fun ScraperManualBlock(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     AsyncImage(
                         model = media.localPath ?: media.remoteUrl,
                         contentDescription = media.type,
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(56.dp).clip(RoundedCornerShape(6.dp))
+                        modifier = Modifier.size(56.dp).clip(RoundedCornerShape(6.dp)),
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(media.type, style = MaterialTheme.typography.bodyMedium)
                         Text(
                             text = media.source,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     TextButton(onClick = { viewModel.deleteMedia(media) }) { Text("Delete") }
@@ -1540,17 +1565,17 @@ private fun ScraperManualBlock(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             GamepadSafeTextField(
                 value = searchName,
                 onValueChange = { searchName = it },
                 label = "Search sources by name",
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
             Button(
                 onClick = { viewModel.searchSources(searchName) },
-                enabled = !manual.searching
+                enabled = !manual.searching,
             ) { Text("Search") }
         }
         manual.candidates.forEach { candidate ->
@@ -1560,7 +1585,7 @@ private fun ScraperManualBlock(
                 onReview = {
                     reviewing = true
                     reviewViewModel.openGame(game, preferredCandidate = candidate)
-                }
+                },
             )
         }
     }
@@ -1570,20 +1595,21 @@ private fun ScraperManualBlock(
 private fun ScraperGamePickRow(
     title: String,
     subtitle: String,
-    onActivate: () -> Unit
+    onActivate: () -> Unit,
 ) {
     GamepadFocusable(
         onClick = onActivate,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = WajihaSpacing.sm, horizontal = WajihaSpacing.xs)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = WajihaSpacing.sm, horizontal = WajihaSpacing.xs),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -1593,25 +1619,25 @@ private fun ScraperGamePickRow(
 private fun CandidateRow(
     candidate: ScrapeCandidate,
     onApply: () -> Unit,
-    onReview: (() -> Unit)? = null
+    onReview: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         AsyncImage(
             model = candidate.thumbnailUrl ?: candidate.media.firstOrNull()?.url,
             contentDescription = candidate.name,
             contentScale = ContentScale.Fit,
-            modifier = Modifier.size(width = 48.dp, height = 64.dp).clip(RoundedCornerShape(6.dp))
+            modifier = Modifier.size(width = 48.dp, height = 64.dp).clip(RoundedCornerShape(6.dp)),
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(candidate.name, style = MaterialTheme.typography.bodyMedium)
             Text(
                 text = "${candidate.sourceId} — ${candidate.media.size} media",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (onReview != null) {

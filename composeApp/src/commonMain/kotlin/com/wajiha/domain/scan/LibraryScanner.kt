@@ -24,7 +24,7 @@ data class ScanProgress(
     val gamesSkipped: Int = 0,
     val foldersFailed: Int = 0,
     val failureMessages: List<String> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
 )
 
 /**
@@ -39,7 +39,7 @@ class LibraryScanner(
     private val romScanner: RomScanner,
     private val romHasher: RomHasher,
     private val settingsRepository: SettingsRepository,
-    private val now: () -> Long
+    private val now: () -> Long,
 ) {
     private val _progress = MutableStateFlow(ScanProgress())
     val progress: StateFlow<ScanProgress> = _progress
@@ -66,40 +66,53 @@ class LibraryScanner(
         val seenByPlatform = mutableMapOf<String, MutableSet<String>?>()
 
         folders.forEachIndexed { index, folder ->
-            _progress.value = _progress.value.copy(
-                currentFolder = folder.treeUri,
-                foldersDone = index
-            )
-            val platform = platformRepository.byId(folder.platformId) ?: return@forEachIndexed
-            val extensions = buildSet {
-                platform.extensions.split(',').forEach { ext ->
-                    ext.trim().lowercase().takeIf { it.isNotEmpty() }?.let { add(it) }
-                }
-                folder.extraExtensions?.split(',')?.forEach { ext ->
-                    ext.trim().lowercase().takeIf { it.isNotEmpty() }?.let { add(it) }
-                }
-            }
-            val scanned = try {
-                romScanner.scan(folder.treeUri, extensions, folder.scanDepth)
-            } catch (e: Exception) {
-                seenByPlatform[folder.platformId] = null
-                val message = e.message ?: "scan failed"
-                _progress.value = _progress.value.copy(
-                    error = message,
-                    foldersFailed = _progress.value.foldersFailed + 1,
-                    failureMessages = _progress.value.failureMessages + message
+            _progress.value =
+                _progress.value.copy(
+                    currentFolder = folder.treeUri,
+                    foldersDone = index,
                 )
-                return@forEachIndexed
-            }
+            val platform = platformRepository.byId(folder.platformId) ?: return@forEachIndexed
+            val extensions =
+                buildSet {
+                    platform.extensions.split(',').forEach { ext ->
+                        ext
+                            .trim()
+                            .lowercase()
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { add(it) }
+                    }
+                    folder.extraExtensions?.split(',')?.forEach { ext ->
+                        ext
+                            .trim()
+                            .lowercase()
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { add(it) }
+                    }
+                }
+            val scanned =
+                try {
+                    romScanner.scan(folder.treeUri, extensions, folder.scanDepth)
+                } catch (e: Exception) {
+                    seenByPlatform[folder.platformId] = null
+                    val message = e.message ?: "scan failed"
+                    _progress.value =
+                        _progress.value.copy(
+                            error = message,
+                            foldersFailed = _progress.value.foldersFailed + 1,
+                            failureMessages = _progress.value.failureMessages + message,
+                        )
+                    return@forEachIndexed
+                }
 
             val afterMultiDisc = filterMultiDiscTracks(scanned)
-            val visible = if (ignoreEnabled) {
-                val filtered = filterIgnoredNamePatterns(afterMultiDisc, ignorePatterns)
-                skipped += afterMultiDisc.size - filtered.size
-                filtered
-            } else {
-                afterMultiDisc
-            }
+            val visible =
+                if (ignoreEnabled) {
+                    val filtered = filterIgnoredNamePatterns(afterMultiDisc, ignorePatterns)
+                    skipped += afterMultiDisc.size - filtered.size
+                    filtered
+                } else {
+                    afterMultiDisc
+                }
             val bucket = seenByPlatform.getOrPut(folder.platformId) { mutableSetOf() }
             bucket?.addAll(visible.map { it.uri })
 
@@ -107,19 +120,21 @@ class LibraryScanner(
             val newRoms = visible.filter { it.uri !in existingUris }
             if (newRoms.isNotEmpty()) {
                 val timestamp = now()
-                val inserted = gameRepository.insertAll(
-                    newRoms.map { rom -> rom.toGameEntity(folder.platformId, timestamp) }
-                )
+                val inserted =
+                    gameRepository.insertAll(
+                        newRoms.map { rom -> rom.toGameEntity(folder.platformId, timestamp) },
+                    )
                 added += inserted.count { it != -1L }
             }
             gameRepository.markFolderScanned(folder.id, now())
-            _progress.value = _progress.value.copy(
-                foldersDone = index + 1,
-                gamesAdded = added,
-                gamesRemoved = removed,
-                gamesSkipped = skipped,
-                currentFolder = null
-            )
+            _progress.value =
+                _progress.value.copy(
+                    foldersDone = index + 1,
+                    gamesAdded = added,
+                    gamesRemoved = removed,
+                    gamesSkipped = skipped,
+                    currentFolder = null,
+                )
         }
 
         // Remove games whose files vanished — only when every folder of the
@@ -137,18 +152,19 @@ class LibraryScanner(
             }
         }
 
-        val result = _progress.value.copy(
-            running = false,
-            currentFolder = null,
-            foldersDone = folders.size,
-            gamesAdded = added,
-            gamesRemoved = removed,
-            gamesSkipped = skipped
-        )
+        val result =
+            _progress.value.copy(
+                running = false,
+                currentFolder = null,
+                foldersDone = folders.size,
+                gamesAdded = added,
+                gamesRemoved = removed,
+                gamesSkipped = skipped,
+            )
         if (skipped > 0) {
             WajihaLog.i(
                 WajihaTags.LIBRARY,
-                "scan: skipped $skipped ROM(s) matching ignore name patterns"
+                "scan: skipped $skipped ROM(s) matching ignore name patterns",
             )
         }
         _progress.value = result
@@ -163,9 +179,12 @@ class LibraryScanner(
         val games = gameRepository.missingHashes(CRC_MAX_BYTES, limit)
         for (game in games) {
             val crc = romHasher.crc32(game.uri, CRC_MAX_BYTES)
-            val md5 = if (game.fileSize in 1..MD5_MAX_BYTES) {
-                romHasher.md5(game.uri, MD5_MAX_BYTES)
-            } else null
+            val md5 =
+                if (game.fileSize in 1..MD5_MAX_BYTES) {
+                    romHasher.md5(game.uri, MD5_MAX_BYTES)
+                } else {
+                    null
+                }
             if (crc != null || md5 != null) {
                 gameRepository.setHashes(game.id, crc, md5)
             }
@@ -173,7 +192,10 @@ class LibraryScanner(
         return games.size
     }
 
-    private fun ScannedRom.toGameEntity(platformId: String, timestamp: Long): GameEntity {
+    private fun ScannedRom.toGameEntity(
+        platformId: String,
+        timestamp: Long,
+    ): GameEntity {
         val baseName = fileName.substringBeforeLast('.')
         return GameEntity(
             uri = uri,
@@ -182,7 +204,7 @@ class LibraryScanner(
             sortName = baseName.lowercase(),
             fileName = fileName,
             fileSize = size,
-            addedAt = timestamp
+            addedAt = timestamp,
         )
     }
 
@@ -201,7 +223,7 @@ class LibraryScanner(
 
         fun filterIgnoredNamePatterns(
             roms: List<ScannedRom>,
-            patterns: List<String>
+            patterns: List<String>,
         ): List<ScannedRom> {
             val needles = patterns.map { it.trim().lowercase() }.filter { it.isNotEmpty() }
             if (needles.isEmpty()) return roms

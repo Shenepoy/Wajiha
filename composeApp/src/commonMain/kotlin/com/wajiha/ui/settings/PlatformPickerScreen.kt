@@ -40,52 +40,60 @@ fun PlatformPickerScreen(
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier,
     gamepadOwner: GamepadOwner? = null,
-    onClaimGamepad: ((GamepadOwner) -> Unit)? = null
+    onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
 ) {
     val allPlatforms by settingsViewModel.allPlatforms.collectAsState()
     val folders by settingsViewModel.folders.collectAsState()
-    val inUseIds = remember(folders, allPlatforms) {
-        settingsViewModel.inUsePlatformIds(allPlatforms, folders)
-    }
-    var query by remember { mutableStateOf("") }
-    val navController = rememberGamepadNavController(
-        mode = GamepadNavMode.Vertical,
-        onBack = { onBack(); true }
-    )
-
-    val filtered = remember(allPlatforms, query) {
-        val q = query.trim().lowercase()
-        val base = if (q.isEmpty()) {
-            allPlatforms
-        } else {
-            allPlatforms.filter {
-                it.name.lowercase().contains(q) ||
-                    it.shortName.lowercase().contains(q) ||
-                    it.id.lowercase().contains(q)
-            }
+    val inUseIds =
+        remember(folders, allPlatforms) {
+            settingsViewModel.inUsePlatformIds(allPlatforms, folders)
         }
-        base.sortedWith(
-            compareByDescending<PlatformEntity> { it.id in inUseIds }
-                .thenBy { it.name.lowercase() }
+    var query by remember { mutableStateOf("") }
+    val navController =
+        rememberGamepadNavController(
+            mode = GamepadNavMode.Vertical,
+            onBack = {
+                onBack()
+                true
+            },
         )
-    }
+
+    val filtered =
+        remember(allPlatforms, query) {
+            val q = query.trim().lowercase()
+            val base =
+                if (q.isEmpty()) {
+                    allPlatforms
+                } else {
+                    allPlatforms.filter {
+                        it.name.lowercase().contains(q) ||
+                            it.shortName.lowercase().contains(q) ||
+                            it.id.lowercase().contains(q)
+                    }
+                }
+            base.sortedWith(
+                compareByDescending<PlatformEntity> { it.id in inUseIds }
+                    .thenBy { it.name.lowercase() },
+            )
+        }
 
     WajihaScreen(
         layerId = "platform_picker",
         modifier = modifier,
         onBack = onBack,
         showActionBar = true,
-        gamepadHints = listOf(
-            "A" to "Add/Open",
-            "B" to "Back",
-            "L2" to "Focus screen",
-            "Search" to "A to edit"
-        ),
+        gamepadHints =
+            listOf(
+                "A" to "Add/Open",
+                "B" to "Back",
+                "L2" to "Focus screen",
+                "Search" to "A to edit",
+            ),
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onOwnerGainedFocus = {
             navController.focusState.focusedIndex = 0
-        }
+        },
     ) {
         GamepadNavHost(controller = navController) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -95,32 +103,33 @@ fun PlatformPickerScreen(
                     value = query,
                     onValueChange = { query = it },
                     label = "Search systems",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.xs),
-                    navItemId = "search"
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.xs),
+                    navItemId = "search",
                 )
 
                 Text(
                     text = "Pick a system, then set folders, emulator, scraper ids, and per-system scraper overrides.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.xs)
+                    modifier = Modifier.padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.xs),
                 )
 
                 GamepadList(
                     items = filtered,
                     key = { it.id },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 ) { platform ->
                     GamepadNavItem(
                         onActivate = { onPick(platform.id) },
-                        itemId = platform.id
+                        itemId = platform.id,
                     ) {
                         PlatformPickRow(
                             platform = platform,
                             alreadyInUse = platform.id in inUseIds,
-                            onClick = { onPick(platform.id) }
+                            onClick = { onPick(platform.id) },
                         )
                     }
                 }
@@ -133,32 +142,35 @@ fun PlatformPickerScreen(
 private fun PlatformPickRow(
     platform: PlatformEntity,
     alreadyInUse: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = WajihaSpacing.sm + WajihaSpacing.xs, horizontal = WajihaSpacing.xs),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = WajihaSpacing.sm + WajihaSpacing.xs, horizontal = WajihaSpacing.xs),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(platform.name, style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = platform.shortName.uppercase() +
-                    if (alreadyInUse) " · already added" else "",
+                text =
+                    platform.shortName.uppercase() +
+                        if (alreadyInUse) " · already added" else "",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (alreadyInUse) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                color =
+                    if (alreadyInUse) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
             )
         }
         Text(
             text = if (alreadyInUse) "Open" else "Add",
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary
+            color = MaterialTheme.colorScheme.primary,
         )
     }
 }

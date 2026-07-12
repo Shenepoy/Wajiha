@@ -17,9 +17,8 @@ import kotlinx.coroutines.SupervisorJob
 class AndroidLibraryActions(
     private val context: Context,
     private val romFolderManager: RomFolderManager,
-    private val batchScraper: BatchScraper
+    private val batchScraper: BatchScraper,
 ) : LibraryActions {
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** Set by the host activity; invoked with the platformId to pick for. */
@@ -33,7 +32,10 @@ class AndroidLibraryActions(
 
     override fun rescanPlatform(platformId: String) = romFolderManager.rescanPlatform(platformId)
 
-    override suspend fun startScrape(platformId: String?, mode: String): String? {
+    override suspend fun startScrape(
+        platformId: String?,
+        mode: String,
+    ): String? {
         val policy = ScrapeRunPolicy.fromName(mode)
         val blocked = batchScraper.preflightMessage(platformId)
         if (blocked != null) return blocked

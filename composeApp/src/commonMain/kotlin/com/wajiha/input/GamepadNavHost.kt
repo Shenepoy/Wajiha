@@ -23,7 +23,7 @@ fun GamepadNavHost(
     zoneIndex: Int = 0,
     interceptKeys: Boolean = true,
     onGamepadKey: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean)? = null,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val inputModeController = LocalInputModeController.current
     val effectiveCoordinator = coordinator ?: LocalGamepadNavCoordinator.current
@@ -39,30 +39,31 @@ fun GamepadNavHost(
 
     CompositionLocalProvider(LocalGamepadNavController provides controller) {
         Box(
-            modifier = modifier
-                .pointerInput(inputModeController) {
-                    detectTapGestures(
-                        onPress = {
-                            inputModeController?.onTouch()
-                            tryAwaitRelease()
-                        }
-                    )
-                }
-                .then(
-                    if (interceptKeys) {
-                        Modifier.onPreviewKeyEvent { event ->
-                            if (GamepadKeys.switchesToGamepadMode(event)) {
-                                inputModeController?.onGamepadKey()
+            modifier =
+                modifier
+                    .pointerInput(inputModeController) {
+                        detectTapGestures(
+                            onPress = {
+                                inputModeController?.onTouch()
+                                tryAwaitRelease()
+                            },
+                        )
+                    }.then(
+                        if (interceptKeys) {
+                            Modifier.onPreviewKeyEvent { event ->
+                                if (GamepadKeys.switchesToGamepadMode(event)) {
+                                    inputModeController?.onGamepadKey()
+                                }
+                                if (onGamepadKey?.invoke(event) == true) return@onPreviewKeyEvent true
+                                val handled =
+                                    effectiveCoordinator?.handleKeyEvent(event)
+                                        ?: controller.handleKeyEvent(event)
+                                handled
                             }
-                            if (onGamepadKey?.invoke(event) == true) return@onPreviewKeyEvent true
-                            val handled = effectiveCoordinator?.handleKeyEvent(event)
-                                ?: controller.handleKeyEvent(event)
-                            handled
-                        }
-                    } else {
-                        Modifier
-                    }
-                )
+                        } else {
+                            Modifier
+                        },
+                    ),
         ) {
             content()
         }

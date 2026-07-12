@@ -32,7 +32,7 @@ fun WajihaScreen(
     onPreviewKey: ((KeyEvent) -> Boolean)? = null,
     onOwnerGainedFocus: (suspend () -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     if (onBack != null) {
         BackHandler(onBack = onBack)
@@ -44,27 +44,29 @@ fun WajihaScreen(
         owner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onPreviewKey = onPreviewKey,
-        onOwnerGainedFocus = onOwnerGainedFocus
+        onOwnerGainedFocus = onOwnerGainedFocus,
     ) {
         WajihaSnackbarScaffold(
-            snackbarHostState = snackbarHostState ?: rememberWajihaSnackbarHostState()
+            snackbarHostState = snackbarHostState ?: rememberWajihaSnackbarHostState(),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
             ) {
                 if (title != null) {
                     androidx.compose.material3.Text(
                         text = title,
                         style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(WajihaSpacing.md)
+                        modifier = Modifier.padding(WajihaSpacing.md),
                     )
                 }
                 Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxSize()
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxSize(),
                 ) {
                     content()
                 }

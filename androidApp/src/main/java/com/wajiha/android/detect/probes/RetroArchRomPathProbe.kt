@@ -18,14 +18,16 @@ import kotlinx.serialization.json.jsonPrimitive
  * Path is resolved from [retroarch.cfg] when present.
  */
 class RetroArchRomPathProbe(
-    private val reader: EmulatorDataReader
+    private val reader: EmulatorDataReader,
 ) : RomPathProbe {
-
     override val probeId = "retroarch"
     override val supportedPackages = EmulatorPackages.retroArch
     override val priority = 20
 
-    override suspend fun probe(packageName: String, sessionStartedAt: Long): RomPathCandidate? =
+    override suspend fun probe(
+        packageName: String,
+        sessionStartedAt: Long,
+    ): RomPathCandidate? =
         withContext(Dispatchers.IO) {
             val historyPath = resolveHistoryPath(packageName) ?: return@withContext null
             val content = reader.readText(historyPath) ?: return@withContext null
@@ -34,9 +36,13 @@ class RetroArchRomPathProbe(
 
     internal fun resolveHistoryPath(packageName: String): String? {
         val cfgPath = "${reader.dataRootForPackage(packageName)}/retroarch.cfg"
-        val cfg = runCatching {
-            java.io.File(cfgPath).takeIf { it.isFile }?.readText()
-        }.getOrNull()
+        val cfg =
+            runCatching {
+                java.io
+                    .File(cfgPath)
+                    .takeIf { it.isFile }
+                    ?.readText()
+            }.getOrNull()
         val fromCfg = cfg?.let { IniKeyParser.cfgValue(it, "content_history_path") }
         if (!fromCfg.isNullOrBlank() && reader.exists(fromCfg)) {
             return fromCfg
@@ -46,15 +52,18 @@ class RetroArchRomPathProbe(
             val builtin = "$playlistDir/builtin/content_history.lpl"
             if (reader.exists(builtin)) return builtin
         }
-        val defaults = listOf(
-            "${reader.externalRoot()}/RetroArch/playlists/builtin/content_history.lpl",
-            "${reader.dataRootForPackage(packageName)}/content_history.lpl"
-        )
+        val defaults =
+            listOf(
+                "${reader.externalRoot()}/RetroArch/playlists/builtin/content_history.lpl",
+                "${reader.dataRootForPackage(packageName)}/content_history.lpl",
+            )
         return defaults.firstOrNull { reader.exists(it) }
     }
 
-    internal fun parseHistoryEntry(content: String, sessionStartedAt: Long): RomPathCandidate? =
-        parseHistoryContent(content, sessionStartedAt, probeId)
+    internal fun parseHistoryEntry(
+        content: String,
+        sessionStartedAt: Long,
+    ): RomPathCandidate? = parseHistoryContent(content, sessionStartedAt, probeId)
 
     companion object {
         private const val SESSION_SKEW_MS = 60_000L
@@ -63,7 +72,7 @@ class RetroArchRomPathProbe(
         fun parseHistoryContent(
             content: String,
             sessionStartedAt: Long,
-            probeId: String = "retroarch"
+            probeId: String = "retroarch",
         ): RomPathCandidate? {
             val trimmed = content.trim()
             if (trimmed.isEmpty()) return null
@@ -77,43 +86,46 @@ class RetroArchRomPathProbe(
         private fun parseJsonHistoryStatic(
             content: String,
             sessionStartedAt: Long,
-            probeId: String
+            probeId: String,
         ): RomPathCandidate? {
-            val root = runCatching { json.parseToJsonElement(content).jsonObject }.getOrNull()
-                ?: return null
+            val root =
+                runCatching { json.parseToJsonElement(content).jsonObject }.getOrNull()
+                    ?: return null
             val items = root["items"]?.jsonArray ?: return null
             if (items.isEmpty()) return null
 
             val cutoff = sessionStartedAt - SESSION_SKEW_MS
-            val picked = items.mapNotNull { element ->
-                val obj = element.jsonObject
-                val path = obj.stringValue("path") ?: return@mapNotNull null
-                val ts = obj.longValue("entry_timestamp") ?: obj.longValue("last_played")
-                Triple(path, obj.stringValue("core_name"), ts)
-            }.filter { (_, _, ts) -> ts == null || ts >= cutoff }
-                .maxByOrNull { it.third ?: Long.MIN_VALUE }
-                ?: run {
-                    val first = items.first().jsonObject
-                    Triple(
-                        first.stringValue("path") ?: return null,
-                        first.stringValue("core_name"),
-                        first.longValue("entry_timestamp")
-                    )
-                }
+            val picked =
+                items
+                    .mapNotNull { element ->
+                        val obj = element.jsonObject
+                        val path = obj.stringValue("path") ?: return@mapNotNull null
+                        val ts = obj.longValue("entry_timestamp") ?: obj.longValue("last_played")
+                        Triple(path, obj.stringValue("core_name"), ts)
+                    }.filter { (_, _, ts) -> ts == null || ts >= cutoff }
+                    .maxByOrNull { it.third ?: Long.MIN_VALUE }
+                    ?: run {
+                        val first = items.first().jsonObject
+                        Triple(
+                            first.stringValue("path") ?: return null,
+                            first.stringValue("core_name"),
+                            first.longValue("entry_timestamp"),
+                        )
+                    }
 
             val (path, coreName, ts) = picked
             return RomPathCandidate(
                 rawPath = path,
                 probeId = probeId,
                 platformHint = coreName?.let(::platformFromCore),
-                timestamp = ts
+                timestamp = ts,
             )
         }
 
         private fun parseLegacyHistoryStatic(
             content: String,
             sessionStartedAt: Long,
-            probeId: String
+            probeId: String,
         ): RomPathCandidate? {
             val lines = content.lines().map { it.trim() }.filter { it.isNotEmpty() }
             if (lines.size < 2) return null
@@ -121,43 +133,43 @@ class RetroArchRomPathProbe(
                 rawPath = lines[1],
                 probeId = probeId,
                 platformHint = null,
-                timestamp = sessionStartedAt
+                timestamp = sessionStartedAt,
             )
         }
 
         fun platformFromCore(coreName: String): String? {
             val normalized = coreName.lowercase()
-            return CORE_HINTS.entries.firstOrNull { (prefix, _) ->
-                normalized.contains(prefix)
-            }?.value
+            return CORE_HINTS.entries
+                .firstOrNull { (prefix, _) ->
+                    normalized.contains(prefix)
+                }?.value
         }
 
-        private val CORE_HINTS = linkedMapOf(
-            "snes9x" to "snes",
-            "fceumm" to "nes",
-            "nestopia" to "nes",
-            "genesis_plus_gx" to "md",
-            "picodrive" to "md",
-            "pcsx_rearmed" to "psx",
-            "beetle_psx" to "psx",
-            "melonds" to "nds",
-            "desmume" to "nds",
-            "mupen64plus" to "n64",
-            "parallel_n64" to "n64",
-            "gambatte" to "gb",
-            "vba_next" to "gba",
-            "mgba" to "gba",
-            "ppsspp" to "psp",
-            "dolphin" to "gc",
-            "flycast" to "dc",
-            "beetle_pce" to "pce",
-            "mednafen_pce" to "pce"
-        )
+        private val CORE_HINTS =
+            linkedMapOf(
+                "snes9x" to "snes",
+                "fceumm" to "nes",
+                "nestopia" to "nes",
+                "genesis_plus_gx" to "md",
+                "picodrive" to "md",
+                "pcsx_rearmed" to "psx",
+                "beetle_psx" to "psx",
+                "melonds" to "nds",
+                "desmume" to "nds",
+                "mupen64plus" to "n64",
+                "parallel_n64" to "n64",
+                "gambatte" to "gb",
+                "vba_next" to "gba",
+                "mgba" to "gba",
+                "ppsspp" to "psp",
+                "dolphin" to "gc",
+                "flycast" to "dc",
+                "beetle_pce" to "pce",
+                "mednafen_pce" to "pce",
+            )
     }
 }
 
-private fun JsonObject.stringValue(key: String): String? =
-    this[key]?.jsonPrimitive?.contentOrNull
+private fun JsonObject.stringValue(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull
 
-private fun JsonObject.longValue(key: String): Long? =
-    this[key]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+private fun JsonObject.longValue(key: String): Long? = this[key]?.jsonPrimitive?.contentOrNull?.toLongOrNull()

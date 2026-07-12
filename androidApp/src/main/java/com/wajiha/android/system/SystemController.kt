@@ -26,8 +26,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * (WRITE_SETTINGS), media volume, battery, screen timeout, torch, and the
  * permission/role helpers used by onboarding.
  */
-class SystemController(private val context: Context) : SystemControls {
-
+class SystemController(
+    private val context: Context,
+) : SystemControls {
     private val _status = MutableStateFlow(SystemStatus())
     override val status: StateFlow<SystemStatus> = _status.asStateFlow()
 
@@ -38,7 +39,8 @@ class SystemController(private val context: Context) : SystemControls {
     private val torchCameraId: String? by lazy {
         try {
             cameraManager.cameraIdList.firstOrNull { id ->
-                cameraManager.getCameraCharacteristics(id)
+                cameraManager
+                    .getCameraCharacteristics(id)
                     .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
             }
         } catch (_: Exception) {
@@ -55,40 +57,47 @@ class SystemController(private val context: Context) : SystemControls {
         val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         val volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
 
-        val brightness = try {
-            Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS) / 255f
-        } catch (_: Exception) {
-            -1f
-        }
-        val timeoutMs = try {
-            Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_OFF_TIMEOUT)
-        } catch (_: Exception) {
-            0
-        }
+        val brightness =
+            try {
+                Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS) / 255f
+            } catch (_: Exception) {
+                -1f
+            }
+        val timeoutMs =
+            try {
+                Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_OFF_TIMEOUT)
+            } catch (_: Exception) {
+                0
+            }
 
-        val wifi = try {
-            (context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).isWifiEnabled
-        } catch (_: Exception) {
-            false
-        }
-        val bt = try {
-            (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager)
-                .adapter?.isEnabled == true
-        } catch (_: Exception) {
-            false
-        }
+        val wifi =
+            try {
+                (context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).isWifiEnabled
+            } catch (_: Exception) {
+                false
+            }
+        val bt =
+            try {
+                (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager)
+                    .adapter
+                    ?.isEnabled == true
+            } catch (_: Exception) {
+                false
+            }
 
-        _status.value = SystemStatus(
-            batteryPercent = if (level >= 0) level * 100 / scale else -1,
-            charging = chargeStatus == BatteryManager.BATTERY_STATUS_CHARGING ||
-                chargeStatus == BatteryManager.BATTERY_STATUS_FULL,
-            brightness = brightness,
-            volume = if (maxVolume > 0) volume.toFloat() / maxVolume else 0f,
-            screenTimeoutSec = timeoutMs / 1000,
-            wifiEnabled = wifi,
-            bluetoothEnabled = bt,
-            torchOn = torchOn
-        )
+        _status.value =
+            SystemStatus(
+                batteryPercent = if (level >= 0) level * 100 / scale else -1,
+                charging =
+                    chargeStatus == BatteryManager.BATTERY_STATUS_CHARGING ||
+                        chargeStatus == BatteryManager.BATTERY_STATUS_FULL,
+                brightness = brightness,
+                volume = if (maxVolume > 0) volume.toFloat() / maxVolume else 0f,
+                screenTimeoutSec = timeoutMs / 1000,
+                wifiEnabled = wifi,
+                bluetoothEnabled = bt,
+                torchOn = torchOn,
+            )
     }
 
     override fun setBrightness(fraction: Float): Boolean {
@@ -97,12 +106,12 @@ class SystemController(private val context: Context) : SystemControls {
             Settings.System.putInt(
                 context.contentResolver,
                 Settings.System.SCREEN_BRIGHTNESS_MODE,
-                Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
+                Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL,
             )
             Settings.System.putInt(
                 context.contentResolver,
                 Settings.System.SCREEN_BRIGHTNESS,
-                (fraction.coerceIn(0f, 1f) * 255).toInt()
+                (fraction.coerceIn(0f, 1f) * 255).toInt(),
             )
             _status.value = _status.value.copy(brightness = fraction)
             true
@@ -117,7 +126,7 @@ class SystemController(private val context: Context) : SystemControls {
             audioManager.setStreamVolume(
                 AudioManager.STREAM_MUSIC,
                 (fraction.coerceIn(0f, 1f) * max).toInt(),
-                0
+                0,
             )
             _status.value = _status.value.copy(volume = fraction)
         } catch (_: Exception) {
@@ -130,7 +139,7 @@ class SystemController(private val context: Context) : SystemControls {
             Settings.System.putInt(
                 context.contentResolver,
                 Settings.System.SCREEN_OFF_TIMEOUT,
-                seconds * 1000
+                seconds * 1000,
             )
             _status.value = _status.value.copy(screenTimeoutSec = seconds)
             true
@@ -151,24 +160,26 @@ class SystemController(private val context: Context) : SystemControls {
     }
 
     override fun openWifiSettings() = startSettings(Settings.ACTION_WIFI_SETTINGS)
+
     override fun openBluetoothSettings() = startSettings(Settings.ACTION_BLUETOOTH_SETTINGS)
 
     // ---- permissions / roles ----
 
     override fun permissionStates(): PermissionStates {
-        val notifications = if (Build.VERSION.SDK_INT >= 33) {
-            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
-                android.content.pm.PackageManager.PERMISSION_GRANTED
-        } else {
-            (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                .areNotificationsEnabled()
-        }
+        val notifications =
+            if (Build.VERSION.SDK_INT >= 33) {
+                context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else {
+                (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                    .areNotificationsEnabled()
+            }
         return PermissionStates(
             usageAccess = hasUsageAccess(),
             writeSettings = Settings.System.canWrite(context),
             notifications = notifications,
             allFilesAccess = Environment.isExternalStorageManager(),
-            isDefaultLauncher = isDefaultLauncher()
+            isDefaultLauncher = isDefaultLauncher(),
         )
     }
 
@@ -183,7 +194,7 @@ class SystemController(private val context: Context) : SystemControls {
         return appOps.unsafeCheckOpNoThrow(
             android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
             android.os.Process.myUid(),
-            context.packageName
+            context.packageName,
         ) == android.app.AppOpsManager.MODE_ALLOWED
     }
 
@@ -192,7 +203,7 @@ class SystemController(private val context: Context) : SystemControls {
     override fun requestWriteSettings() {
         startActivity(
             Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS)
-                .setData(Uri.parse("package:${context.packageName}"))
+                .setData(Uri.parse("package:${context.packageName}")),
         )
     }
 
@@ -205,7 +216,7 @@ class SystemController(private val context: Context) : SystemControls {
         } else {
             startActivity(
                 Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
             )
         }
     }
@@ -213,7 +224,7 @@ class SystemController(private val context: Context) : SystemControls {
     override fun requestAllFilesAccess() {
         startActivity(
             Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                .setData(Uri.parse("package:${context.packageName}"))
+                .setData(Uri.parse("package:${context.packageName}")),
         )
     }
 
@@ -222,23 +233,25 @@ class SystemController(private val context: Context) : SystemControls {
     override fun openAppInfo(packageName: String) {
         startActivity(
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                .setData(Uri.parse("package:$packageName"))
+                .setData(Uri.parse("package:$packageName")),
         )
     }
 
-    override fun isPackageInstalled(packageName: String): Boolean = try {
-        context.packageManager.getPackageInfo(packageName, 0)
-        true
-    } catch (_: Exception) {
-        false
-    }
+    override fun isPackageInstalled(packageName: String): Boolean =
+        try {
+            context.packageManager.getPackageInfo(packageName, 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
 
     override fun appVersionLabel(): String {
-        val version = try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        } catch (_: Exception) {
-            null
-        }
+        val version =
+            try {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            } catch (_: Exception) {
+                null
+            }
         return if (version.isNullOrBlank()) "Wajiha" else "Wajiha $version"
     }
 

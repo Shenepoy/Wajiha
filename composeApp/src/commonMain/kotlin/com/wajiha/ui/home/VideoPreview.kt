@@ -8,4 +8,7 @@ import androidx.compose.ui.Modifier
  * ExoPlayer; plays the scraped preview video (muted, looping) when present.
  */
 @Composable
-expect fun VideoPreview(path: String, modifier: Modifier)
+expect fun VideoPreview(
+    path: String,
+    modifier: Modifier,
+)

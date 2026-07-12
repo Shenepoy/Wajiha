@@ -10,7 +10,6 @@ import kotlin.test.assertTrue
  * 119 Daijishō platform JSONs and the iiSU 173-console file.
  */
 class ImporterFixturesTest {
-
     private val resourcesDir =
         File("src/commonMain/composeResources/files/platforms")
 
@@ -73,30 +72,34 @@ class ImporterFixturesTest {
 
     @Test
     fun mergePrefersDaijishouAndAppendsIisuExtras() {
-        val daijishou = listOf(
-            PlatformConfig(
-                id = "snes",
-                name = "Super Nintendo",
-                shortName = "snes",
-                extensions = listOf("sfc", "smc"),
-                raConsoleId = 3,
-                emulators = listOf(
-                    EmulatorConfig(id = "snes.ra64.snes9x", name = "RA snes9x", isDefault = true)
-                )
+        val daijishou =
+            listOf(
+                PlatformConfig(
+                    id = "snes",
+                    name = "Super Nintendo",
+                    shortName = "snes",
+                    extensions = listOf("sfc", "smc"),
+                    raConsoleId = 3,
+                    emulators =
+                        listOf(
+                            EmulatorConfig(id = "snes.ra64.snes9x", name = "RA snes9x", isDefault = true),
+                        ),
+                ),
             )
-        )
-        val iisu = listOf(
-            PlatformConfig(
-                id = "snes",
-                name = "SNES (iiSU)",
-                shortName = "snes",
-                extensions = listOf("sfc", "zip"),
-                emulators = listOf(
-                    EmulatorConfig(id = "snes.snes9x-standalone", name = "Snes9x EX+", isDefault = true)
-                )
-            ),
-            PlatformConfig(id = "pico8", name = "PICO-8", shortName = "pico8")
-        )
+        val iisu =
+            listOf(
+                PlatformConfig(
+                    id = "snes",
+                    name = "SNES (iiSU)",
+                    shortName = "snes",
+                    extensions = listOf("sfc", "zip"),
+                    emulators =
+                        listOf(
+                            EmulatorConfig(id = "snes.snes9x-standalone", name = "Snes9x EX+", isDefault = true),
+                        ),
+                ),
+                PlatformConfig(id = "pico8", name = "PICO-8", shortName = "pico8"),
+            )
         val merged = ConfigMerger.merge(daijishou, iisu)
 
         val snes = merged.first { it.id == "snes" }
@@ -104,7 +107,12 @@ class ImporterFixturesTest {
         assertEquals(listOf("sfc", "smc", "zip"), snes.extensions)
         assertEquals(2, snes.emulators.size)
         // iiSU emulator must not steal the default flag
-        assertTrue(snes.emulators.first { it.id == "snes.snes9x-standalone" }.isDefault.not())
+        assertTrue(
+            snes.emulators
+                .first { it.id == "snes.snes9x-standalone" }
+                .isDefault
+                .not(),
+        )
         assertTrue(merged.any { it.id == "pico8" })
     }
 }

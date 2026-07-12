@@ -5,6 +5,9 @@ import android.content.ComponentCallbacks2
 import android.content.res.Configuration
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStoreFile
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -12,9 +15,6 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.request.crossfade
-import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.preferencesDataStoreFile
 import com.wajiha.android.detect.EmulatorDataReader
 import com.wajiha.android.detect.ExternalGameResolver
 import com.wajiha.android.detect.RomPathMatcher
@@ -31,8 +31,8 @@ import com.wajiha.android.platform.AndroidLibraryActions
 import com.wajiha.android.system.SystemController
 import com.wajiha.data.config.ConfigInstaller
 import com.wajiha.data.db.WajihaDatabase
-import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.data.db.createWajihaDatabase
+import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.data.scraper.ImageProcessor
 import com.wajiha.data.scraper.LocalMediaFiles
 import com.wajiha.data.scraper.MediaStorage
@@ -60,122 +60,132 @@ import org.koin.core.qualifier.named
 import org.koin.dsl.binds
 import org.koin.dsl.module
 
-class WajihaApplication : Application(), SingletonImageLoader.Factory {
-
+class WajihaApplication :
+    Application(),
+    SingletonImageLoader.Factory {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private val memoryTrimCallbacks = object : ComponentCallbacks2 {
-        override fun onTrimMemory(level: Int) {
-            if (level != TRIM_MEMORY_RUNNING_CRITICAL &&
-                level != TRIM_MEMORY_COMPLETE
-            ) {
-                return
+    private val memoryTrimCallbacks =
+        object : ComponentCallbacks2 {
+            override fun onTrimMemory(level: Int) {
+                if (level != TRIM_MEMORY_RUNNING_CRITICAL &&
+                    level != TRIM_MEMORY_COMPLETE
+                ) {
+                    return
+                }
+                runCatching {
+                    GlobalContext
+                        .get()
+                        .get<ForegroundAppMonitor>()
+                        .enforceMemoryGuard(trigger = "trim:$level")
+                }
             }
-            runCatching {
-                GlobalContext.get().get<ForegroundAppMonitor>()
-                    .enforceMemoryGuard(trigger = "trim:$level")
+
+            override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+            override fun onLowMemory() {
+                runCatching {
+                    GlobalContext
+                        .get()
+                        .get<ForegroundAppMonitor>()
+                        .enforceMemoryGuard(trigger = "onLowMemory")
+                }
             }
         }
-
-        override fun onConfigurationChanged(newConfig: Configuration) = Unit
-
-        override fun onLowMemory() {
-            runCatching {
-                GlobalContext.get().get<ForegroundAppMonitor>()
-                    .enforceMemoryGuard(trigger = "onLowMemory")
-            }
-        }
-    }
 
     /** Tuned Coil pipeline: bounded memory cache + persistent disk cache. */
     override fun newImageLoader(context: PlatformContext): ImageLoader =
-        ImageLoader.Builder(context)
+        ImageLoader
+            .Builder(context)
             .memoryCache {
                 MemoryCache.Builder().maxSizePercent(context, 0.15).build()
-            }
-            .diskCache {
-                DiskCache.Builder()
+            }.diskCache {
+                DiskCache
+                    .Builder()
                     .directory(cacheDir.resolve("image_cache"))
                     .maxSizeBytes(256L * 1024 * 1024)
                     .build()
-            }
-            .crossfade(true)
+            }.crossfade(true)
             .build()
 
     override fun onCreate() {
         super.onCreate()
-        val androidModule = module {
-            single<WajihaDatabase> {
-                createWajihaDatabase(this@WajihaApplication)
-            }
-            single<DataStore<Preferences>> {
-                PreferenceDataStoreFactory.create {
-                    this@WajihaApplication.preferencesDataStoreFile("wajiha_settings")
+        val androidModule =
+            module {
+                single<WajihaDatabase> {
+                    createWajihaDatabase(this@WajihaApplication)
+                }
+                single<DataStore<Preferences>> {
+                    PreferenceDataStoreFactory.create {
+                        this@WajihaApplication.preferencesDataStoreFile("wajiha_settings")
+                    }
+                }
+                single<RomScanner> { SafRomScanner(this@WajihaApplication) }
+                single<RomHasher> { ContentRomHasher(this@WajihaApplication) }
+                single { RomFolderManager(this@WajihaApplication, get()) }
+                single { PlaySessionTracker(get(), get()) }
+                single { GameLauncher(this@WajihaApplication, get(), get(), get(), get(), get(), get()) }
+                single { DisplayCoordinator(this@WajihaApplication, get()) }
+                single(named("applicationScope")) { appScope }
+                single {
+                    com.wajiha.android.input.GamepadKeyRouter(
+                        store = get(),
+                        settingsRepository = get(),
+                        appActions = get(),
+                        notifications = get(),
+                        scope = get(named("applicationScope")),
+                    )
+                }
+                single {
+                    com.wajiha.android.input.TriggerAxisHandler(
+                        store = get(),
+                        notifications = get(),
+                        appActions = get(),
+                    )
+                }
+                single {
+                    com.wajiha.android.input
+                        .GamepadGate(get())
+                }
+                single { EmulatorDataReader(this@WajihaApplication) }
+                single { RomPathMatcher(get()) }
+                single { AetherSx2RomPathProbe(get()) }
+                single { RetroArchRomPathProbe(get()) }
+                single {
+                    ExternalGameResolver(
+                        probes = listOf(get<AetherSx2RomPathProbe>(), get<RetroArchRomPathProbe>()),
+                        matcher = get(),
+                        settingsRepository = get(),
+                        reader = get(),
+                    )
+                }
+                single {
+                    ForegroundAppMonitor(
+                        this@WajihaApplication,
+                        get(),
+                        get(),
+                        get(),
+                        get(),
+                        get(),
+                    )
+                }
+                single { RomFileDeleter(this@WajihaApplication) }
+                single { AndroidAppActions(this@WajihaApplication, get(), get(), get(), get(), get()) } binds
+                    arrayOf(AppActions::class)
+                single { AndroidLibraryActions(this@WajihaApplication, get(), get()) } binds
+                    arrayOf(LibraryActions::class)
+                single<MediaStorage> { AndroidMediaStorage(this@WajihaApplication) }
+                single<LocalMediaFiles> { EsDeLocalMediaFiles() }
+                single<ImageProcessor> { AndroidImageProcessor() }
+                single { SystemController(this@WajihaApplication) } binds
+                    arrayOf(SystemControls::class)
+                single {
+                    ScreenScraperDevCredentials(
+                        devId = BuildConfig.SCREENSCRAPER_DEV_ID,
+                        devPassword = BuildConfig.SCREENSCRAPER_DEV_PASSWORD,
+                    )
                 }
             }
-            single<RomScanner> { SafRomScanner(this@WajihaApplication) }
-            single<RomHasher> { ContentRomHasher(this@WajihaApplication) }
-            single { RomFolderManager(this@WajihaApplication, get()) }
-            single { PlaySessionTracker(get(), get()) }
-            single { GameLauncher(this@WajihaApplication, get(), get(), get(), get(), get(), get()) }
-            single { DisplayCoordinator(this@WajihaApplication, get()) }
-            single(named("applicationScope")) { appScope }
-            single {
-                com.wajiha.android.input.GamepadKeyRouter(
-                    store = get(),
-                    settingsRepository = get(),
-                    appActions = get(),
-                    notifications = get(),
-                    scope = get(named("applicationScope"))
-                )
-            }
-            single {
-                com.wajiha.android.input.TriggerAxisHandler(
-                    store = get(),
-                    notifications = get(),
-                    appActions = get()
-                )
-            }
-            single { com.wajiha.android.input.GamepadGate(get()) }
-            single { EmulatorDataReader(this@WajihaApplication) }
-            single { RomPathMatcher(get()) }
-            single { AetherSx2RomPathProbe(get()) }
-            single { RetroArchRomPathProbe(get()) }
-            single {
-                ExternalGameResolver(
-                    probes = listOf(get<AetherSx2RomPathProbe>(), get<RetroArchRomPathProbe>()),
-                    matcher = get(),
-                    settingsRepository = get(),
-                    reader = get()
-                )
-            }
-            single {
-                ForegroundAppMonitor(
-                    this@WajihaApplication,
-                    get(),
-                    get(),
-                    get(),
-                    get(),
-                    get()
-                )
-            }
-            single { RomFileDeleter(this@WajihaApplication) }
-            single { AndroidAppActions(this@WajihaApplication, get(), get(), get(), get(), get()) } binds
-                arrayOf(AppActions::class)
-            single { AndroidLibraryActions(this@WajihaApplication, get(), get()) } binds
-                arrayOf(LibraryActions::class)
-            single<MediaStorage> { AndroidMediaStorage(this@WajihaApplication) }
-            single<LocalMediaFiles> { EsDeLocalMediaFiles() }
-            single<ImageProcessor> { AndroidImageProcessor() }
-            single { SystemController(this@WajihaApplication) } binds
-                arrayOf(SystemControls::class)
-            single {
-                ScreenScraperDevCredentials(
-                    devId = BuildConfig.SCREENSCRAPER_DEV_ID,
-                    devPassword = BuildConfig.SCREENSCRAPER_DEV_PASSWORD
-                )
-            }
-        }
         initKoin(platformModules = listOf(androidModule)) {
             androidLogger()
             androidContext(this@WajihaApplication)
@@ -198,11 +208,12 @@ class WajihaApplication : Application(), SingletonImageLoader.Factory {
                 monitor.memoryGuardEnabled = settings.memoryGuardEnabled
                 // Force the same night mode on both Thor displays so Compose
                 // "system" and any residual platform chrome stay in lockstep.
-                val nightMode = when (settings.theme) {
-                    "dark" -> AppCompatDelegate.MODE_NIGHT_YES
-                    "light" -> AppCompatDelegate.MODE_NIGHT_NO
-                    else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                }
+                val nightMode =
+                    when (settings.theme) {
+                        "dark" -> AppCompatDelegate.MODE_NIGHT_YES
+                        "light" -> AppCompatDelegate.MODE_NIGHT_NO
+                        else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+                    }
                 if (AppCompatDelegate.getDefaultNightMode() != nightMode) {
                     AppCompatDelegate.setDefaultNightMode(nightMode)
                 }

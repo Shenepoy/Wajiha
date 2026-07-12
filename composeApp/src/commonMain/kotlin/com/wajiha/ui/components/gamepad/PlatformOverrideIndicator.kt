@@ -29,8 +29,8 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.ui.theme.WajihaSpacing
-import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 private val OverrideBadgeColor = Color(0xFFFFC107)
 private const val HintAutoDismissMs = 2_500L
@@ -42,7 +42,7 @@ private const val HintAutoDismissMs = 2_500L
 @Composable
 fun PlatformOverrideIndicator(
     hint: String = "Changed from global default",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var showHint by remember { mutableStateOf(false) }
     val density = LocalDensity.current
@@ -55,21 +55,21 @@ fun PlatformOverrideIndicator(
     }
 
     Box(
-        modifier = modifier
-            .size(width = 12.dp, height = 5.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(OverrideBadgeColor.copy(alpha = 0.82f))
-            .focusable()
-            .wajihaGamepadFocus()
-            .onFocusChanged { state ->
-                showHint = state.isFocused
-            }
-            .pointerInput(hint) {
-                detectTapGestures(
-                    onTap = { showHint = !showHint },
-                    onLongPress = { showHint = true }
-                )
-            }
+        modifier =
+            modifier
+                .size(width = 12.dp, height = 5.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(OverrideBadgeColor.copy(alpha = 0.82f))
+                .focusable()
+                .wajihaGamepadFocus()
+                .onFocusChanged { state ->
+                    showHint = state.isFocused
+                }.pointerInput(hint) {
+                    detectTapGestures(
+                        onTap = { showHint = !showHint },
+                        onLongPress = { showHint = true },
+                    )
+                },
     )
 
     if (showHint) {
@@ -77,21 +77,22 @@ fun PlatformOverrideIndicator(
             alignment = Alignment.TopStart,
             offset = IntOffset(0, with(density) { 18.dp.roundToPx() }),
             onDismissRequest = { showHint = false },
-            properties = PopupProperties(focusable = false)
+            properties = PopupProperties(focusable = false),
         ) {
             Surface(
                 shape = RoundedCornerShape(6.dp),
                 color = MaterialTheme.colorScheme.inverseSurface,
-                tonalElevation = 4.dp
+                tonalElevation = 4.dp,
             ) {
                 Text(
                     text = hint,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.inverseOnSurface,
-                    modifier = Modifier.padding(
-                        horizontal = WajihaSpacing.sm,
-                        vertical = WajihaSpacing.xs
-                    )
+                    modifier =
+                        Modifier.padding(
+                            horizontal = WajihaSpacing.sm,
+                            vertical = WajihaSpacing.xs,
+                        ),
                 )
             }
         }

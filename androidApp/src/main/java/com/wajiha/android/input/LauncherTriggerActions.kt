@@ -12,7 +12,7 @@ import com.wajiha.state.SystemNotificationStore
 class LauncherTriggerActions(
     private val store: DualScreenStore,
     private val notifications: SystemNotificationStore,
-    private val appActions: AppActions
+    private val appActions: AppActions,
 ) {
     /** @return true when the press was handled. */
     fun onL2(label: String): Boolean {
@@ -22,7 +22,7 @@ class LauncherTriggerActions(
         store.toggleGamepadOwner()
         WajihaLog.i(
             WajihaTags.GAMEPAD,
-            "map: L2($label) → gamepadOwner=${store.gamepadOwner.value}"
+            "map: L2($label) → gamepadOwner=${store.gamepadOwner.value}",
         )
         appActions.playSound(UiSound.Navigate)
         return true
@@ -39,7 +39,7 @@ class LauncherTriggerActions(
         notifications.togglePanel()
         WajihaLog.i(
             WajihaTags.GAMEPAD,
-            "map: R2($label) → notifications panelOpen=${notifications.panelOpen.value}"
+            "map: R2($label) → notifications panelOpen=${notifications.panelOpen.value}",
         )
         appActions.playSound(UiSound.Navigate)
         return true

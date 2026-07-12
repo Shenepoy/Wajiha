@@ -27,6 +27,7 @@ object WajihaColors {
     val SurfaceLight = Color(0xFFF4F7FB)
     val SurfaceVariantLight = Color(0xFFDAE2EC)
     val OnLight = Color(0xFF16202C)
+
     /** Secondary labels on light surfaces — readable without alpha hacks. */
     val OnLightMuted = Color(0xFF4A5A6E)
 
@@ -34,8 +35,10 @@ object WajihaColors {
     val BackgroundDark = Color(0xFF0B101B)
     val SurfaceDark = Color(0xFF121927)
     val SurfaceVariantDark = Color(0xFF1D2738)
+
     /** Primary text on dark — near-white for strong contrast. */
     val OnDark = Color(0xFFF2F5FA)
+
     /**
      * Body / caption text on dark. Solid muted blue-grey (~AA on navy) —
      * prefer this over OnDark.copy(alpha = …) which washes out.
@@ -49,6 +52,7 @@ object WajihaColors {
     val ScreenFrame = Color(0xFF080B12)
     val ScreenFrameLight = Color(0xFFD4DCE8)
     val HeroScrim = Color(0x99000000)
+
     // Bottom-of-tile label scrim (always over artwork → keep dark)
     val TileScrim = Color(0xCC0B101B)
 }

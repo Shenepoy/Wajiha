@@ -62,7 +62,7 @@ fun AppDrawerScreen(
     secondaryDisplayId: Int? = null,
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(Unit) { onLoad() }
 
@@ -105,19 +105,20 @@ fun AppDrawerScreen(
         restoringGridFocus = true
     }
 
-    val gamepadHints = remember(menuOpen) {
-        buildList {
-            if (menuOpen) {
-                add("B" to "Back")
-            } else {
-                add("A" to "Open app")
-                add("Y" to "Bottom screen")
-                add("X" to "Menu")
-                add("B" to "Back")
-                add("L2" to "Focus screen")
+    val gamepadHints =
+        remember(menuOpen) {
+            buildList {
+                if (menuOpen) {
+                    add("B" to "Back")
+                } else {
+                    add("A" to "Open app")
+                    add("Y" to "Bottom screen")
+                    add("X" to "Menu")
+                    add("B" to "Back")
+                    add("L2" to "Focus screen")
+                }
             }
         }
-    }
 
     WajihaScreen(
         layerId = "app_drawer",
@@ -142,14 +143,16 @@ fun AppDrawerScreen(
                     openContextMenu(pkg)
                     true
                 }
+
                 GamepadKeys.isY(event.type, event.key) && pkg != null -> {
                     WajihaLog.i(
                         WajihaTags.LAUNCH,
-                        "appDrawer: Y launches pkg=$pkg on displayId=$bottomDisplayId"
+                        "appDrawer: Y launches pkg=$pkg on displayId=$bottomDisplayId",
                     )
                     onLaunchOnDisplay(pkg, bottomDisplayId)
                     true
                 }
+
                 aTileHasFocus &&
                     pkg != null &&
                     GamepadKeys.isConfirm(event.type, event.key) -> {
@@ -157,23 +160,27 @@ fun AppDrawerScreen(
                     onLaunch(pkg)
                     true
                 }
-                else -> false
+
+                else -> {
+                    false
+                }
             }
-        }
+        },
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = WajihaSpacing.sm + WajihaSpacing.xs, vertical = WajihaSpacing.sm),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = WajihaSpacing.sm + WajihaSpacing.xs, vertical = WajihaSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TextButton(onClick = onBack) { Text("< Back") }
                     Text(
                         text = "Apps",
                         style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = WajihaSpacing.sm)
+                        modifier = Modifier.padding(start = WajihaSpacing.sm),
                     )
                 }
                 LaunchedEffect(restoringGridFocus, restoreFocusPackage) {
@@ -195,16 +202,18 @@ fun AppDrawerScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(WajihaSpacing.sm + WajihaSpacing.xs),
                     horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm + WajihaSpacing.xs)
+                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm + WajihaSpacing.xs),
                 ) {
                     items(apps, key = { it.packageName }) { app ->
                         val isSelected = app.packageName == selectedPackage
                         val isMenuTile = menuOpen && contextMenuTarget?.packageName == app.packageName
-                        val isRestoreTile = restoringGridFocus &&
-                            (restoreFocusPackage ?: selectedPackage) == app.packageName
-                        val tileFocus = remember(app.packageName) {
-                            tileFocusRequesters.getOrPut(app.packageName) { FocusRequester() }
-                        }
+                        val isRestoreTile =
+                            restoringGridFocus &&
+                                (restoreFocusPackage ?: selectedPackage) == app.packageName
+                        val tileFocus =
+                            remember(app.packageName) {
+                                tileFocusRequesters.getOrPut(app.packageName) { FocusRequester() }
+                            }
                         AppTile(
                             app = app,
                             selected = isSelected,
@@ -234,17 +243,19 @@ fun AppDrawerScreen(
                                 }
                             },
                             focusRequester = tileFocus,
-                            gamepadFocusable = when {
-                                menuOpen -> false
-                                restoringGridFocus -> isRestoreTile
-                                else -> true
-                            },
+                            gamepadFocusable =
+                                when {
+                                    menuOpen -> false
+                                    restoringGridFocus -> isRestoreTile
+                                    else -> true
+                                },
                             navHighlighted = (isMenuTile || isRestoreTile) && isSelected,
-                            modifier = Modifier
-                                .then(if (isMenuTile) Modifier.zIndex(1f) else Modifier)
-                                .onGloballyPositioned { coords ->
-                                    tileBoundsByPackage[app.packageName] = coords.boundsInRoot()
-                                }
+                            modifier =
+                                Modifier
+                                    .then(if (isMenuTile) Modifier.zIndex(1f) else Modifier)
+                                    .onGloballyPositioned { coords ->
+                                        tileBoundsByPackage[app.packageName] = coords.boundsInRoot()
+                                    },
                         )
                     }
                 }
@@ -283,28 +294,29 @@ private fun AppTile(
         focusRequester = focusRequester,
         gamepadFocusable = gamepadFocusable,
         navHighlighted = navHighlighted,
-        modifier = modifier.padding(WajihaSpacing.sm)
+        modifier = modifier.padding(WajihaSpacing.sm),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                modifier = Modifier
-                    .size(WajihaSpacing.touchMin + WajihaSpacing.sm)
-                    .clip(WajihaShapes.tile)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .size(WajihaSpacing.touchMin + WajihaSpacing.sm)
+                        .clip(WajihaShapes.tile)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
             ) {
                 val icon = app.icon
                 if (icon != null) {
                     Image(
                         bitmap = icon,
                         contentDescription = app.label,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     )
                 } else {
                     Text(
                         text = app.label.take(1).uppercase(),
                         style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }
@@ -315,7 +327,7 @@ private fun AppTile(
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(top = WajihaSpacing.xs)
+                modifier = Modifier.padding(top = WajihaSpacing.xs),
             )
         }
     }

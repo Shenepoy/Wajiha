@@ -14,45 +14,63 @@ import org.koin.core.component.inject
  * Debug-build test hooks for agents (`adb shell am broadcast -a com.wajiha.DEBUG_*`).
  * Compiled only in debug variants — not present in release APKs.
  */
-class DebugBroadcastReceiver : BroadcastReceiver(), KoinComponent {
-
+class DebugBroadcastReceiver :
+    BroadcastReceiver(),
+    KoinComponent {
     private val monitor: ForegroundAppMonitor by inject()
     private val dualStore: DualScreenStore by inject()
 
-    override fun onReceive(context: Context, intent: Intent) {
+    override fun onReceive(
+        context: Context,
+        intent: Intent,
+    ) {
         when (intent.action) {
-            ACTION_DUMP_SESSIONS -> monitor.debugDumpState()
-            ACTION_REFRESH_SESSIONS -> monitor.debugForceRefresh()
-            ACTION_CLEAR_SUPPRESS -> monitor.debugClearSuppressList()
+            ACTION_DUMP_SESSIONS -> {
+                monitor.debugDumpState()
+            }
+
+            ACTION_REFRESH_SESSIONS -> {
+                monitor.debugForceRefresh()
+            }
+
+            ACTION_CLEAR_SUPPRESS -> {
+                monitor.debugClearSuppressList()
+            }
+
             ACTION_TOGGLE_GAMEPAD_OWNER -> {
                 dualStore.toggleGamepadOwner()
                 WajihaLog.i(
                     WajihaTags.DEBUG,
                     "toggleGamepadOwner → owner=${dualStore.gamepadOwner.value} " +
-                        "state=${dualStore.state.value} epoch=${dualStore.gamepadFocusEpoch.value}"
+                        "state=${dualStore.state.value} epoch=${dualStore.gamepadFocusEpoch.value}",
                 )
             }
+
             ACTION_DUMP_GAMEPAD -> {
                 WajihaLog.i(
                     WajihaTags.DEBUG,
                     "gamepad: owner=${dualStore.gamepadOwner.value} " +
                         "state=${dualStore.state.value} epoch=${dualStore.gamepadFocusEpoch.value} " +
-                        "menu=${dualStore.menuGamepadOwner()} hero=${dualStore.heroGamepadOwner()}"
+                        "menu=${dualStore.menuGamepadOwner()} hero=${dualStore.heroGamepadOwner()}",
                 )
             }
+
             ACTION_SIMULATE_FOREGROUND -> {
                 val pkg = intent.getStringExtra(EXTRA_PACKAGE)
                 if (pkg.isNullOrBlank()) {
                     WajihaLog.w(
                         WajihaTags.DEBUG,
-                        "simulateForeground: missing --es package <pkg>"
+                        "simulateForeground: missing --es package <pkg>",
                     )
                 } else {
                     WajihaLog.i(WajihaTags.DEBUG, "simulateForeground: $pkg")
                     monitor.onForegroundPackage(pkg)
                 }
             }
-            else -> WajihaLog.w(WajihaTags.DEBUG, "unknown action: ${intent.action}")
+
+            else -> {
+                WajihaLog.w(WajihaTags.DEBUG, "unknown action: ${intent.action}")
+            }
         }
     }
 

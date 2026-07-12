@@ -18,20 +18,32 @@ data class LaunchSpec(
     val keepSafUri: Boolean = false,
     val killBeforeLaunch: Boolean = false,
     /** When set, launches on this display via [ActivityOptions.setLaunchDisplayId]. */
-    val launchDisplayId: Int? = null
+    val launchDisplayId: Int? = null,
 )
 
 data class LaunchExtra(
     val key: String,
     val value: String,
     /** string | bool | boolean | int | long | float | uri | string_array */
-    val type: String = "string"
+    val type: String = "string",
 )
 
 sealed interface LaunchResult {
     data object Success : LaunchResult
-    data class EmulatorNotInstalled(val packageName: String) : LaunchResult
-    data class ActivityNotFound(val packageName: String) : LaunchResult
-    data class PermissionDenied(val message: String?) : LaunchResult
-    data class Failed(val message: String?) : LaunchResult
+
+    data class EmulatorNotInstalled(
+        val packageName: String,
+    ) : LaunchResult
+
+    data class ActivityNotFound(
+        val packageName: String,
+    ) : LaunchResult
+
+    data class PermissionDenied(
+        val message: String?,
+    ) : LaunchResult
+
+    data class Failed(
+        val message: String?,
+    ) : LaunchResult
 }

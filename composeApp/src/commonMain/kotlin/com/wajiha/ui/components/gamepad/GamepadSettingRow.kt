@@ -46,14 +46,14 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -74,21 +74,25 @@ data class MultiChoiceOption(
     val label: String,
     val description: String? = null,
     val icon: String? = null,
-    val enabled: Boolean = true
+    val enabled: Boolean = true,
 )
 
 /** Setting row interaction pattern for gamepad-first settings screens. */
 enum class SettingType {
     /** On/off toggle — A or Left/Right flips the switch. */
     Toggle,
+
     /** Two or three discrete values — inline segmented pills beside the label. */
     BinaryChoice,
+
     /** Four or more values — collapsed row that expands into a vertical radio list. */
     MultiChoice,
+
     /** Integer value — Left decreases, Right increases; A also steps up. */
     Number,
+
     /** Row supports Y → reset when [GamepadSettingRow.onReset] is set. */
-    WithReset
+    WithReset,
 }
 
 /**
@@ -118,14 +122,15 @@ fun GamepadSettingRow(
     numberRange: IntRange = 0..100,
     numberStep: Int = 1,
     numberLabel: ((Int) -> String)? = null,
-    content: (@Composable () -> Unit)? = null
+    content: (@Composable () -> Unit)? = null,
 ) {
     if (type == SettingType.MultiChoice && (multiChoiceOptions.isNotEmpty() || options.isNotEmpty())) {
-        val resolved = if (multiChoiceOptions.isNotEmpty()) {
-            multiChoiceOptions
-        } else {
-            options.map { (value, display) -> MultiChoiceOption(value, display) }
-        }
+        val resolved =
+            if (multiChoiceOptions.isNotEmpty()) {
+                multiChoiceOptions
+            } else {
+                options.map { (value, display) -> MultiChoiceOption(value, display) }
+            }
         MultiChoiceSettingRow(
             label = label,
             description = description,
@@ -137,7 +142,7 @@ fun GamepadSettingRow(
             isAtDefault = isAtDefault,
             overridden = overridden,
             overrideHint = overrideHint,
-            modifier = modifier
+            modifier = modifier,
         )
         return
     }
@@ -164,11 +169,16 @@ fun GamepadSettingRow(
                 feedback.confirm()
                 onActivate()
             }
-            type == SettingType.Number && onNumberChange != null -> adjustNumber(+numberStep)
+
+            type == SettingType.Number && onNumberChange != null -> {
+                adjustNumber(+numberStep)
+            }
+
             onCheckedChange != null -> {
                 feedback.confirm()
                 onCheckedChange(!checked)
             }
+
             options.isNotEmpty() && onSelect != null -> {
                 feedback.navigate()
                 val idx = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
@@ -186,70 +196,83 @@ fun GamepadSettingRow(
                 onCheckedChange?.invoke(!checked)
                 true
             }
+
             SettingType.Number -> {
                 adjustNumber(if (key == Key.DirectionLeft) -numberStep else numberStep)
                 true
             }
-            else -> false
+
+            else -> {
+                false
+            }
         }
     }
 
-    val interactionModifier = Modifier
-        .clip(WajihaShapes.focus)
-        .wajihaFocusIndicator(highlighted = highlight)
-        .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-        .then(
-            if (!useCustomNav) {
-                Modifier
-                    .onFocusChanged { focused = it.isFocused }
-                    .wajihaGamepadFocus()
-                    .onPreviewKeyEvent { event ->
-                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        when {
-                            GamepadKeys.isConfirm(event.type, event.key) -> {
-                                activate()
-                                true
+    val interactionModifier =
+        Modifier
+            .clip(WajihaShapes.focus)
+            .wajihaFocusIndicator(highlighted = highlight)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .then(
+                if (!useCustomNav) {
+                    Modifier
+                        .onFocusChanged { focused = it.isFocused }
+                        .wajihaGamepadFocus()
+                        .onPreviewKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                            when {
+                                GamepadKeys.isConfirm(event.type, event.key) -> {
+                                    activate()
+                                    true
+                                }
+
+                                handleHorizontalKey(event.key) -> {
+                                    true
+                                }
+
+                                GamepadKeys.isY(event.type, event.key) && canReset -> {
+                                    feedback.confirm()
+                                    onReset?.invoke()
+                                    true
+                                }
+
+                                else -> {
+                                    false
+                                }
                             }
-                            handleHorizontalKey(event.key) -> true
-                            GamepadKeys.isY(event.type, event.key) && canReset -> {
-                                feedback.confirm()
-                                onReset?.invoke()
-                                true
-                            }
-                            else -> false
                         }
-                    }
-            } else {
-                Modifier
+                } else {
+                    Modifier
+                },
+            ).pointerInput(
+                type,
+                checked,
+                options,
+                selected,
+                numberValue,
+                onCheckedChange,
+                onSelect,
+                onActivate,
+                onNumberChange,
+            ) {
+                if (type != SettingType.Number) {
+                    detectTapGestures { activate() }
+                }
             }
-        )
-        .pointerInput(
-            type,
-            checked,
-            options,
-            selected,
-            numberValue,
-            onCheckedChange,
-            onSelect,
-            onActivate,
-            onNumberChange
-        ) {
-            if (type != SettingType.Number) {
-                detectTapGestures { activate() }
-            }
-        }
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = WajihaSpacing.touchMin)
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = WajihaSpacing.touchMin),
     ) {
         if (stackedChoices && options.isNotEmpty()) {
             Column(
-                modifier = interactionModifier
-                    .fillMaxWidth()
-                    .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
-                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+                modifier =
+                    interactionModifier
+                        .fillMaxWidth()
+                        .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
             ) {
                 SettingLabelWithReset(
                     label = label,
@@ -257,23 +280,24 @@ fun GamepadSettingRow(
                     onReset = onReset,
                     overridden = overridden,
                     overrideHint = overrideHint,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 SegmentedChoice(
                     options = options,
                     selected = selected,
                     onSelect = onSelect,
                     wrap = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         } else {
             Row(
-                modifier = interactionModifier
-                    .fillMaxWidth()
-                    .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+                modifier =
+                    interactionModifier
+                        .fillMaxWidth()
+                        .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
             ) {
                 SettingLabelWithReset(
                     label = label,
@@ -281,41 +305,47 @@ fun GamepadSettingRow(
                     onReset = onReset,
                     overridden = overridden,
                     overrideHint = overrideHint,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
 
                 when {
-                    content != null -> content()
+                    content != null -> {
+                        content()
+                    }
+
                     type == SettingType.Toggle -> {
                         Switch(
                             checked = checked,
                             onCheckedChange = null,
                             enabled = false,
-                            colors = SwitchDefaults.colors(
-                                disabledCheckedThumbColor = MaterialTheme.colorScheme.primary,
-                                disabledCheckedTrackColor =
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                disabledUncheckedThumbColor =
-                                    MaterialTheme.colorScheme.outline,
-                                disabledUncheckedTrackColor =
-                                    MaterialTheme.colorScheme.surfaceVariant
-                            )
+                            colors =
+                                SwitchDefaults.colors(
+                                    disabledCheckedThumbColor = MaterialTheme.colorScheme.primary,
+                                    disabledCheckedTrackColor =
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                    disabledUncheckedThumbColor =
+                                        MaterialTheme.colorScheme.outline,
+                                    disabledUncheckedTrackColor =
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                ),
                         )
                     }
+
                     type == SettingType.Number && onNumberChange != null -> {
                         GamepadNumberStepper(
                             value = numberValue,
                             onValueChange = onNumberChange,
                             range = numberRange,
                             step = numberStep,
-                            valueLabel = numberLabel ?: { it.toString() }
+                            valueLabel = numberLabel ?: { it.toString() },
                         )
                     }
+
                     options.isNotEmpty() -> {
                         SegmentedChoice(
                             options = options,
                             selected = selected,
-                            onSelect = onSelect
+                            onSelect = onSelect,
                         )
                     }
                 }
@@ -327,11 +357,12 @@ fun GamepadSettingRow(
                 text = description,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(
-                    start = WajihaSpacing.sm,
-                    end = WajihaSpacing.sm,
-                    top = WajihaSpacing.xs / 2
-                )
+                modifier =
+                    Modifier.padding(
+                        start = WajihaSpacing.sm,
+                        end = WajihaSpacing.sm,
+                        top = WajihaSpacing.xs / 2,
+                    ),
             )
         }
     }
@@ -350,7 +381,7 @@ private fun MultiChoiceSettingRow(
     isAtDefault: Boolean,
     overridden: Boolean,
     overrideHint: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var headerFocused by remember { mutableStateOf(false) }
@@ -363,9 +394,10 @@ private fun MultiChoiceSettingRow(
     val headerFocusRequester = focusRequester ?: remember { FocusRequester() }
     val sectionScroll = LocalSettingSectionScroll.current
     var headerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val listFocusRequesters = remember(options.size) {
-        List(options.size) { FocusRequester() }
-    }
+    val listFocusRequesters =
+        remember(options.size) {
+            List(options.size) { FocusRequester() }
+        }
 
     fun collapse() {
         expanded = false
@@ -392,9 +424,11 @@ private fun MultiChoiceSettingRow(
             sectionScroll.scrollHeaderToTop(header)
         }
         delay(50)
-        val selectedIndex = options.indexOfFirst { it.value == selected && it.enabled }
-            .takeIf { it >= 0 }
-            ?: options.indexOfFirst { it.enabled }.coerceAtLeast(0)
+        val selectedIndex =
+            options
+                .indexOfFirst { it.value == selected && it.enabled }
+                .takeIf { it >= 0 }
+                ?: options.indexOfFirst { it.enabled }.coerceAtLeast(0)
         try {
             listFocusRequesters[selectedIndex].requestFocus()
         } catch (_: Exception) {
@@ -406,50 +440,54 @@ private fun MultiChoiceSettingRow(
     }
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = WajihaSpacing.touchMin)
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = WajihaSpacing.touchMin),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .onGloballyPositioned { headerCoordinates = it }
-                .clip(WajihaShapes.focus)
-                .wajihaFocusIndicator(highlighted = headerHighlight)
-                .focusRequester(headerFocusRequester)
-                .then(
-                    if (!useCustomNav) {
-                        Modifier
-                            .onFocusChanged { headerFocused = it.isFocused }
-                            .wajihaGamepadFocus()
-                            .onPreviewKeyEvent { event ->
-                                when {
-                                    GamepadKeys.isConfirm(event.type, event.key) -> {
-                                        feedback.confirm()
-                                        if (expanded) collapse() else expand()
-                                        true
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { headerCoordinates = it }
+                    .clip(WajihaShapes.focus)
+                    .wajihaFocusIndicator(highlighted = headerHighlight)
+                    .focusRequester(headerFocusRequester)
+                    .then(
+                        if (!useCustomNav) {
+                            Modifier
+                                .onFocusChanged { headerFocused = it.isFocused }
+                                .wajihaGamepadFocus()
+                                .onPreviewKeyEvent { event ->
+                                    when {
+                                        GamepadKeys.isConfirm(event.type, event.key) -> {
+                                            feedback.confirm()
+                                            if (expanded) collapse() else expand()
+                                            true
+                                        }
+
+                                        GamepadKeys.isY(event.type, event.key) && canReset -> {
+                                            feedback.confirm()
+                                            onReset?.invoke()
+                                            true
+                                        }
+
+                                        else -> {
+                                            false
+                                        }
                                     }
-                                    GamepadKeys.isY(event.type, event.key) && canReset -> {
-                                        feedback.confirm()
-                                        onReset?.invoke()
-                                        true
-                                    }
-                                    else -> false
                                 }
-                            }
-                    } else {
-                        Modifier
-                    }
-                )
-                .pointerInput(expanded) {
-                    detectTapGestures {
-                        feedback.confirm()
-                        if (expanded) collapse() else expand()
-                    }
-                }
-                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+                        } else {
+                            Modifier
+                        },
+                    ).pointerInput(expanded) {
+                        detectTapGestures {
+                            feedback.confirm()
+                            if (expanded) collapse() else expand()
+                        }
+                    }.padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             SettingLabelWithReset(
                 label = label,
@@ -457,20 +495,20 @@ private fun MultiChoiceSettingRow(
                 onReset = onReset,
                 overridden = overridden,
                 overrideHint = overrideHint,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
             Text(
                 text = selectedLabel,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.End
+                textAlign = TextAlign.End,
             )
             Text(
                 text = if (expanded) "˅" else "›",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
             )
         }
 
@@ -479,18 +517,19 @@ private fun MultiChoiceSettingRow(
                 text = description,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(
-                    start = WajihaSpacing.sm,
-                    end = WajihaSpacing.sm,
-                    top = WajihaSpacing.xs / 2
-                )
+                modifier =
+                    Modifier.padding(
+                        start = WajihaSpacing.sm,
+                        end = WajihaSpacing.sm,
+                        top = WajihaSpacing.xs / 2,
+                    ),
             )
         }
 
         AnimatedVisibility(
             visible = expanded,
             enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
+            exit = shrinkVertically() + fadeOut(),
         ) {
             MultiChoicePickerPanel(
                 options = options,
@@ -499,7 +538,7 @@ private fun MultiChoiceSettingRow(
                 onReset = onReset,
                 useCustomNav = useCustomNav,
                 listFocusRequesters = listFocusRequesters,
-                onSelect = ::selectOption
+                onSelect = ::selectOption,
             )
         }
     }
@@ -513,29 +552,31 @@ private fun MultiChoicePickerPanel(
     onReset: (() -> Unit)?,
     useCustomNav: Boolean,
     listFocusRequesters: List<FocusRequester>,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
 ) {
     val feedback = LocalUiFeedback.current
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = WajihaSpacing.xs / 2),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(top = WajihaSpacing.xs / 2),
         shape = RectangleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 2.dp
+        tonalElevation = 2.dp,
     ) {
         Column(
-            modifier = Modifier
-                .padding(vertical = 2.dp)
-                .onPreviewKeyEvent { event ->
-                    if (GamepadKeys.isY(event.type, event.key) && canReset) {
-                        feedback.confirm()
-                        onReset?.invoke()
-                        true
-                    } else {
-                        false
-                    }
-                }
+            modifier =
+                Modifier
+                    .padding(vertical = 2.dp)
+                    .onPreviewKeyEvent { event ->
+                        if (GamepadKeys.isY(event.type, event.key) && canReset) {
+                            feedback.confirm()
+                            onReset?.invoke()
+                            true
+                        } else {
+                            false
+                        }
+                    },
         ) {
             options.forEachIndexed { index, option ->
                 MultiChoiceListItem(
@@ -543,7 +584,7 @@ private fun MultiChoicePickerPanel(
                     selected = option.value == selected,
                     focusRequester = listFocusRequesters[index],
                     useCustomNav = useCustomNav,
-                    onSelect = { onSelect(option.value) }
+                    onSelect = { onSelect(option.value) },
                 )
             }
         }
@@ -556,80 +597,90 @@ private fun MultiChoiceListItem(
     selected: Boolean,
     focusRequester: FocusRequester,
     useCustomNav: Boolean,
-    onSelect: () -> Unit
+    onSelect: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val highlight = !useCustomNav && focused && option.enabled
     val disabledAlpha = 0.45f
-    val labelColor = when {
-        !option.enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
-        selected -> MaterialTheme.colorScheme.onSurface
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-    val detailColor = if (option.enabled) {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
-    }
+    val labelColor =
+        when {
+            !option.enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
+            selected -> MaterialTheme.colorScheme.onSurface
+            else -> MaterialTheme.colorScheme.onSurface
+        }
+    val detailColor =
+        if (option.enabled) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
+        }
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = MultiChoiceItemMinHeight)
-            .focusProperties { canFocus = option.enabled }
-            .background(
-                when {
-                    highlight -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                    selected && option.enabled ->
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                    selected && !option.enabled ->
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-                    else -> Color.Transparent
-                }
-            )
-            .wajihaFocusIndicator(highlighted = highlight, shape = RectangleShape)
-            .focusRequester(focusRequester)
-            .then(
-                if (!useCustomNav && option.enabled) {
-                    Modifier
-                        .onFocusChanged { focused = it.isFocused }
-                        .wajihaGamepadFocus()
-                        .onPreviewKeyEvent { event ->
-                            if (GamepadKeys.isConfirm(event.type, event.key)) {
-                                onSelect()
-                                true
-                            } else {
-                                false
-                            }
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = MultiChoiceItemMinHeight)
+                .focusProperties { canFocus = option.enabled }
+                .background(
+                    when {
+                        highlight -> {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                         }
-                } else {
-                    Modifier
-                }
-            )
-            .then(
-                if (option.enabled) {
-                    Modifier.pointerInput(option.value) {
-                        detectTapGestures { onSelect() }
-                    }
-                } else {
-                    Modifier
-                }
-            )
-            .padding(horizontal = WajihaSpacing.sm, vertical = 2.dp),
+
+                        selected && option.enabled -> {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                        }
+
+                        selected && !option.enabled -> {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                        }
+
+                        else -> {
+                            Color.Transparent
+                        }
+                    },
+                ).wajihaFocusIndicator(highlighted = highlight, shape = RectangleShape)
+                .focusRequester(focusRequester)
+                .then(
+                    if (!useCustomNav && option.enabled) {
+                        Modifier
+                            .onFocusChanged { focused = it.isFocused }
+                            .wajihaGamepadFocus()
+                            .onPreviewKeyEvent { event ->
+                                if (GamepadKeys.isConfirm(event.type, event.key)) {
+                                    onSelect()
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                    } else {
+                        Modifier
+                    },
+                ).then(
+                    if (option.enabled) {
+                        Modifier.pointerInput(option.value) {
+                            detectTapGestures { onSelect() }
+                        }
+                    } else {
+                        Modifier
+                    },
+                ).padding(horizontal = WajihaSpacing.sm, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
     ) {
         val leading = option.icon ?: if (selected) "●" else "○"
         Text(
             text = leading,
             style = MaterialTheme.typography.labelMedium,
-            color = when {
-                !option.enabled -> detailColor
-                selected -> MaterialTheme.colorScheme.primary
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color =
+                when {
+                    !option.enabled -> detailColor
+                    selected -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
             modifier = Modifier.size(20.dp),
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -637,14 +688,14 @@ private fun MultiChoiceListItem(
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = labelColor,
-                maxLines = 1
+                maxLines = 1,
             )
             if (!option.description.isNullOrBlank()) {
                 Text(
                     text = option.description,
                     style = MaterialTheme.typography.labelSmall,
                     color = detailColor,
-                    maxLines = 1
+                    maxLines = 1,
                 )
             }
         }
@@ -653,7 +704,7 @@ private fun MultiChoiceListItem(
                 text = "✓",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -666,46 +717,47 @@ private fun SegmentedChoice(
     selected: String,
     onSelect: ((String) -> Unit)?,
     wrap: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val feedback = LocalUiFeedback.current
-    val containerModifier = modifier
-        .clip(WajihaShapes.chip)
-        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+    val containerModifier =
+        modifier
+            .clip(WajihaShapes.chip)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
 
     val segment: @Composable (Pair<String, String>) -> Unit = { (value, display) ->
         val isSelected = value == selected
         Box(
-            modifier = Modifier
-                .clip(WajihaShapes.chip)
-                .background(
-                    if (isSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        Color.Transparent
-                    }
-                )
-                .pointerInput(value, onSelect) {
-                    detectTapGestures {
-                        if (value != selected) {
-                            feedback.navigate()
-                            onSelect?.invoke(value)
+            modifier =
+                Modifier
+                    .clip(WajihaShapes.chip)
+                    .background(
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            Color.Transparent
+                        },
+                    ).pointerInput(value, onSelect) {
+                        detectTapGestures {
+                            if (value != selected) {
+                                feedback.navigate()
+                                onSelect?.invoke(value)
+                            }
                         }
-                    }
-                }
-                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs / 2),
-            contentAlignment = Alignment.Center
+                    }.padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs / 2),
+            contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = display,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = if (isSelected) {
-                    MaterialTheme.colorScheme.onPrimary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                textAlign = TextAlign.Center
+                color =
+                    if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                textAlign = TextAlign.Center,
             )
         }
     }
@@ -714,14 +766,14 @@ private fun SegmentedChoice(
         FlowRow(
             modifier = containerModifier.padding(WajihaSpacing.xs / 2),
             horizontalArrangement = Arrangement.spacedBy(1.dp),
-            verticalArrangement = Arrangement.spacedBy(1.dp)
+            verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
             options.forEach { segment(it) }
         }
     } else {
         Row(
             modifier = containerModifier,
-            horizontalArrangement = Arrangement.spacedBy(1.dp)
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
         ) {
             options.forEach { segment(it) }
         }
@@ -735,17 +787,17 @@ private fun SettingLabelWithReset(
     onReset: (() -> Unit)?,
     overridden: Boolean = false,
     overrideHint: String = "Changed from global default",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.Medium,
         )
         if (overridden) {
             PlatformOverrideIndicator(hint = overrideHint)
@@ -757,34 +809,34 @@ private fun SettingLabelWithReset(
 }
 
 @Composable
-private fun ResetGlyph(
-    onClick: (() -> Unit)?
-) {
+private fun ResetGlyph(onClick: (() -> Unit)?) {
     val transition = rememberInfiniteTransition(label = "reset_spin")
     val rotation by transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "reset_rotation"
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(4000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+        label = "reset_rotation",
     )
     val tint = Color(0xFFFFC107).copy(alpha = 0.35f)
     Box(
-        modifier = Modifier
-            .size(28.dp)
-            .rotate(rotation)
-            .pointerInput(onClick) {
-                detectTapGestures { onClick?.invoke() }
-            },
-        contentAlignment = Alignment.Center
+        modifier =
+            Modifier
+                .size(28.dp)
+                .rotate(rotation)
+                .pointerInput(onClick) {
+                    detectTapGestures { onClick?.invoke() }
+                },
+        contentAlignment = Alignment.Center,
     ) {
         Text(
             text = "↺",
             style = MaterialTheme.typography.titleMedium,
             color = tint,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
         )
     }
 }

@@ -18,31 +18,32 @@ fun rememberPressInteractionSource(): MutableInteractionSource = remember { Muta
 /** Brief scale-down and tint while a control is pressed. */
 fun Modifier.wajihaPressedFeedback(
     pressed: Boolean,
-    shape: Shape? = null
-): Modifier = composed {
-  val overlay = if (pressed) {
-        Modifier
-            .graphicsLayer {
-                scaleX = 0.97f
-                scaleY = 0.97f
+    shape: Shape? = null,
+): Modifier =
+    composed {
+        val overlay =
+            if (pressed) {
+                Modifier
+                    .graphicsLayer {
+                        scaleX = 0.97f
+                        scaleY = 0.97f
+                    }.then(
+                        if (shape != null) {
+                            Modifier.background(WajihaFocus.pressedOverlay(), shape)
+                        } else {
+                            Modifier.background(WajihaFocus.pressedOverlay())
+                        },
+                    )
+            } else {
+                Modifier
             }
-            .then(
-                if (shape != null) {
-                    Modifier.background(WajihaFocus.pressedOverlay(), shape)
-                } else {
-                    Modifier.background(WajihaFocus.pressedOverlay())
-                }
-            )
-    } else {
-        Modifier
+        then(overlay)
     }
-    then(overlay)
-}
 
 @Composable
 fun Modifier.wajihaPressedFeedback(
     interactionSource: MutableInteractionSource,
-    shape: Shape? = null
+    shape: Shape? = null,
 ): Modifier {
     val pressed by interactionSource.collectIsPressedAsState()
     return wajihaPressedFeedback(pressed, shape)

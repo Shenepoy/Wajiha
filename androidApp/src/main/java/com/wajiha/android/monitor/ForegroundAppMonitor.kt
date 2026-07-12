@@ -5,6 +5,7 @@ import android.app.AppOpsManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.os.Debug
 import android.os.Process
 import android.provider.Settings
 import com.wajiha.android.detect.ExternalGameResolver
@@ -21,7 +22,6 @@ import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingState
 import com.wajiha.state.RunningApp
 import com.wajiha.state.sessionDisplayLabel
-import android.os.Debug
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,7 +53,7 @@ class ForegroundAppMonitor(
     private val platformRepository: PlatformRepository,
     private val sessionTracker: PlaySessionTracker,
     private val externalGameResolver: ExternalGameResolver,
-    private val displayCoordinator: DisplayCoordinator
+    private val displayCoordinator: DisplayCoordinator,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
@@ -92,16 +92,16 @@ class ForegroundAppMonitor(
 
     fun hasUsageAccess(): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        val mode = appOps.unsafeCheckOpNoThrow(
-            AppOpsManager.OPSTR_GET_USAGE_STATS,
-            Process.myUid(),
-            context.packageName
-        )
+        val mode =
+            appOps.unsafeCheckOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                context.packageName,
+            )
         return mode == AppOpsManager.MODE_ALLOWED
     }
 
-    fun usageAccessSettingsIntent() =
-        android.content.Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+    fun usageAccessSettingsIntent() = android.content.Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
 
     /** Task-switcher: feature session, pause background timers, keep all processes alive. */
     fun switchToSession(packageName: String) {
@@ -114,7 +114,7 @@ class ForegroundAppMonitor(
         } else {
             WajihaLog.w(
                 WajihaTags.NOW_PLAYING,
-                "switchToSession: no cache for $packageName (task switch only)"
+                "switchToSession: no cache for $packageName (task switch only)",
             )
         }
         store.setTopDisplayForeground(packageName)
@@ -140,9 +140,11 @@ class ForegroundAppMonitor(
 
     /** Call from [com.wajiha.android.launch.GameLauncher] right after [DualScreenStore.beginGameSession]. */
     fun onSessionStarted(packageName: String) {
-        val siblings = store.activeSessions()
-            .map { it.packageName }
-            .filter { it != packageName }
+        val siblings =
+            store
+                .activeSessions()
+                .map { it.packageName }
+                .filter { it != packageName }
         if (siblings.isNotEmpty()) {
             sessionController.markSiblingLaunchGrace(*siblings.toTypedArray())
         }
@@ -158,30 +160,32 @@ class ForegroundAppMonitor(
 
     fun start() {
         if (job?.isActive == true) return
-        job = scope.launch {
-            var lastPackagesRefresh = 0L
-            while (isActive) {
-                val now = System.currentTimeMillis()
-                if (now - lastPackagesRefresh > PACKAGES_REFRESH_MS) {
-                    lastPackagesRefresh = now
-                    refreshKnownPackages()
-                }
-                if (hasUsageAccess()) {
-                    poll()
-                    // Idle path: poll skips running-apps refresh; keep the 10s throttle.
-                    if (!store.hasActiveSessions()) {
-                        refreshRunningApps(force = false)
+        job =
+            scope.launch {
+                var lastPackagesRefresh = 0L
+                while (isActive) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastPackagesRefresh > PACKAGES_REFRESH_MS) {
+                        lastPackagesRefresh = now
+                        refreshKnownPackages()
                     }
-                    store.nowPlaying.value?.let { maybeResolveExternalSession(it) }
+                    if (hasUsageAccess()) {
+                        poll()
+                        // Idle path: poll skips running-apps refresh; keep the 10s throttle.
+                        if (!store.hasActiveSessions()) {
+                            refreshRunningApps(force = false)
+                        }
+                        store.nowPlaying.value?.let { maybeResolveExternalSession(it) }
+                    }
+                    val interval =
+                        if (store.hasActiveSessions()) {
+                            ACTIVE_POLL_INTERVAL_MS
+                        } else {
+                            POLL_INTERVAL_MS
+                        }
+                    delay(interval)
                 }
-                val interval = if (store.hasActiveSessions()) {
-                    ACTIVE_POLL_INTERVAL_MS
-                } else {
-                    POLL_INTERVAL_MS
-                }
-                delay(interval)
             }
-        }
     }
 
     fun stop() {
@@ -284,14 +288,14 @@ class ForegroundAppMonitor(
                     ) {
                         applyTopDisplayForeground(
                             overlay,
-                            reason = "overlay (resolver=$ownPackage)"
+                            reason = "overlay (resolver=$ownPackage)",
                         )
                         return
                     }
                     if (sessionProcessAlive(topSession)) {
                         applyTopDisplayForeground(
                             topSession.packageName,
-                            reason = "dual-play (resolver=$ownPackage)"
+                            reason = "dual-play (resolver=$ownPackage)",
                         )
                         return
                     }
@@ -301,6 +305,7 @@ class ForegroundAppMonitor(
                 }
                 return
             }
+
             resolved != null && !isSystemUi(resolved) -> {
                 val changed = resolved != previous
                 applyTopDisplayForeground(resolved, reason = "resolved")
@@ -313,6 +318,7 @@ class ForegroundAppMonitor(
                     beginOrUpdateExternalSession(resolved, allowSuppressed = false)
                 }
             }
+
             else -> {
                 inferTopDisplayGamingPackage()?.let { pkg ->
                     applyTopDisplayForeground(pkg, reason = "infer")
@@ -329,15 +335,20 @@ class ForegroundAppMonitor(
      * - Alt-tab to another app: debounce hide briefly so transient resolver noise is ignored.
      * - Launcher resolved under an alive game: keep the gaming package, never publish wajiha.
      */
-    private fun applyTopDisplayForeground(desired: String, reason: String) {
+    private fun applyTopDisplayForeground(
+        desired: String,
+        reason: String,
+    ) {
         val topSession = topDisplaySession()
         val previous = store.topDisplayForegroundPackage.value
-        val normalized = when {
-            desired == ownPackage && topSession != null &&
-                isGamingPackage(topSession.packageName) &&
-                sessionProcessAlive(topSession) -> topSession.packageName
-            else -> desired
-        }
+        val normalized =
+            when {
+                desired == ownPackage && topSession != null &&
+                    isGamingPackage(topSession.packageName) &&
+                    sessionProcessAlive(topSession) -> topSession.packageName
+
+                else -> desired
+            }
 
         if (topSession != null && normalized == topSession.packageName) {
             pendingTopHidePackage = null
@@ -365,13 +376,13 @@ class ForegroundAppMonitor(
     private fun commitTopDisplayForeground(
         packageName: String,
         previous: String?,
-        reason: String
+        reason: String,
     ) {
         if (packageName == previous) return
         store.setTopDisplayForeground(packageName)
         WajihaLog.d(
             WajihaTags.NOW_PLAYING,
-            "topDisplay: ${previous ?: "none"} -> $packageName ($reason)"
+            "topDisplay: ${previous ?: "none"} -> $packageName ($reason)",
         )
     }
 
@@ -384,8 +395,10 @@ class ForegroundAppMonitor(
 
     /** Infer top-display gaming package when resolver is blocked during an active session. */
     private fun inferTopDisplayGamingPackage(): String? {
-        val active = store.activeSessions()
-            .filter { isGamingPackage(it.packageName) && isSessionStillActive(it) }
+        val active =
+            store
+                .activeSessions()
+                .filter { isGamingPackage(it.packageName) && isSessionStillActive(it) }
         if (active.isEmpty()) return null
         val topPkg = store.topDisplayForegroundPackage.value
         return active.firstOrNull { it.packageName == topPkg }?.packageName
@@ -404,12 +417,12 @@ class ForegroundAppMonitor(
                 }
                 if (sessionController.isWithinLaunchGrace(
                         session.sessionStartedAt,
-                        session.packageName
+                        session.packageName,
                     )
                 ) {
                     WajihaLog.d(
                         WajihaTags.NOW_PLAYING,
-                        "launcherFocus($trigger): keep ${session.packageName} (launch grace)"
+                        "launcherFocus($trigger): keep ${session.packageName} (launch grace)",
                     )
                     return@forEach
                 }
@@ -417,7 +430,7 @@ class ForegroundAppMonitor(
                     if (sessionController.recordAliveCheck(
                             session.packageName,
                             processAlive = false,
-                            multiSession = multiSession
+                            multiSession = multiSession,
                         )
                     ) {
                         if (sessionProcessAlive(session)) {
@@ -425,7 +438,7 @@ class ForegroundAppMonitor(
                             WajihaLog.d(
                                 WajihaTags.NOW_PLAYING,
                                 "launcherFocus($trigger): keep ${session.packageName} " +
-                                    "(alive recheck)"
+                                    "(alive recheck)",
                             )
                             return@forEach
                         }
@@ -434,7 +447,7 @@ class ForegroundAppMonitor(
                         WajihaLog.d(
                             WajihaTags.NOW_PLAYING,
                             "launcherFocus($trigger): ${session.packageName} end pending " +
-                                "(awaiting confirm)"
+                                "(awaiting confirm)",
                         )
                     }
                     return@forEach
@@ -442,11 +455,11 @@ class ForegroundAppMonitor(
                 sessionController.recordAliveCheck(
                     session.packageName,
                     processAlive = true,
-                    multiSession = multiSession
+                    multiSession = multiSession,
                 )
                 WajihaLog.d(
                     WajihaTags.NOW_PLAYING,
-                    "launcherFocus($trigger): keep ${session.packageName}"
+                    "launcherFocus($trigger): keep ${session.packageName}",
                 )
                 maybeResolveExternalSession(session)
             }
@@ -474,12 +487,12 @@ class ForegroundAppMonitor(
             }
             if (sessionController.isWithinLaunchGrace(
                     session.sessionStartedAt,
-                    session.packageName
+                    session.packageName,
                 )
             ) {
                 WajihaLog.d(
                     WajihaTags.NOW_PLAYING,
-                    "verify($trigger): keep ${session.packageName} (launch grace)"
+                    "verify($trigger): keep ${session.packageName} (launch grace)",
                 )
                 return@forEach
             }
@@ -488,11 +501,11 @@ class ForegroundAppMonitor(
                 sessionController.recordAliveCheck(
                     session.packageName,
                     processAlive = true,
-                    multiSession = multiSession
+                    multiSession = multiSession,
                 )
                 WajihaLog.d(
                     WajihaTags.NOW_PLAYING,
-                    "verify($trigger): keep ${session.packageName} (overlay=$overlay)"
+                    "verify($trigger): keep ${session.packageName} (overlay=$overlay)",
                 )
                 return@forEach
             }
@@ -500,7 +513,7 @@ class ForegroundAppMonitor(
                 sessionController.recordAliveCheck(
                     session.packageName,
                     processAlive = true,
-                    multiSession = multiSession
+                    multiSession = multiSession,
                 )
                 maybeResolveExternalSession(session)
                 return@forEach
@@ -508,14 +521,14 @@ class ForegroundAppMonitor(
             if (sessionController.recordAliveCheck(
                     session.packageName,
                     processAlive = false,
-                    multiSession = multiSession
+                    multiSession = multiSession,
                 )
             ) {
                 if (sessionProcessAlive(session)) {
                     sessionController.onSessionStarted(session.packageName)
                     WajihaLog.d(
                         WajihaTags.NOW_PLAYING,
-                        "verify($trigger): keep ${session.packageName} (alive recheck)"
+                        "verify($trigger): keep ${session.packageName} (alive recheck)",
                     )
                     return@forEach
                 }
@@ -523,7 +536,7 @@ class ForegroundAppMonitor(
             } else {
                 WajihaLog.d(
                     WajihaTags.NOW_PLAYING,
-                    "verify($trigger): ${session.packageName} end pending (awaiting confirm)"
+                    "verify($trigger): ${session.packageName} end pending (awaiting confirm)",
                 )
             }
         }
@@ -553,10 +566,12 @@ class ForegroundAppMonitor(
      * Session alive while usage stats, accessibility, launch grace, or a cached task say so.
      * Prefer [store.runningApps] + UsageStats over getRunningTasks (blocked for other packages on Thor).
      */
-    private fun sessionProcessAlive(session: NowPlayingState): Boolean =
-        sessionProcessAlive(session.packageName, session.sessionStartedAt)
+    private fun sessionProcessAlive(session: NowPlayingState): Boolean = sessionProcessAlive(session.packageName, session.sessionStartedAt)
 
-    private fun sessionProcessAlive(packageName: String, sessionStartedAt: Long = 0L): Boolean {
+    private fun sessionProcessAlive(
+        packageName: String,
+        sessionStartedAt: Long = 0L,
+    ): Boolean {
         if (sessionController.isWithinLaunchGrace(sessionStartedAt, packageName)) return true
         if (isPackageRecentlyUsed(packageName)) return true
         if (sessionStartedAt > 0L && isUsageTimelineActive(packageName, sessionStartedAt)) return true
@@ -582,11 +597,12 @@ class ForegroundAppMonitor(
         try {
             val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
             val now = System.currentTimeMillis()
-            val stats = usm.queryUsageStats(
-                UsageStatsManager.INTERVAL_BEST,
-                now - SESSION_RECENT_USAGE_MS,
-                now
-            )
+            val stats =
+                usm.queryUsageStats(
+                    UsageStatsManager.INTERVAL_BEST,
+                    now - SESSION_RECENT_USAGE_MS,
+                    now,
+                )
             return stats.find { it.packageName == packageName }?.lastTimeUsed?.takeIf { it > 0L }
         } catch (_: Exception) {
             return null
@@ -599,7 +615,10 @@ class ForegroundAppMonitor(
     }
 
     /** True when the latest usage event for [packageName] is a resume, not a stop. */
-    private fun isUsageTimelineActive(packageName: String, since: Long): Boolean {
+    private fun isUsageTimelineActive(
+        packageName: String,
+        since: Long,
+    ): Boolean {
         if (!hasUsageAccess()) return false
         try {
             val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
@@ -612,9 +631,11 @@ class ForegroundAppMonitor(
                 if (event.packageName != packageName) continue
                 when (event.eventType) {
                     UsageEvents.Event.ACTIVITY_RESUMED,
-                    UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+                    UsageEvents.Event.MOVE_TO_FOREGROUND,
+                    -> {
                         if (event.timeStamp >= lastResume) lastResume = event.timeStamp
                     }
+
                     UsageEvents.Event.ACTIVITY_STOPPED -> {
                         if (event.timeStamp >= lastStop) lastStop = event.timeStamp
                     }
@@ -636,12 +657,12 @@ class ForegroundAppMonitor(
 
     private fun beginOrUpdateExternalSession(
         packageName: String,
-        allowSuppressed: Boolean = true
+        allowSuppressed: Boolean = true,
     ) {
         if (allowSuppressed && isRediscoverySuppressed(packageName)) {
             WajihaLog.d(
                 WajihaTags.NOW_PLAYING,
-                "discover: skip $packageName (user closed)"
+                "discover: skip $packageName (user closed)",
             )
             return
         }
@@ -654,24 +675,25 @@ class ForegroundAppMonitor(
         }
 
         val preserve = existing
-        val newState = NowPlayingState(
-            packageName = packageName,
-            appLabel = labelOf(packageName),
-            gameId = preserve?.gameId,
-            gameName = preserve?.gameName,
-            platformId = preserve?.platformId,
-            boxartPath = preserve?.boxartPath,
-            heroPath = preserve?.heroPath,
-            sessionStartedAt = preserve?.sessionStartedAt ?: System.currentTimeMillis(),
-            sessionElapsedMs = preserve?.sessionElapsedMs ?: 0L,
-            sessionResumedAt = preserve?.sessionResumedAt ?: 0L,
-            launchedByWajiha = preserve?.launchedByWajiha ?: false
-        )
+        val newState =
+            NowPlayingState(
+                packageName = packageName,
+                appLabel = labelOf(packageName),
+                gameId = preserve?.gameId,
+                gameName = preserve?.gameName,
+                platformId = preserve?.platformId,
+                boxartPath = preserve?.boxartPath,
+                heroPath = preserve?.heroPath,
+                sessionStartedAt = preserve?.sessionStartedAt ?: System.currentTimeMillis(),
+                sessionElapsedMs = preserve?.sessionElapsedMs ?: 0L,
+                sessionResumedAt = preserve?.sessionResumedAt ?: 0L,
+                launchedByWajiha = preserve?.launchedByWajiha ?: false,
+            )
 
         if (existing?.packageName != packageName) {
             WajihaLog.i(
                 WajihaTags.NOW_PLAYING,
-                "external session ${existing?.packageName ?: "none"} -> $packageName"
+                "external session ${existing?.packageName ?: "none"} -> $packageName",
             )
         }
 
@@ -689,23 +711,28 @@ class ForegroundAppMonitor(
     private fun maybeResolveExternalSession(session: NowPlayingState) {
         if (session.launchedByWajiha || session.gameId != null) return
         scope.launch {
-            val resolved = externalGameResolver.resolve(session.packageName, session.sessionStartedAt)
-                ?: return@launch
+            val resolved =
+                externalGameResolver.resolve(session.packageName, session.sessionStartedAt)
+                    ?: return@launch
             enrichNowPlaying(session, resolved)
         }
     }
 
-    private fun enrichNowPlaying(session: NowPlayingState, resolved: ResolvedGame) {
+    private fun enrichNowPlaying(
+        session: NowPlayingState,
+        resolved: ResolvedGame,
+    ) {
         val cached = store.getSession(session.packageName) ?: return
         if (cached.gameId != null && resolved.gameId == null) return
 
-        val enriched = cached.copy(
-            gameId = resolved.gameId ?: cached.gameId,
-            gameName = resolved.displayName.takeIf { it.isNotBlank() } ?: cached.gameName,
-            platformId = resolved.platformId ?: cached.platformId,
-            boxartPath = resolved.boxartPath ?: cached.boxartPath,
-            heroPath = resolved.heroPath ?: cached.heroPath
-        )
+        val enriched =
+            cached.copy(
+                gameId = resolved.gameId ?: cached.gameId,
+                gameName = resolved.displayName.takeIf { it.isNotBlank() } ?: cached.gameName,
+                platformId = resolved.platformId ?: cached.platformId,
+                boxartPath = resolved.boxartPath ?: cached.boxartPath,
+                heroPath = resolved.heroPath ?: cached.heroPath,
+            )
         if (enriched == cached) return
         store.updateGameSession(enriched)
         resolved.gameId?.let { gameId ->
@@ -713,7 +740,10 @@ class ForegroundAppMonitor(
         }
     }
 
-    private fun endSession(packageName: String, trigger: String) {
+    private fun endSession(
+        packageName: String,
+        trigger: String,
+    ) {
         WajihaLog.i(WajihaTags.NOW_PLAYING, "endSession: $packageName ($trigger)")
         SessionTaskRegistry.clear(packageName)
         lastSeenForegroundAt.remove(packageName)
@@ -732,9 +762,12 @@ class ForegroundAppMonitor(
     private fun findExternalGamingPackage(): String? {
         val alive = findAliveGamingPackages().filter { hasEmulatorProcessOrTask(it) }
         if (alive.isEmpty()) return null
-        return alive.maxByOrNull { pkg ->
-            store.runningApps.value.find { it.packageName == pkg }?.lastUsedAt ?: 0L
-        }?.takeUnless { isRediscoverySuppressed(it) }
+        return alive
+            .maxByOrNull { pkg ->
+                store.runningApps.value
+                    .find { it.packageName == pkg }
+                    ?.lastUsedAt ?: 0L
+            }?.takeUnless { isRediscoverySuppressed(it) }
     }
 
     /** Register any live emulator not yet in [DualScreenStore.sessionCache]. */
@@ -745,13 +778,13 @@ class ForegroundAppMonitor(
             if (isRediscoverySuppressed(pkg)) {
                 WajihaLog.d(
                     WajihaTags.NOW_PLAYING,
-                    "discover($trigger): skip $pkg (user closed)"
+                    "discover($trigger): skip $pkg (user closed)",
                 )
                 return@forEach
             }
             WajihaLog.i(
                 WajihaTags.NOW_PLAYING,
-                "discover($trigger): additional session $pkg"
+                "discover($trigger): additional session $pkg",
             )
             beginOrUpdateExternalSession(pkg)
         }
@@ -761,13 +794,20 @@ class ForegroundAppMonitor(
         val packages = mutableSetOf<String>()
         packages.addAll(findGamingPackagesFromProcesses())
         packages.addAll(findGamingPackagesFromTasks())
-        packages.addAll(store.runningApps.value.filter { it.isGame }.map { it.packageName })
-        return packages.filter { pkg ->
-            pkg != ownPackage && !isSystemUi(pkg) && isGamingPackage(pkg) &&
-                !isRediscoverySuppressed(pkg) &&
-                (isPackageRecentlyUsed(pkg) || hasRunningProcess(pkg) ||
-                    SessionTaskRegistry.hasTask(pkg))
-        }.toSet()
+        packages.addAll(
+            store.runningApps.value
+                .filter { it.isGame }
+                .map { it.packageName },
+        )
+        return packages
+            .filter { pkg ->
+                pkg != ownPackage && !isSystemUi(pkg) && isGamingPackage(pkg) &&
+                    !isRediscoverySuppressed(pkg) &&
+                    (
+                        isPackageRecentlyUsed(pkg) || hasRunningProcess(pkg) ||
+                            SessionTaskRegistry.hasTask(pkg)
+                    )
+            }.toSet()
     }
 
     private fun findGamingPackagesFromProcesses(): Set<String> {
@@ -786,11 +826,12 @@ class ForegroundAppMonitor(
         return packages
     }
 
-    private fun findGamingPackagesFromTasks(): Set<String> {
-        return TopDisplayTaskResolver.packagesWithTasks(context).filter { pkg ->
-            pkg != ownPackage && !isSystemUi(pkg) && isGamingPackage(pkg)
-        }.toSet()
-    }
+    private fun findGamingPackagesFromTasks(): Set<String> =
+        TopDisplayTaskResolver
+            .packagesWithTasks(context)
+            .filter { pkg ->
+                pkg != ownPackage && !isSystemUi(pkg) && isGamingPackage(pkg)
+            }.toSet()
 
     /**
      * True when [packageName] has any running process, including IMPORTANCE_CACHED.
@@ -799,17 +840,17 @@ class ForegroundAppMonitor(
     private fun hasRunningProcess(packageName: String): Boolean {
         try {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            val listed = am.runningAppProcesses?.any { proc ->
-                proc.pkgList?.contains(packageName) == true
-            } ?: false
+            val listed =
+                am.runningAppProcesses?.any { proc ->
+                    proc.pkgList?.contains(packageName) == true
+                } ?: false
             if (listed) return true
         } catch (_: Exception) {
         }
         return pidOf(packageName) != null
     }
 
-    private fun hasRunningTask(packageName: String): Boolean =
-        TopDisplayTaskResolver.taskIdForPackage(context, packageName) != null
+    private fun hasRunningTask(packageName: String): Boolean = TopDisplayTaskResolver.taskIdForPackage(context, packageName) != null
 
     /**
      * Process or top-display task — excludes usage-stats-only hits after force-stop
@@ -895,29 +936,30 @@ class ForegroundAppMonitor(
         lastRunningRefresh = now
         try {
             val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-            val stats = usm.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY,
-                now - RUNNING_APPS_WINDOW_MS,
-                now
-            )
+            val stats =
+                usm.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    now - RUNNING_APPS_WINDOW_MS,
+                    now,
+                )
             val pm = context.packageManager
-            val apps = stats
-                .asSequence()
-                .filter { it.lastTimeUsed > now - RUNNING_APPS_WINDOW_MS }
-                .filter { it.packageName != ownPackage && !isSystemUi(it.packageName) }
-                .filter { pm.getLaunchIntentForPackage(it.packageName) != null }
-                .sortedByDescending { it.lastTimeUsed }
-                .distinctBy { it.packageName }
-                .take(12)
-                .map { stat ->
-                    RunningApp(
-                        packageName = stat.packageName,
-                        label = labelOf(stat.packageName) ?: stat.packageName,
-                        lastUsedAt = stat.lastTimeUsed,
-                        isGame = isGamingPackage(stat.packageName)
-                    )
-                }
-                .toList()
+            val apps =
+                stats
+                    .asSequence()
+                    .filter { it.lastTimeUsed > now - RUNNING_APPS_WINDOW_MS }
+                    .filter { it.packageName != ownPackage && !isSystemUi(it.packageName) }
+                    .filter { pm.getLaunchIntentForPackage(it.packageName) != null }
+                    .sortedByDescending { it.lastTimeUsed }
+                    .distinctBy { it.packageName }
+                    .take(12)
+                    .map { stat ->
+                        RunningApp(
+                            packageName = stat.packageName,
+                            label = labelOf(stat.packageName) ?: stat.packageName,
+                            lastUsedAt = stat.lastTimeUsed,
+                            isGame = isGamingPackage(stat.packageName),
+                        )
+                    }.toList()
             store.setRunningApps(apps)
         } catch (_: Exception) {
         }
@@ -933,11 +975,11 @@ class ForegroundAppMonitor(
         WajihaLog.i(WajihaTags.DEBUG, "topDisplay: ${top ?: "none"}")
         WajihaLog.i(
             WajihaTags.DEBUG,
-            "featured(nowPlaying): ${featured?.packageName ?: "none"}"
+            "featured(nowPlaying): ${featured?.packageName ?: "none"}",
         )
         WajihaLog.i(
             WajihaTags.DEBUG,
-            "detectionEnabled=$detectionEnabled lastForeground=${lastForeground ?: "none"}"
+            "detectionEnabled=$detectionEnabled lastForeground=${lastForeground ?: "none"}",
         )
         WajihaLog.i(WajihaTags.DEBUG, "usageAccess=${hasUsageAccess()}")
         if (sessions.isEmpty()) {
@@ -950,19 +992,19 @@ class ForegroundAppMonitor(
                         "game=${session.gameName ?: session.appLabel ?: "?"} " +
                         "onTop=${session.packageName == top} " +
                         "wajihaLaunch=${session.launchedByWajiha} " +
-                        "elapsedMs=${session.activeElapsedMs(now)}"
+                        "elapsedMs=${session.activeElapsedMs(now)}",
                 )
             }
         }
-        val suppress = suppressRediscoveryUntil.entries
-            .map { (pkg, until) ->
-                val remaining = (until - now).coerceAtLeast(0)
-                "$pkg(${remaining}ms)"
-            }
-            .sorted()
+        val suppress =
+            suppressRediscoveryUntil.entries
+                .map { (pkg, until) ->
+                    val remaining = (until - now).coerceAtLeast(0)
+                    "$pkg(${remaining}ms)"
+                }.sorted()
         WajihaLog.i(
             WajihaTags.DEBUG,
-            "suppressRediscovery: ${if (suppress.isEmpty()) "(none)" else suppress.joinToString()}"
+            "suppressRediscovery: ${if (suppress.isEmpty()) "(none)" else suppress.joinToString()}",
         )
         WajihaLog.i(WajihaTags.DEBUG, "=== end dump ===")
     }
@@ -993,7 +1035,7 @@ class ForegroundAppMonitor(
         suppressRediscoveryUntil.clear()
         WajihaLog.i(
             WajihaTags.DEBUG,
-            "debugClearSuppressList: cleared ${if (cleared.isEmpty()) "(none)" else cleared}"
+            "debugClearSuppressList: cleared ${if (cleared.isEmpty()) "(none)" else cleared}",
         )
     }
 
@@ -1035,27 +1077,30 @@ class ForegroundAppMonitor(
         // Best-effort RSS probe (infrequent — API is throttled + usually zeros for others).
         if (now - lastRssProbeAtMs >= RSS_PROBE_INTERVAL_MS) {
             lastRssProbeAtMs = now
-            val rssCap = minOf(SESSION_RSS_CAP_BYTES, (memTotal * SESSION_RSS_CAP_FRACTION).toLong())
-                .coerceAtLeast(1L)
+            val rssCap =
+                minOf(SESSION_RSS_CAP_BYTES, (memTotal * SESSION_RSS_CAP_FRACTION).toLong())
+                    .coerceAtLeast(1L)
             val fatOffenders = findOversizedSessions(am, rssCap)
             if (fatOffenders.isNotEmpty()) {
                 lastMemoryGuardAtMs.set(now)
-                val labels = fatOffenders.map { (pkg, rss) ->
-                    val label = sessionLabel(pkg)
-                    killApp(pkg)
-                    WajihaLog.w(
-                        WajihaTags.NOW_PLAYING,
-                        "memoryGuard[$trigger]: RSS kill $pkg rss=${formatBytes(rss)} " +
-                            "cap=${formatBytes(rssCap)}"
-                    )
-                    label to rss
-                }
-                val reason = labels.joinToString("; ") { (label, rss) ->
-                    "$label RSS ${formatBytes(rss)}"
-                }
+                val labels =
+                    fatOffenders.map { (pkg, rss) ->
+                        val label = sessionLabel(pkg)
+                        killApp(pkg)
+                        WajihaLog.w(
+                            WajihaTags.NOW_PLAYING,
+                            "memoryGuard[$trigger]: RSS kill $pkg rss=${formatBytes(rss)} " +
+                                "cap=${formatBytes(rssCap)}",
+                        )
+                        label to rss
+                    }
+                val reason =
+                    labels.joinToString("; ") { (label, rss) ->
+                        "$label RSS ${formatBytes(rss)}"
+                    }
                 finishMemoryGuard(
                     killedLabels = labels.map { it.first },
-                    reason = reason
+                    reason = reason,
                 )
                 return
             }
@@ -1070,10 +1115,12 @@ class ForegroundAppMonitor(
         lastMemoryGuardAtMs.set(now)
 
         val topPkg = store.topDisplayForegroundPackage.value
-        val background = store.activeSessions()
-            .map { it.packageName }
-            .filter { it != topPkg }
-            .distinct()
+        val background =
+            store
+                .activeSessions()
+                .map { it.packageName }
+                .filter { it != topPkg }
+                .distinct()
         val killedLabels = mutableListOf<String>()
         background.forEach { pkg ->
             killedLabels += sessionLabel(pkg)
@@ -1081,7 +1128,7 @@ class ForegroundAppMonitor(
             WajihaLog.w(
                 WajihaTags.NOW_PLAYING,
                 "memoryGuard[$trigger]: system kill background $pkg " +
-                    "avail=${formatBytes(memInfo.availMem)} low=${memInfo.lowMemory}"
+                    "avail=${formatBytes(memInfo.availMem)} low=${memInfo.lowMemory}",
             )
         }
 
@@ -1094,7 +1141,7 @@ class ForegroundAppMonitor(
                 WajihaLog.w(
                     WajihaTags.NOW_PLAYING,
                     "memoryGuard[$trigger]: system kill top/remaining $pkg " +
-                        "avail=${formatBytes(memInfo.availMem)}"
+                        "avail=${formatBytes(memInfo.availMem)}",
                 )
             }
         }
@@ -1102,11 +1149,14 @@ class ForegroundAppMonitor(
         if (killedLabels.isEmpty()) return
         finishMemoryGuard(
             killedLabels = killedLabels.distinct(),
-            reason = "low system memory (avail ${formatBytes(memInfo.availMem)})"
+            reason = "low system memory (avail ${formatBytes(memInfo.availMem)})",
         )
     }
 
-    private fun finishMemoryGuard(killedLabels: List<String>, reason: String) {
+    private fun finishMemoryGuard(
+        killedLabels: List<String>,
+        reason: String,
+    ) {
         displayCoordinator.deferReclaimForMemoryGuard()
         MemoryGuardNotifier.notifyClosed(context, killedLabels, reason)
     }
@@ -1120,7 +1170,7 @@ class ForegroundAppMonitor(
 
     private fun findOversizedSessions(
         am: ActivityManager,
-        rssCapBytes: Long
+        rssCapBytes: Long,
     ): List<Pair<String, Long>> {
         val sessions = store.activeSessions().map { it.packageName }.distinct()
         if (sessions.isEmpty()) return emptyList()
@@ -1144,11 +1194,12 @@ class ForegroundAppMonitor(
 
         val packages = pidByPackage.keys.toList()
         val pids = IntArray(packages.size) { pidByPackage.getValue(packages[it]) }
-        val memInfos = try {
-            am.getProcessMemoryInfo(pids)
-        } catch (_: Exception) {
-            return emptyList()
-        }
+        val memInfos =
+            try {
+                am.getProcessMemoryInfo(pids)
+            } catch (_: Exception) {
+                return emptyList()
+            }
         val offenders = mutableListOf<Pair<String, Long>>()
         packages.forEachIndexed { index, pkg ->
             val info = memInfos.getOrNull(index) ?: return@forEachIndexed
@@ -1160,22 +1211,26 @@ class ForegroundAppMonitor(
             }
         }
         if (offenders.isEmpty() && !loggedRssBlind) {
-            val anyReadable = packages.indices.any { index ->
-                processRssKb(memInfos.getOrNull(index) ?: return@any false, pids[index]) > 0
-            }
+            val anyReadable =
+                packages.indices.any { index ->
+                    processRssKb(memInfos.getOrNull(index) ?: return@any false, pids[index]) > 0
+                }
             if (!anyReadable) {
                 loggedRssBlind = true
                 WajihaLog.i(
                     WajihaTags.NOW_PLAYING,
                     "memoryGuard: per-app RSS unavailable " +
-                        "(Android Q+ zeros /proc blocked) — using system MemoryInfo only"
+                        "(Android Q+ zeros /proc blocked) — using system MemoryInfo only",
                 )
             }
         }
         return offenders
     }
 
-    private fun processRssKb(info: Debug.MemoryInfo, pid: Int): Int {
+    private fun processRssKb(
+        info: Debug.MemoryInfo,
+        pid: Int,
+    ): Int {
         // Prefer /proc VmRSS — matches LMK's view of native emulator balloons
         // better than summary.total-rss / PSS (which under-count EE guest RAM).
         val fromProc = readProcRssKb(pid)
@@ -1197,42 +1252,48 @@ class ForegroundAppMonitor(
         }
     }
 
-    private fun pidOf(packageName: String): Int? {
-        return try {
+    private fun pidOf(packageName: String): Int? =
+        try {
             val process = Runtime.getRuntime().exec(arrayOf("/system/bin/pidof", packageName))
-            val output = process.inputStream.bufferedReader().readText().trim()
+            val output =
+                process.inputStream
+                    .bufferedReader()
+                    .readText()
+                    .trim()
             process.waitFor()
-            output.split(Regex("\\s+"))
+            output
+                .split(Regex("\\s+"))
                 .firstOrNull { it.isNotEmpty() }
                 ?.toIntOrNull()
         } catch (_: Exception) {
             null
         }
-    }
 
     private fun memTotalBytes(): Long {
         if (cachedMemTotalBytes > 0L) return cachedMemTotalBytes
-        val fromAm = try {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            val info = ActivityManager.MemoryInfo()
-            am.getMemoryInfo(info)
-            info.totalMem
-        } catch (_: Exception) {
-            0L
-        }
+        val fromAm =
+            try {
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                val info = ActivityManager.MemoryInfo()
+                am.getMemoryInfo(info)
+                info.totalMem
+            } catch (_: Exception) {
+                0L
+            }
         if (fromAm > 0L) {
             cachedMemTotalBytes = fromAm
             return fromAm
         }
-        val fromProc = try {
-            File("/proc/meminfo").useLines { lines ->
-                val line = lines.firstOrNull { it.startsWith("MemTotal:") } ?: return@useLines 0L
-                val kb = line.split(Regex("\\s+")).getOrNull(1)?.toLongOrNull() ?: return@useLines 0L
-                kb * 1024L
+        val fromProc =
+            try {
+                File("/proc/meminfo").useLines { lines ->
+                    val line = lines.firstOrNull { it.startsWith("MemTotal:") } ?: return@useLines 0L
+                    val kb = line.split(Regex("\\s+")).getOrNull(1)?.toLongOrNull() ?: return@useLines 0L
+                    kb * 1024L
+                }
+            } catch (_: Exception) {
+                0L
             }
-        } catch (_: Exception) {
-            0L
-        }
         cachedMemTotalBytes = fromProc.coerceAtLeast(8L * 1024 * 1024 * 1024)
         return cachedMemTotalBytes
     }
@@ -1252,7 +1313,7 @@ class ForegroundAppMonitor(
             System.currentTimeMillis() + SUPPRESS_REDISCOVERY_MS
         WajihaLog.i(
             WajihaTags.NOW_PLAYING,
-            "suppressRediscovery: $packageName for ${SUPPRESS_REDISCOVERY_MS}ms"
+            "suppressRediscovery: $packageName for ${SUPPRESS_REDISCOVERY_MS}ms",
         )
     }
 
@@ -1269,12 +1330,13 @@ class ForegroundAppMonitor(
         return false
     }
 
-    private fun labelOf(packageName: String): String? = try {
-        val pm = context.packageManager
-        pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
-    } catch (_: Exception) {
-        null
-    }
+    private fun labelOf(packageName: String): String? =
+        try {
+            val pm = context.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+        } catch (_: Exception) {
+            null
+        }
 
     private fun isSystemUi(packageName: String): Boolean =
         packageName == "com.android.systemui" ||
@@ -1285,41 +1347,51 @@ class ForegroundAppMonitor(
         GamingAppCatalog.isKnownGamingPackage(
             packageName = packageName,
             emulatorPackages = knownEmulatorPackages,
-            isPlayStoreGame = isGameApp(packageName)
+            isPlayStoreGame = isGameApp(packageName),
         )
 
-    private fun isGameApp(packageName: String): Boolean = try {
-        val info = context.packageManager.getApplicationInfo(packageName, 0)
-        info.category == android.content.pm.ApplicationInfo.CATEGORY_GAME
-    } catch (_: Exception) {
-        false
-    }
+    private fun isGameApp(packageName: String): Boolean =
+        try {
+            val info = context.packageManager.getApplicationInfo(packageName, 0)
+            info.category == android.content.pm.ApplicationInfo.CATEGORY_GAME
+        } catch (_: Exception) {
+            false
+        }
 
     private companion object {
         const val POLL_INTERVAL_MS = 2_000L
+
         /** Faster verification while a session is active. */
         const val ACTIVE_POLL_INTERVAL_MS = 750L
         const val EVENT_WINDOW_MS = 10_000L
         const val RUNNING_APPS_REFRESH_MS = 10_000L
         const val RUNNING_APPS_WINDOW_MS = 6 * 60 * 60 * 1000L
+
         /** Matches [refreshRunningApps] — cached emulators stay in session grid while recently used. */
         const val SESSION_RECENT_USAGE_MS = RUNNING_APPS_WINDOW_MS
+
         /** Accessibility / poll RESUMED events — sibling background sessions stay alive. */
         const val RECENT_FOREGROUND_MS = 30 * 60 * 1000L
         const val PACKAGES_REFRESH_MS = 60_000L
+
         /** Ignore brief resolver flips when alt-tabbing away from the game. */
         const val TOP_GAME_HIDE_DEBOUNCE_MS = 400L
+
         /** After explicit Y-close, block rediscovery while emulator process lingers. */
         const val SUPPRESS_REDISCOVERY_MS = 60_000L
+
         /** At most one memory-guard escalation pass this often. */
         const val MEMORY_GUARD_DEBOUNCE_MS = 5_000L
+
         /**
          * How often to attempt per-session RSS probes. [getProcessMemoryInfo] is
          * throttled (~5 min) and returns zeros for other UIDs on Android Q+.
          */
         const val RSS_PROBE_INTERVAL_MS = 30_000L
+
         /** Absolute per-session RSS cap (~4 GB) — only if readings are non-zero. */
         const val SESSION_RSS_CAP_BYTES = 4L * 1024 * 1024 * 1024
+
         /** Relative per-session RSS cap vs device MemTotal. */
         const val SESSION_RSS_CAP_FRACTION = 0.35
     }

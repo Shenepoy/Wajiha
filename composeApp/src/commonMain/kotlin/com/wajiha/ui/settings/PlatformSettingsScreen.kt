@@ -52,8 +52,8 @@ import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.FolderTabRow
-import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.LocalUiFeedback
+import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaSection
 import com.wajiha.ui.components.WajihaSectionDivider
 import com.wajiha.ui.components.gamepad.GamepadButton
@@ -70,20 +70,22 @@ import com.wajiha.ui.scraper.ScrapeModeSelector
 import com.wajiha.ui.scraper.ScrapeUiMode
 import com.wajiha.ui.scraper.ScraperViewModel
 import com.wajiha.ui.scraper.batchPolicyOrNull
-import com.wajiha.ui.scraper.toPolicy
 import com.wajiha.ui.scraper.review.ScrapeReviewPicker
 import com.wajiha.ui.scraper.review.ScrapeReviewViewModel
+import com.wajiha.ui.scraper.toPolicy
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
-private enum class PlatformSettingsTab(val label: String) {
+private enum class PlatformSettingsTab(
+    val label: String,
+) {
     General("General"),
     Emulator("Emulator"),
     Folders("Folders"),
     Scraper("Scraper"),
-    Info("Info")
+    Info("Info"),
 }
 
 /**
@@ -98,7 +100,7 @@ fun PlatformSettingsScreen(
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     viewModel: PlatformSettingsViewModel = koinInject(),
-    scraperViewModel: ScraperViewModel = koinInject()
+    scraperViewModel: ScraperViewModel = koinInject(),
 ) {
     LaunchedEffect(platformId) { viewModel.open(platformId) }
     val state by viewModel.uiState.collectAsState()
@@ -140,17 +142,25 @@ fun PlatformSettingsScreen(
                     if (selectedTabIndex > 0) {
                         selectTab(selectedTabIndex - 1)
                         true
-                    } else false
+                    } else {
+                        false
+                    }
                 }
+
                 GamepadKeys.isR1(event.type, event.key) -> {
                     if (selectedTabIndex < tabs.lastIndex) {
                         selectTab(selectedTabIndex + 1)
                         true
-                    } else false
+                    } else {
+                        false
+                    }
                 }
-                else -> false
+
+                else -> {
+                    false
+                }
             }
-        }
+        },
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             PlatformSettingsToolbar(
@@ -158,67 +168,84 @@ fun PlatformSettingsScreen(
                 enabled = platform?.enabled ?: true,
                 onEnabledChange = viewModel::setEnabled,
                 onBack = onBack,
-                showLibraryToggle = platform != null
+                showLibraryToggle = platform != null,
             )
 
             if (platform == null) {
                 Text(
                     text = "Platform not found",
                     modifier = Modifier.padding(WajihaSpacing.md),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(horizontal = WajihaSpacing.md)
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = WajihaSpacing.md),
                 ) {
                     FolderTabRow(
                         tabs = tabs.map { it.label },
                         selectedIndex = selectedTabIndex,
                         onSelect = ::selectTab,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusProperties { canFocus = false }
-                            .padding(top = WajihaSpacing.sm)
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .focusProperties { canFocus = false }
+                                .padding(top = WajihaSpacing.sm),
                     )
 
                     PlatformSettingsSectionCard(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .offset(y = (-1).dp)
-                            .padding(bottom = WajihaSpacing.md)
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .offset(y = (-1).dp)
+                                .padding(bottom = WajihaSpacing.md),
                     ) {
                         when (tabs[selectedTabIndex]) {
-                            PlatformSettingsTab.General -> PlatformGeneralTabContent(
-                                platform = platform,
-                                viewModel = viewModel,
-                                firstFocusRequester = sectionFocus
-                            )
-                            PlatformSettingsTab.Emulator -> PlatformEmulatorTabContent(
-                                platform = platform,
-                                state = state,
-                                systemControls = systemControls,
-                                viewModel = viewModel,
-                                firstFocusRequester = sectionFocus
-                            )
-                            PlatformSettingsTab.Folders -> PlatformFoldersTabContent(
-                                state = state,
-                                viewModel = viewModel,
-                                firstFocusRequester = sectionFocus
-                            )
-                            PlatformSettingsTab.Scraper -> PlatformScraperTabContent(
-                                platform = platform,
-                                viewModel = viewModel,
-                                scraperViewModel = scraperViewModel,
-                                firstFocusRequester = sectionFocus
-                            )
-                            PlatformSettingsTab.Info -> PlatformInfoTabContent(
-                                platform = platform,
-                                state = state
-                            )
+                            PlatformSettingsTab.General -> {
+                                PlatformGeneralTabContent(
+                                    platform = platform,
+                                    viewModel = viewModel,
+                                    firstFocusRequester = sectionFocus,
+                                )
+                            }
+
+                            PlatformSettingsTab.Emulator -> {
+                                PlatformEmulatorTabContent(
+                                    platform = platform,
+                                    state = state,
+                                    systemControls = systemControls,
+                                    viewModel = viewModel,
+                                    firstFocusRequester = sectionFocus,
+                                )
+                            }
+
+                            PlatformSettingsTab.Folders -> {
+                                PlatformFoldersTabContent(
+                                    state = state,
+                                    viewModel = viewModel,
+                                    firstFocusRequester = sectionFocus,
+                                )
+                            }
+
+                            PlatformSettingsTab.Scraper -> {
+                                PlatformScraperTabContent(
+                                    platform = platform,
+                                    viewModel = viewModel,
+                                    scraperViewModel = scraperViewModel,
+                                    firstFocusRequester = sectionFocus,
+                                )
+                            }
+
+                            PlatformSettingsTab.Info -> {
+                                PlatformInfoTabContent(
+                                    platform = platform,
+                                    state = state,
+                                )
+                            }
                         }
                     }
                 }
@@ -234,36 +261,37 @@ private fun PlatformSettingsToolbar(
     onEnabledChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     showLibraryToggle: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.sm),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
         GamepadButton(
             text = "Back",
             onClick = onBack,
-            outlined = true
+            outlined = true,
         )
         Row(
             modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
             if (showLibraryToggle) {
                 HeaderLibraryToggle(
                     checked = enabled,
-                    onCheckedChange = onEnabledChange
+                    onCheckedChange = onEnabledChange,
                 )
             }
         }
@@ -274,43 +302,42 @@ private fun PlatformSettingsToolbar(
 private fun HeaderLibraryToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
     val useCustomNav = LocalGamepadNavController.current != null
 
     Row(
-        modifier = modifier
-            .clip(WajihaShapes.focus)
-            .wajihaFocusIndicator(highlighted = !useCustomNav && focused)
-            .then(
-                if (!useCustomNav) {
-                    Modifier
-                        .onFocusChanged { focused = it.isFocused }
-                        .wajihaGamepadFocus()
-                        .onPreviewKeyEvent { event ->
-                            if (GamepadKeys.isConfirm(event.type, event.key)) {
-                                onCheckedChange(!checked)
-                                true
-                            } else {
-                                false
+        modifier =
+            modifier
+                .clip(WajihaShapes.focus)
+                .wajihaFocusIndicator(highlighted = !useCustomNav && focused)
+                .then(
+                    if (!useCustomNav) {
+                        Modifier
+                            .onFocusChanged { focused = it.isFocused }
+                            .wajihaGamepadFocus()
+                            .onPreviewKeyEvent { event ->
+                                if (GamepadKeys.isConfirm(event.type, event.key)) {
+                                    onCheckedChange(!checked)
+                                    true
+                                } else {
+                                    false
+                                }
                             }
-                        }
-                } else {
-                    Modifier
-                }
-            )
-            .pointerInput(checked, onCheckedChange) {
-                detectTapGestures { onCheckedChange(!checked) }
-            }
-            .padding(horizontal = WajihaSpacing.xs, vertical = WajihaSpacing.xs),
+                    } else {
+                        Modifier
+                    },
+                ).pointerInput(checked, onCheckedChange) {
+                    detectTapGestures { onCheckedChange(!checked) }
+                }.padding(horizontal = WajihaSpacing.xs, vertical = WajihaSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
     ) {
         Text(
             text = "Library",
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
@@ -319,26 +346,28 @@ private fun HeaderLibraryToggle(
 @Composable
 private fun PlatformSettingsSectionCard(
     modifier: Modifier = Modifier,
-    sectionContent: @Composable () -> Unit
+    sectionContent: @Composable () -> Unit,
 ) {
     val shape = WajihaShapes.folderPanel
     val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
 
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(width = 1.dp, color = outlineColor, shape = shape),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .border(width = 1.dp, color = outlineColor, shape = shape),
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(WajihaSpacing.md)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(WajihaSpacing.md),
         ) {
             SettingSectionScrollColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
             ) {
                 sectionContent()
             }
@@ -350,23 +379,23 @@ private fun PlatformSettingsSectionCard(
 private fun PlatformGeneralTabContent(
     platform: PlatformEntity,
     viewModel: PlatformSettingsViewModel,
-    firstFocusRequester: FocusRequester
+    firstFocusRequester: FocusRequester,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
         Text(
             text = "Display name and short label shown in the library grid.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = WajihaSpacing.xs)
+            modifier = Modifier.padding(bottom = WajihaSpacing.xs),
         )
         NameFields(
             platform = platform,
             onNameCommit = viewModel::setDisplayName,
             onShortNameCommit = viewModel::setShortName,
-            firstFocusRequester = firstFocusRequester
+            firstFocusRequester = firstFocusRequester,
         )
     }
 }
@@ -377,32 +406,37 @@ private fun PlatformEmulatorTabContent(
     state: PlatformSettingsUiState,
     systemControls: SystemControls,
     viewModel: PlatformSettingsViewModel,
-    firstFocusRequester: FocusRequester
+    firstFocusRequester: FocusRequester,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
         Text(
-            text = "Player used when launching games for this system " +
-                "(same idea as Daijishō / Cocoon players).",
+            text =
+                "Player used when launching games for this system " +
+                    "(same idea as Daijishō / Cocoon players).",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = WajihaSpacing.xs)
+            modifier = Modifier.padding(bottom = WajihaSpacing.xs),
         )
         if (state.emulators.isEmpty()) {
             Text(
                 text = "No emulators configured for this platform.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            val selectedEmulatorId = platform.defaultEmulatorId
-                ?: state.emulators.firstOrNull { it.isDefault }?.id
-                .orEmpty()
-            val emulatorOptions = state.emulators.toEmulatorChoiceOptions(
-                isPackageInstalled = systemControls::isPackageInstalled
-            )
+            val selectedEmulatorId =
+                platform.defaultEmulatorId
+                    ?: state.emulators
+                        .firstOrNull { it.isDefault }
+                        ?.id
+                        .orEmpty()
+            val emulatorOptions =
+                state.emulators.toEmulatorChoiceOptions(
+                    isPackageInstalled = systemControls::isPackageInstalled,
+                )
             GamepadSettingRow(
                 label = "Default emulator",
                 description = "Installed apps are selectable. Missing emulators stay visible but greyed out.",
@@ -410,7 +444,7 @@ private fun PlatformEmulatorTabContent(
                 multiChoiceOptions = emulatorOptions,
                 selected = selectedEmulatorId,
                 onSelect = viewModel::setDefaultEmulator,
-                focusRequester = firstFocusRequester
+                focusRequester = firstFocusRequester,
             )
         }
     }
@@ -420,45 +454,45 @@ private fun PlatformEmulatorTabContent(
 private fun PlatformFoldersTabContent(
     state: PlatformSettingsUiState,
     viewModel: PlatformSettingsViewModel,
-    firstFocusRequester: FocusRequester
+    firstFocusRequester: FocusRequester,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
         Text(
             text = "Folders scanned for games on this system. Add at least one to include it in your library.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = WajihaSpacing.xs)
+            modifier = Modifier.padding(bottom = WajihaSpacing.xs),
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
+            horizontalArrangement = Arrangement.End,
         ) {
             GamepadButton(
                 text = "Rescan",
                 onClick = viewModel::rescanPlatform,
                 outlined = true,
-                focusRequester = firstFocusRequester
+                focusRequester = firstFocusRequester,
             )
             GamepadButton(
                 text = "Add folder",
                 onClick = viewModel::pickRomFolder,
-                modifier = Modifier.padding(start = WajihaSpacing.sm)
+                modifier = Modifier.padding(start = WajihaSpacing.sm),
             )
         }
         if (state.folders.isEmpty()) {
             Text(
                 text = "No folders yet — add a ROM folder to bring this system into your library.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
             state.folders.forEach { folder ->
                 FolderRow(
                     folder = folder,
-                    onRemove = { viewModel.removeFolder(folder.id) }
+                    onRemove = { viewModel.removeFolder(folder.id) },
                 )
             }
         }
@@ -472,7 +506,7 @@ private fun PlatformScraperTabContent(
     scraperViewModel: ScraperViewModel,
     firstFocusRequester: FocusRequester,
     reviewViewModel: ScrapeReviewViewModel = koinInject(),
-    dualStore: DualScreenStore = koinInject()
+    dualStore: DualScreenStore = koinInject(),
 ) {
     val progress by scraperViewModel.progress.collectAsState()
     val settings by scraperViewModel.settings.collectAsState()
@@ -487,29 +521,34 @@ private fun PlatformScraperTabContent(
     var estimate by remember { mutableStateOf<Int?>(null) }
     var reviewing by remember { mutableStateOf(false) }
     var includeScraped by remember { mutableStateOf(false) }
-    val linkageWarning = buildList {
-        if ("screenscraper" in effective.enabledSources && platform.screenScraperId == null) {
-            add("ScreenScraper system id is empty")
-        }
-        if ("ra" in effective.enabledSources && platform.raConsoleId == null) {
-            add("RetroAchievements console id is empty")
-        }
-        if ("libretro" in effective.enabledSources && platform.libretroName.isNullOrBlank()) {
-            add("Libretro system name is empty")
-        }
-    }
-    val scrapeBusy = progress.running &&
-        (progress.platformId == platform.id || progress.platformId == null)
-
-    LaunchedEffect(platform.id, mode, includeScraped) {
-        estimate = when (mode) {
-            ScrapeUiMode.Review ->
-                scraperViewModel.reviewQueueGames(platform.id, includeScraped).size
-            else -> {
-                val policy = mode.batchPolicyOrNull() ?: return@LaunchedEffect
-                scraperViewModel.estimateBatchCount(platform.id, policy)
+    val linkageWarning =
+        buildList {
+            if ("screenscraper" in effective.enabledSources && platform.screenScraperId == null) {
+                add("ScreenScraper system id is empty")
+            }
+            if ("ra" in effective.enabledSources && platform.raConsoleId == null) {
+                add("RetroAchievements console id is empty")
+            }
+            if ("libretro" in effective.enabledSources && platform.libretroName.isNullOrBlank()) {
+                add("Libretro system name is empty")
             }
         }
+    val scrapeBusy =
+        progress.running &&
+            (progress.platformId == platform.id || progress.platformId == null)
+
+    LaunchedEffect(platform.id, mode, includeScraped) {
+        estimate =
+            when (mode) {
+                ScrapeUiMode.Review -> {
+                    scraperViewModel.reviewQueueGames(platform.id, includeScraped).size
+                }
+
+                else -> {
+                    val policy = mode.batchPolicyOrNull() ?: return@LaunchedEffect
+                    scraperViewModel.estimateBatchCount(platform.id, policy)
+                }
+            }
     }
 
     if (reviewing) {
@@ -518,69 +557,71 @@ private fun PlatformScraperTabContent(
             onCancel = { reviewing = false },
             showSkip = true,
             dualDisplay = dualDisplay,
-            hostGamepadOwner = if (dualDisplay) dualStore.menuGamepadOwner() else null
+            hostGamepadOwner = if (dualDisplay) dualStore.menuGamepadOwner() else null,
         )
     }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
         Text(
-            text = "Scrape metadata and media for games on this platform, " +
-                "or adjust linkage IDs and per-system source overrides.",
+            text =
+                "Scrape metadata and media for games on this platform, " +
+                    "or adjust linkage IDs and per-system source overrides.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = WajihaSpacing.xs)
+            modifier = Modifier.padding(bottom = WajihaSpacing.xs),
         )
 
         ScrapeModeSelector(
             selected = mode,
             onSelect = { mode = it },
             firstFocusRequester = firstFocusRequester,
-            enabled = !progress.running
+            enabled = !progress.running,
         )
 
         if (mode == ScrapeUiMode.Review) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
             ) {
                 GamepadChip(
                     label = "Gaps only",
                     selected = !includeScraped,
-                    onClick = { if (!progress.running) includeScraped = false }
+                    onClick = { if (!progress.running) includeScraped = false },
                 )
                 GamepadChip(
                     label = "Include scraped",
                     selected = includeScraped,
-                    onClick = { if (!progress.running) includeScraped = true }
+                    onClick = { if (!progress.running) includeScraped = true },
                 )
             }
         }
 
         estimate?.let { count ->
             Text(
-                text = when (mode) {
-                    ScrapeUiMode.Review -> "$count game(s) in review queue"
-                    ScrapeUiMode.Force -> "$count game(s) will be force-scraped"
-                    ScrapeUiMode.FillGaps -> "$count game(s) need gap fill"
-                },
+                text =
+                    when (mode) {
+                        ScrapeUiMode.Review -> "$count game(s) in review queue"
+                        ScrapeUiMode.Force -> "$count game(s) will be force-scraped"
+                        ScrapeUiMode.FillGaps -> "$count game(s) need gap fill"
+                    },
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
+            horizontalArrangement = Arrangement.End,
         ) {
             if (canRetry && mode != ScrapeUiMode.Review) {
                 GamepadButton(
                     text = "Retry failed",
                     onClick = { scraperViewModel.retryFailedBatch(platform.id) },
                     outlined = true,
-                    enabled = !progress.running
+                    enabled = !progress.running,
                 )
             }
             when (mode) {
@@ -589,10 +630,11 @@ private fun PlatformScraperTabContent(
                         text = "Start review",
                         onClick = {
                             scope.launch {
-                                val games = scraperViewModel.reviewQueueGames(
-                                    platform.id,
-                                    includeScraped
-                                )
+                                val games =
+                                    scraperViewModel.reviewQueueGames(
+                                        platform.id,
+                                        includeScraped,
+                                    )
                                 if (games.isEmpty()) {
                                     scraperViewModel.dismissBatchFeedback()
                                     return@launch
@@ -604,25 +646,27 @@ private fun PlatformScraperTabContent(
                             }
                         },
                         enabled = !progress.running && sourcesReady && (estimate ?: 0) > 0,
-                        modifier = Modifier.padding(start = WajihaSpacing.sm)
+                        modifier = Modifier.padding(start = WajihaSpacing.sm),
                     )
                 }
+
                 else -> {
                     GamepadButton(
-                        text = if (scrapeBusy) {
-                            "Scraping…"
-                        } else {
-                            when (mode) {
-                                ScrapeUiMode.Force -> "Force scrape"
-                                else -> "Fill gaps"
-                            }
-                        },
+                        text =
+                            if (scrapeBusy) {
+                                "Scraping…"
+                            } else {
+                                when (mode) {
+                                    ScrapeUiMode.Force -> "Force scrape"
+                                    else -> "Fill gaps"
+                                }
+                            },
                         onClick = {
                             scraperViewModel.dismissBatchFeedback()
                             scraperViewModel.startBatch(platform.id, mode.toPolicy())
                         },
                         enabled = !progress.running && sourcesReady,
-                        modifier = Modifier.padding(start = WajihaSpacing.sm)
+                        modifier = Modifier.padding(start = WajihaSpacing.sm),
                     )
                 }
             }
@@ -634,19 +678,19 @@ private fun PlatformScraperTabContent(
                     GamepadButton(
                         text = "Resume",
                         onClick = scraperViewModel::resumeBatch,
-                        outlined = true
+                        outlined = true,
                     )
                 } else {
                     GamepadButton(
                         text = "Pause",
                         onClick = scraperViewModel::pauseBatch,
-                        outlined = true
+                        outlined = true,
                     )
                 }
                 GamepadButton(
                     text = "Cancel",
                     onClick = scraperViewModel::cancelBatch,
-                    outlined = true
+                    outlined = true,
                 )
             }
         }
@@ -655,32 +699,33 @@ private fun PlatformScraperTabContent(
             Text(
                 text = "No scraper sources configured — enable and sign in under Settings → Scraper.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         linkageWarning.forEach { warning ->
             Text(
                 text = warning,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         batchFeedback?.let { feedback ->
             Text(
                 text = feedback,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.error,
             )
         }
         if (scrapeBusy) {
             Text(
-                text = when {
-                    progress.paused -> "Paused — ${progress.summaryLine()}"
-                    progress.currentGameName != null -> "Scraping: ${progress.currentGameName}"
-                    else -> "Scraping…"
-                },
+                text =
+                    when {
+                        progress.paused -> "Paused — ${progress.summaryLine()}"
+                        progress.currentGameName != null -> "Scraping: ${progress.currentGameName}"
+                        else -> "Scraping…"
+                    },
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else if (
             progress.done > 0 &&
@@ -689,25 +734,26 @@ private fun PlatformScraperTabContent(
             Text(
                 text = "Last run: ${progress.summaryLine()}",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
         WajihaSectionDivider()
         WajihaSection(title = "Scraper linkage") {
             Text(
-                text = "IDs used to match games on ScreenScraper, RetroAchievements, and Libretro. " +
-                    "Defaults come from platform packs; tweak here if a match is wrong.",
+                text =
+                    "IDs used to match games on ScreenScraper, RetroAchievements, and Libretro. " +
+                        "Defaults come from platform packs; tweak here if a match is wrong.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = WajihaSpacing.xs)
+                modifier = Modifier.padding(bottom = WajihaSpacing.xs),
             )
             ScraperIdFields(
                 platform = platform,
                 onScreenScraperId = viewModel::setScreenScraperId,
                 onRaConsoleId = viewModel::setRaConsoleId,
                 onLibretroName = viewModel::setLibretroName,
-                firstFocusRequester = remember { FocusRequester() }
+                firstFocusRequester = remember { FocusRequester() },
             )
         }
 
@@ -715,7 +761,7 @@ private fun PlatformScraperTabContent(
         WajihaSection(title = "Scraper overrides") {
             PlatformScraperSettingsSection(
                 platformId = platform.id,
-                viewModel = scraperViewModel
+                viewModel = scraperViewModel,
             )
         }
     }
@@ -724,22 +770,23 @@ private fun PlatformScraperTabContent(
 @Composable
 private fun PlatformInfoTabContent(
     platform: PlatformEntity,
-    state: PlatformSettingsUiState
+    state: PlatformSettingsUiState,
 ) {
     val labelStyle = MaterialTheme.typography.labelSmall
     val bodyStyle = MaterialTheme.typography.bodySmall
-    val defaultEmulatorName = state.emulators
-        .firstOrNull { it.id == platform.defaultEmulatorId }
-        ?.name
-        ?: state.emulators.firstOrNull { it.isDefault }?.name
-        ?: "—"
+    val defaultEmulatorName =
+        state.emulators
+            .firstOrNull { it.id == platform.defaultEmulatorId }
+            ?.name
+            ?: state.emulators.firstOrNull { it.isDefault }?.name
+            ?: "—"
 
     Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)) {
         Text(
             text = "Read-only platform metadata and library stats.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = WajihaSpacing.xs)
+            modifier = Modifier.padding(bottom = WajihaSpacing.xs),
         )
 
         PlatformInfoRow("Platform id", platform.id, labelStyle, bodyStyle)
@@ -749,7 +796,7 @@ private fun PlatformInfoTabContent(
             "In library",
             if (platform.enabled) "Yes" else "No",
             labelStyle,
-            bodyStyle
+            bodyStyle,
         )
         PlatformInfoRow("Games", "${state.gameCount}", labelStyle, bodyStyle)
         PlatformInfoRow("ROM folders", "${state.folders.size}", labelStyle, bodyStyle)
@@ -762,19 +809,19 @@ private fun PlatformInfoTabContent(
             "ScreenScraper id",
             platform.screenScraperId?.toString() ?: "—",
             labelStyle,
-            bodyStyle
+            bodyStyle,
         )
         PlatformInfoRow(
             "RetroAchievements id",
             platform.raConsoleId?.toString() ?: "—",
             labelStyle,
-            bodyStyle
+            bodyStyle,
         )
         PlatformInfoRow(
             "Libretro name",
             platform.libretroName ?: "—",
             labelStyle,
-            bodyStyle
+            bodyStyle,
         )
 
         if (state.folders.isNotEmpty()) {
@@ -782,7 +829,7 @@ private fun PlatformInfoTabContent(
             Text(
                 text = "Folder paths",
                 style = labelStyle,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             state.folders.forEach { folder ->
                 PlatformInfoRow(
@@ -790,7 +837,7 @@ private fun PlatformInfoTabContent(
                     value = folderDisplayPath(folder),
                     labelStyle = labelStyle,
                     bodyStyle = bodyStyle,
-                    maxValueLines = 4
+                    maxValueLines = 4,
                 )
             }
         }
@@ -803,29 +850,31 @@ private fun PlatformInfoRow(
     value: String,
     labelStyle: TextStyle,
     bodyStyle: TextStyle,
-    maxValueLines: Int = 3
+    maxValueLines: Int = 3,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = WajihaSpacing.touchMin / 2),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = WajihaSpacing.touchMin / 2),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.Top,
     ) {
         Text(
             text = label,
             style = labelStyle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.widthIn(max = 120.dp)
+            modifier = Modifier.widthIn(max = 120.dp),
         )
         Text(
             text = value,
             style = bodyStyle,
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = WajihaSpacing.sm),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .padding(start = WajihaSpacing.sm),
             maxLines = maxValueLines,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -834,20 +883,18 @@ private fun PlatformInfoRow(
 private fun InfoGroupDivider() {
     HorizontalDivider(
         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-        modifier = Modifier.padding(vertical = WajihaSpacing.xs)
+        modifier = Modifier.padding(vertical = WajihaSpacing.xs),
     )
 }
 
-private fun folderDisplayPath(folder: RomFolderEntity): String {
-    return folder.treeUri.substringAfterLast("%3A").substringAfterLast(':')
-}
+private fun folderDisplayPath(folder: RomFolderEntity): String = folder.treeUri.substringAfterLast("%3A").substringAfterLast(':')
 
 @Composable
 private fun NameFields(
     platform: PlatformEntity,
     onNameCommit: (String) -> Unit,
     onShortNameCommit: (String) -> Unit,
-    firstFocusRequester: FocusRequester
+    firstFocusRequester: FocusRequester,
 ) {
     var name by remember(platform.id, platform.name) { mutableStateOf(platform.name) }
     var shortName by remember(platform.id, platform.shortName) {
@@ -858,9 +905,10 @@ private fun NameFields(
             value = name,
             onValueChange = { name = it },
             label = "Display name",
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(firstFocusRequester)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .focusRequester(firstFocusRequester),
         )
     }
     LaunchedEffect(name) {
@@ -874,7 +922,7 @@ private fun NameFields(
             value = shortName,
             onValueChange = { shortName = it },
             label = "Short name",
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
     }
     LaunchedEffect(shortName) {
@@ -886,7 +934,10 @@ private fun NameFields(
 }
 
 @Composable
-private fun FolderRow(folder: RomFolderEntity, onRemove: () -> Unit) {
+private fun FolderRow(
+    folder: RomFolderEntity,
+    onRemove: () -> Unit,
+) {
     GamepadSettingRow(
         label = folderDisplayPath(folder),
         description = "ROM folder on this device.",
@@ -897,9 +948,9 @@ private fun FolderRow(folder: RomFolderEntity, onRemove: () -> Unit) {
                 text = "Remove",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.error,
             )
-        }
+        },
     )
 }
 
@@ -909,7 +960,7 @@ private fun ScraperIdFields(
     onScreenScraperId: (String) -> Unit,
     onRaConsoleId: (String) -> Unit,
     onLibretroName: (String) -> Unit,
-    firstFocusRequester: FocusRequester
+    firstFocusRequester: FocusRequester,
 ) {
     var ss by remember(platform.id, platform.screenScraperId) {
         mutableStateOf(platform.screenScraperId?.toString().orEmpty())
@@ -926,9 +977,10 @@ private fun ScraperIdFields(
             value = ss,
             onValueChange = { ss = it },
             label = "ScreenScraper system id",
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(firstFocusRequester)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .focusRequester(firstFocusRequester),
         )
     }
     LaunchedEffect(ss) {
@@ -943,7 +995,7 @@ private fun ScraperIdFields(
             value = ra,
             onValueChange = { ra = it },
             label = "RetroAchievements console id",
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
     }
     LaunchedEffect(ra) {
@@ -958,7 +1010,7 @@ private fun ScraperIdFields(
             value = libretro,
             onValueChange = { libretro = it },
             label = "Libretro thumbnails name",
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
     }
     LaunchedEffect(libretro) {

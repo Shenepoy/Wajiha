@@ -15,8 +15,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import com.wajiha.ui.theme.WajihaFocus
-import com.wajiha.ui.theme.showGamepadChrome
 import com.wajiha.ui.theme.WajihaShapes
+import com.wajiha.ui.theme.showGamepadChrome
 
 /**
  * Registers a navigable slot with the nav controller.
@@ -31,7 +31,7 @@ fun GamepadNavItem(
     onEnterEdit: (() -> Boolean)? = null,
     onExitEdit: (() -> Boolean)? = null,
     onFocus: (() -> Unit)? = null,
-    content: @Composable (highlighted: Boolean) -> Unit
+    content: @Composable (highlighted: Boolean) -> Unit,
 ) {
     val controller = LocalGamepadNavController.current
     val id = itemId ?: remember { Any() }
@@ -54,15 +54,16 @@ fun GamepadNavItem(
             modifier = modifier,
             showChrome = showChrome,
             onActivate = onActivate,
-            enabled = enabled
+            enabled = enabled,
         ) {
             content(showChrome)
         }
     } else {
         Box(
-            modifier = modifier.pointerInput(onActivate, enabled) {
-                if (enabled) detectTapGestures { onActivate() }
-            }
+            modifier =
+                modifier.pointerInput(onActivate, enabled) {
+                    if (enabled) detectTapGestures { onActivate() }
+                },
         ) {
             content(false)
         }
@@ -75,32 +76,31 @@ private fun NavItemChrome(
     onActivate: () -> Unit,
     enabled: Boolean,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val scale = if (showChrome) WajihaFocus.selectedScale else 1f
     Box(
-        modifier = modifier
-            .scale(scale)
-            .clip(WajihaShapes.focus)
-            .then(
-                if (showChrome) {
-                    Modifier
-                        .background(
-                            color = WajihaFocus.selectedBackground(),
-                            shape = WajihaShapes.focus
-                        )
-                        .border(
-                            width = WajihaFocus.selectedBorderWidth,
-                            color = WajihaFocus.selectedBorderColor(),
-                            shape = WajihaShapes.focus
-                        )
-                } else {
-                    Modifier
-                }
-            )
-            .pointerInput(onActivate, enabled) {
-                if (enabled) detectTapGestures { onActivate() }
-            }
+        modifier =
+            modifier
+                .scale(scale)
+                .clip(WajihaShapes.focus)
+                .then(
+                    if (showChrome) {
+                        Modifier
+                            .background(
+                                color = WajihaFocus.selectedBackground(),
+                                shape = WajihaShapes.focus,
+                            ).border(
+                                width = WajihaFocus.selectedBorderWidth,
+                                color = WajihaFocus.selectedBorderColor(),
+                                shape = WajihaShapes.focus,
+                            )
+                    } else {
+                        Modifier
+                    },
+                ).pointerInput(onActivate, enabled) {
+                    if (enabled) detectTapGestures { onActivate() }
+                },
     ) {
         content()
     }

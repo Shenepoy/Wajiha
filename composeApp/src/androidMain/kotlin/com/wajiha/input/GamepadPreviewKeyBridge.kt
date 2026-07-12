@@ -1,7 +1,7 @@
 package com.wajiha.input
 
-import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.ui.input.key.KeyEvent
+import android.view.KeyEvent as AndroidKeyEvent
 
 /**
  * Dispatches shoulder / tab keys to the top [GamepadLayers] preview handler

@@ -37,7 +37,7 @@ fun GamepadChip(
     gamepadFocusable: Boolean = true,
     focusRequester: FocusRequester? = null,
     sound: UiSound? = null,
-    soundWhenUnselected: Boolean = false
+    soundWhenUnselected: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     val useCustomNav = LocalGamepadNavController.current != null
@@ -45,11 +45,12 @@ fun GamepadChip(
     val interactionSource = rememberPressInteractionSource()
 
     fun performClick() {
-        val shouldPlay = when {
-            soundWhenUnselected && !selected -> sound
-            !soundWhenUnselected -> sound
-            else -> null
-        }
+        val shouldPlay =
+            when {
+                soundWhenUnselected && !selected -> sound
+                !soundWhenUnselected -> sound
+                else -> null
+            }
         when (shouldPlay) {
             UiSound.Navigate -> feedback.navigate()
             UiSound.Open -> feedback.confirm()
@@ -66,42 +67,42 @@ fun GamepadChip(
         label = {
             Text(
                 text = label,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             )
         },
         shape = WajihaShapes.chip,
         interactionSource = interactionSource,
-        modifier = modifier
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .clip(WajihaShapes.chip)
-            .wajihaPressedFeedback(interactionSource, WajihaShapes.chip)
-            .wajihaFocusIndicator(
-                highlighted = !useCustomNav && focused,
-                shape = WajihaShapes.chip
-            )
-            .then(
-                if (!useCustomNav) {
-                    Modifier
-                        .onFocusChanged { focused = it.isFocused }
-                        .wajihaGamepadFocus(gamepadFocusable)
-                        .onPreviewKeyEvent { event ->
-                            if (GamepadKeys.isConfirm(event.type, event.key)) {
-                                performClick()
-                                true
-                            } else {
-                                false
+        modifier =
+            modifier
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .clip(WajihaShapes.chip)
+                .wajihaPressedFeedback(interactionSource, WajihaShapes.chip)
+                .wajihaFocusIndicator(
+                    highlighted = !useCustomNav && focused,
+                    shape = WajihaShapes.chip,
+                ).then(
+                    if (!useCustomNav) {
+                        Modifier
+                            .onFocusChanged { focused = it.isFocused }
+                            .wajihaGamepadFocus(gamepadFocusable)
+                            .onPreviewKeyEvent { event ->
+                                if (GamepadKeys.isConfirm(event.type, event.key)) {
+                                    performClick()
+                                    true
+                                } else {
+                                    false
+                                }
                             }
-                        }
-                } else {
-                    Modifier
-                }
-            )
-            .pointerInput(Unit) {
-                detectTapGestures { performClick() }
-            },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primary,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-        )
+                    } else {
+                        Modifier
+                    },
+                ).pointerInput(Unit) {
+                    detectTapGestures { performClick() }
+                },
+        colors =
+            FilterChipDefaults.filterChipColors(
+                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+            ),
     )
 }

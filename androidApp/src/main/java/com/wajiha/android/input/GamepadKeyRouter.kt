@@ -4,19 +4,19 @@ import android.os.Looper
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import com.wajiha.data.prefs.SettingsRepository
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaTags
 import com.wajiha.platform.AppActions
 import com.wajiha.platform.UiSound
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.SystemNotificationStore
-import com.wajiha.log.WajihaLog
-import com.wajiha.log.WajihaTags
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 
 /**
  * Same-process gamepad routing between [com.wajiha.android.MainActivity] and
@@ -38,24 +38,31 @@ class GamepadKeyRouter(
     private val settingsRepository: SettingsRepository,
     private val appActions: AppActions,
     private val notifications: SystemNotificationStore,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
 ) {
     private val triggers = LauncherTriggerActions(store, notifications, appActions)
     private var primaryRef: WeakReference<ComponentActivity>? = null
     private var secondaryRef: WeakReference<ComponentActivity>? = null
 
-    fun attach(owner: GamepadOwner, activity: ComponentActivity) {
+    fun attach(
+        owner: GamepadOwner,
+        activity: ComponentActivity,
+    ) {
         when (owner) {
             GamepadOwner.Primary -> primaryRef = WeakReference(activity)
             GamepadOwner.Secondary -> secondaryRef = WeakReference(activity)
         }
     }
 
-    fun detach(owner: GamepadOwner, activity: ComponentActivity) {
+    fun detach(
+        owner: GamepadOwner,
+        activity: ComponentActivity,
+    ) {
         when (owner) {
             GamepadOwner.Primary -> {
                 if (primaryRef?.get() === activity) primaryRef = null
             }
+
             GamepadOwner.Secondary -> {
                 if (secondaryRef?.get() === activity) secondaryRef = null
             }
@@ -70,7 +77,7 @@ class GamepadKeyRouter(
     fun dispatch(
         from: GamepadOwner,
         event: KeyEvent,
-        localDispatch: (KeyEvent) -> Boolean
+        localDispatch: (KeyEvent) -> Boolean,
     ): Boolean {
         if (
             event.action == KeyEvent.ACTION_DOWN &&
@@ -85,7 +92,7 @@ class GamepadKeyRouter(
             WajihaLog.i(
                 WajihaTags.GAMEPAD,
                 "key: ${KeyEvent.keyCodeToString(event.keyCode)} from=$from " +
-                    "scan=${event.scanCode} device=${event.deviceId}"
+                    "scan=${event.scanCode} device=${event.deviceId}",
             )
         }
         if (isSwapScreenKey(event.keyCode) && event.action == KeyEvent.ACTION_UP) {
@@ -93,7 +100,7 @@ class GamepadKeyRouter(
                 val swapped = settingsRepository.toggleSwapScreenRoles()
                 WajihaLog.i(
                     WajihaTags.GAMEPAD,
-                    "map: SELECT → swapScreenRoles=$swapped (from=$from)"
+                    "map: SELECT → swapScreenRoles=$swapped (from=$from)",
                 )
                 appActions.playSound(UiSound.Navigate)
             }
@@ -129,7 +136,7 @@ class GamepadKeyRouter(
             WajihaLog.d(
                 WajihaTags.GAMEPAD,
                 "forward: keyCode=${event.keyCode} from=$from → owner=$owner " +
-                    "target=${target.javaClass.simpleName}"
+                    "target=${target.javaClass.simpleName}",
             )
         }
         return runOnMainBlocking {

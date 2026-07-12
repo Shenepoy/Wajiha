@@ -13,7 +13,7 @@ data class RaUserProfile(
     @SerialName("User") val user: String = "",
     @SerialName("TotalPoints") val totalPoints: Int = 0,
     @SerialName("TotalTruePoints") val totalTruePoints: Int = 0,
-    @SerialName("UserPic") val userPic: String? = null
+    @SerialName("UserPic") val userPic: String? = null,
 )
 
 @Serializable
@@ -25,7 +25,7 @@ data class RaAchievement(
     @SerialName("BadgeName") val badgeName: String = "",
     @SerialName("DisplayOrder") val displayOrder: Int = 0,
     @SerialName("DateEarned") val dateEarned: String? = null,
-    @SerialName("DateEarnedHardcore") val dateEarnedHardcore: String? = null
+    @SerialName("DateEarnedHardcore") val dateEarnedHardcore: String? = null,
 ) {
     val earned: Boolean get() = dateEarned != null || dateEarnedHardcore != null
     val badgeUrl: String get() = RaMediaUrls.badge(badgeName)
@@ -42,51 +42,72 @@ data class RaGameProgress(
     @SerialName("NumAwardedToUser") val numAwardedToUser: Int = 0,
     @SerialName("NumAwardedToUserHardcore") val numAwardedToUserHardcore: Int = 0,
     @SerialName("UserCompletion") val userCompletion: String? = null,
-    @SerialName("Achievements") val achievements: Map<String, RaAchievement> = emptyMap()
+    @SerialName("Achievements") val achievements: Map<String, RaAchievement> = emptyMap(),
 ) {
     val sortedAchievements: List<RaAchievement>
         get() = achievements.values.sortedBy { it.displayOrder }
 }
 
 /** Thin client for the RetroAchievements Web API (user API key auth). */
-class RaClient(private val http: HttpClient) {
-
+class RaClient(
+    private val http: HttpClient,
+) {
     /** Validates credentials by fetching the user's profile; null on failure. */
-    suspend fun profile(username: String, apiKey: String): RaUserProfile? = try {
-        val body = http.get("$BASE/API_GetUserProfile.php") {
-            parameter("z", username)
-            parameter("y", apiKey)
-            parameter("u", username)
-        }.body<String>()
-        WajihaJson.Lenient.decodeFromString<RaUserProfile>(body).takeIf { it.user.isNotBlank() }
-    } catch (_: Exception) {
-        null
-    }
+    suspend fun profile(
+        username: String,
+        apiKey: String,
+    ): RaUserProfile? =
+        try {
+            val body =
+                http
+                    .get("$BASE/API_GetUserProfile.php") {
+                        parameter("z", username)
+                        parameter("y", apiKey)
+                        parameter("u", username)
+                    }.body<String>()
+            WajihaJson.Lenient.decodeFromString<RaUserProfile>(body).takeIf { it.user.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
 
     /** RA game id for a ROM md5, or null when unknown. */
-    suspend fun gameIdForHash(username: String, apiKey: String, md5: String): Long? = try {
-        val body = http.get("$BASE/API_GetGameInfoByHash.php") {
-            parameter("z", username)
-            parameter("y", apiKey)
-            parameter("h", md5)
-        }.body<String>()
-        parseRaGameIdFromHashResponse(body)
-    } catch (_: Exception) {
-        null
-    }
+    suspend fun gameIdForHash(
+        username: String,
+        apiKey: String,
+        md5: String,
+    ): Long? =
+        try {
+            val body =
+                http
+                    .get("$BASE/API_GetGameInfoByHash.php") {
+                        parameter("z", username)
+                        parameter("y", apiKey)
+                        parameter("h", md5)
+                    }.body<String>()
+            parseRaGameIdFromHashResponse(body)
+        } catch (_: Exception) {
+            null
+        }
 
     /** Full achievement list with the user's earned state. */
-    suspend fun gameProgress(username: String, apiKey: String, raGameId: Long): RaGameProgress? = try {
-        val body = http.get("$BASE/API_GetGameInfoAndUserProgress.php") {
-            parameter("z", username)
-            parameter("y", apiKey)
-            parameter("g", raGameId)
-            parameter("u", username)
-        }.body<String>()
-        WajihaJson.Lenient.decodeFromString<RaGameProgress>(body).takeIf { it.id > 0 }
-    } catch (_: Exception) {
-        null
-    }
+    suspend fun gameProgress(
+        username: String,
+        apiKey: String,
+        raGameId: Long,
+    ): RaGameProgress? =
+        try {
+            val body =
+                http
+                    .get("$BASE/API_GetGameInfoAndUserProgress.php") {
+                        parameter("z", username)
+                        parameter("y", apiKey)
+                        parameter("g", raGameId)
+                        parameter("u", username)
+                    }.body<String>()
+            WajihaJson.Lenient.decodeFromString<RaGameProgress>(body).takeIf { it.id > 0 }
+        } catch (_: Exception) {
+            null
+        }
 
     private companion object {
         const val BASE = "https://retroachievements.org/API"

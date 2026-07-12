@@ -5,7 +5,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 data class LaunchableApp(
     val packageName: String,
     val label: String,
-    val icon: ImageBitmap? = null
+    val icon: ImageBitmap? = null,
 )
 
 enum class UiSound { Navigate, Open, Back, Launch }
@@ -13,16 +13,23 @@ enum class UiSound { Navigate, Open, Back, Launch }
 /** Host-side actions the shared UI needs (actual implementation on Android). */
 interface AppActions {
     suspend fun installedApps(): List<LaunchableApp>
+
     fun launchApp(packageName: String)
 
     /** Launch on a specific display (0 = primary/top, secondary id = bottom). */
-    fun launchAppOnDisplay(packageName: String, displayId: Int)
+    fun launchAppOnDisplay(
+        packageName: String,
+        displayId: Int,
+    )
 
     /** Returns null on success, otherwise a user-displayable error. */
     suspend fun launchGame(gameId: Long): String?
 
     /** Launch on a specific display (0 = primary/top, secondary id = bottom). */
-    suspend fun launchGameOnDisplay(gameId: Long, displayId: Int): String?
+    suspend fun launchGameOnDisplay(
+        gameId: Long,
+        displayId: Int,
+    ): String?
 
     /** Remove from library DB only; ROM file is kept. Returns null on success. */
     suspend fun removeFromLibrary(gameId: Long): String?
@@ -33,7 +40,11 @@ interface AppActions {
     fun playSound(sound: UiSound)
 
     fun killApp(packageName: String)
-    fun moveAppToDisplay(packageName: String, displayId: Int)
+
+    fun moveAppToDisplay(
+        packageName: String,
+        displayId: Int,
+    )
 
     /** Bring a running app's task to the foreground on the primary (top) display. */
     fun focusApp(packageName: String)
@@ -56,7 +67,7 @@ interface LibraryActions {
      */
     suspend fun startScrape(
         platformId: String? = null,
-        mode: String = "fill_gaps"
+        mode: String = "fill_gaps",
     ): String?
 
     /**

@@ -24,9 +24,9 @@ import org.koin.core.component.inject
  */
 class ScrapeWorker(
     appContext: Context,
-    params: WorkerParameters
-) : CoroutineWorker(appContext, params), KoinComponent {
-
+    params: WorkerParameters,
+) : CoroutineWorker(appContext, params),
+    KoinComponent {
     private val batchScraper: BatchScraper by inject()
     private val platformRepository: PlatformRepository by inject()
 
@@ -42,40 +42,41 @@ class ScrapeWorker(
                 total = 0,
                 summary = "Preparing scrape…",
                 currentGameName = null,
-                paused = false
-            )
+                paused = false,
+            ),
         )
 
-        val notifJob = launchProgressNotifications(
-            progress = batchScraper.progress,
-            shouldUpdate = { it.running },
-            foregroundInfo = { p ->
-                OperationNotificationHelper.scrapeForegroundInfo(
-                    context = applicationContext,
-                    platformLabel = platformLabel,
-                    done = p.done,
-                    total = p.total,
-                    summary = p.summaryLine(),
-                    currentGameName = p.currentGameName,
-                    paused = p.paused
-                )
-            }
-        )
+        val notifJob =
+            launchProgressNotifications(
+                progress = batchScraper.progress,
+                shouldUpdate = { it.running },
+                foregroundInfo = { p ->
+                    OperationNotificationHelper.scrapeForegroundInfo(
+                        context = applicationContext,
+                        platformLabel = platformLabel,
+                        done = p.done,
+                        total = p.total,
+                        summary = p.summaryLine(),
+                        currentGameName = p.currentGameName,
+                        paused = p.paused,
+                    )
+                },
+            )
         return try {
             batchScraper.runForPlatform(platformId, policy)
             val progress = batchScraper.progress.value
             OperationNotificationHelper.postScrapeComplete(
                 context = applicationContext,
                 platformLabel = platformLabel,
-                progress = progress
+                progress = progress,
             )
             Result.success(
                 workDataOf(
                     "matched" to progress.matched,
                     "partial" to progress.partial,
                     "noMatch" to progress.noMatch,
-                    "errors" to progress.errorCount
-                )
+                    "errors" to progress.errorCount,
+                ),
             )
         } finally {
             notifJob.cancel()
@@ -89,9 +90,15 @@ class ScrapeWorker(
 
         /** True when a scrape job is running or waiting on constraints (e.g. Wi‑Fi). */
         suspend fun isWorkActive(context: Context): Boolean {
-            if (getKoin().get<BatchScraper>().progress.value.running) return true
+            if (getKoin()
+                    .get<BatchScraper>()
+                    .progress.value.running
+            ) {
+                return true
+            }
             return try {
-                WorkManager.getInstance(context)
+                WorkManager
+                    .getInstance(context)
                     .getWorkInfosForUniqueWorkFlow(UNIQUE_NAME)
                     .first()
                     .any { !it.state.isFinished }
@@ -103,27 +110,28 @@ class ScrapeWorker(
         suspend fun enqueue(
             context: Context,
             platformId: String? = null,
-            policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps
+            policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps,
         ) {
             val settings = getKoin().get<ScraperSettingsRepository>().current()
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(
-                    if (settings.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED
-                )
-                .build()
-            val request = OneTimeWorkRequestBuilder<ScrapeWorker>()
-                .setInputData(
-                    workDataOf(
-                        KEY_PLATFORM_ID to platformId,
-                        KEY_MODE to policy.wireName()
-                    )
-                )
-                .setConstraints(constraints)
-                .build()
+            val constraints =
+                Constraints
+                    .Builder()
+                    .setRequiredNetworkType(
+                        if (settings.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED,
+                    ).build()
+            val request =
+                OneTimeWorkRequestBuilder<ScrapeWorker>()
+                    .setInputData(
+                        workDataOf(
+                            KEY_PLATFORM_ID to platformId,
+                            KEY_MODE to policy.wireName(),
+                        ),
+                    ).setConstraints(constraints)
+                    .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_NAME,
                 ExistingWorkPolicy.KEEP,
-                request
+                request,
             )
         }
 

@@ -46,116 +46,144 @@ import kotlin.math.min
 fun Modifier.wajihaFocusIndicator(
     highlighted: Boolean,
     shape: Shape = RoundedCornerShape(8.dp),
-    selected: Boolean = false
-): Modifier = composed {
-    if (!showGamepadChrome(highlighted)) return@composed this
-    val style = LocalFocusIndicatorStyle.current
-    val color = style.color ?: WajihaFocus.borderColor()
-    val thickness = if (selected) style.selectedThickness else style.thickness
-    val placement = style.placement
-    val borderStyle = style.borderStyle
-    val overlay = LocalFocusRingOverlay.current
+    selected: Boolean = false,
+): Modifier =
+    composed {
+        if (!showGamepadChrome(highlighted)) return@composed this
+        val style = LocalFocusIndicatorStyle.current
+        val color = style.color ?: WajihaFocus.borderColor()
+        val thickness = if (selected) style.selectedThickness else style.thickness
+        val placement = style.placement
+        val borderStyle = style.borderStyle
+        val overlay = LocalFocusRingOverlay.current
 
-    if (placement == FocusPlacement.Outside && overlay != null) {
-        return@composed outsideFocusViaOverlay(
-            overlay = overlay,
-            color = color,
-            thickness = thickness,
-            borderStyle = borderStyle,
-            shape = shape
-        )
-    }
+        if (placement == FocusPlacement.Outside && overlay != null) {
+            return@composed outsideFocusViaOverlay(
+                overlay = overlay,
+                color = color,
+                thickness = thickness,
+                borderStyle = borderStyle,
+                shape = shape,
+            )
+        }
 
-    when (borderStyle) {
-        FocusBorderStyle.Solid -> placementBorder(color, thickness, shape, placement)
-        FocusBorderStyle.Pulsing -> pulsingBorder(color, thickness, shape, placement)
-        FocusBorderStyle.Double -> doubleBorder(color, thickness, shape, placement)
-        FocusBorderStyle.Glow -> glowBorder(color, thickness, shape, placement)
-        FocusBorderStyle.CornerBrackets -> cornerBracketsBorder(color, thickness, placement)
-        FocusBorderStyle.GradientPulse -> gradientPulseBorder(color, thickness, shape, placement)
-        FocusBorderStyle.Neon -> neonBorder(color, thickness, shape, placement)
-        FocusBorderStyle.Dotted,
-        FocusBorderStyle.Dashed,
-        FocusBorderStyle.MarchingAnts -> styledStrokeBorder(
-            color = color,
-            thickness = thickness,
-            placement = placement,
-            borderStyle = borderStyle,
-            shape = shape
-        )
+        when (borderStyle) {
+            FocusBorderStyle.Solid -> {
+                placementBorder(color, thickness, shape, placement)
+            }
+
+            FocusBorderStyle.Pulsing -> {
+                pulsingBorder(color, thickness, shape, placement)
+            }
+
+            FocusBorderStyle.Double -> {
+                doubleBorder(color, thickness, shape, placement)
+            }
+
+            FocusBorderStyle.Glow -> {
+                glowBorder(color, thickness, shape, placement)
+            }
+
+            FocusBorderStyle.CornerBrackets -> {
+                cornerBracketsBorder(color, thickness, placement)
+            }
+
+            FocusBorderStyle.GradientPulse -> {
+                gradientPulseBorder(color, thickness, shape, placement)
+            }
+
+            FocusBorderStyle.Neon -> {
+                neonBorder(color, thickness, shape, placement)
+            }
+
+            FocusBorderStyle.Dotted,
+            FocusBorderStyle.Dashed,
+            FocusBorderStyle.MarchingAnts,
+            -> {
+                styledStrokeBorder(
+                    color = color,
+                    thickness = thickness,
+                    placement = placement,
+                    borderStyle = borderStyle,
+                    shape = shape,
+                )
+            }
+        }
     }
-}
 
 private fun Modifier.outsideFocusViaOverlay(
     overlay: FocusRingOverlayState,
     color: Color,
     thickness: Dp,
     borderStyle: FocusBorderStyle,
-    shape: Shape
-): Modifier = composed {
-    val token = remember { Any() }
-    var boundsInRoot by remember { mutableStateOf<Rect?>(null) }
+    shape: Shape,
+): Modifier =
+    composed {
+        val token = remember { Any() }
+        var boundsInRoot by remember { mutableStateOf<Rect?>(null) }
 
-    FocusRingOverlayRegistrationEffect(
-        state = overlay,
-        token = token,
-        active = true,
-        boundsInRoot = boundsInRoot,
-        color = color,
-        thickness = thickness,
-        borderStyle = borderStyle,
-        shape = shape
-    )
+        FocusRingOverlayRegistrationEffect(
+            state = overlay,
+            token = token,
+            active = true,
+            boundsInRoot = boundsInRoot,
+            color = color,
+            thickness = thickness,
+            borderStyle = borderStyle,
+            shape = shape,
+        )
 
-    onGloballyPositioned { coords ->
-        boundsInRoot = coords.boundsInRoot()
+        onGloballyPositioned { coords ->
+            boundsInRoot = coords.boundsInRoot()
+        }
     }
-}
 
 internal data class StrokeBounds(
     val topLeft: Offset,
     val size: Size,
-    val cornerRadius: CornerRadius
+    val cornerRadius: CornerRadius,
 )
 
 internal fun strokeBounds(
     drawSize: Size,
     strokeWidth: Float,
     outside: Boolean,
-    cornerRadiusPx: Float
-): StrokeBounds {
-    return if (!outside) {
+    cornerRadiusPx: Float,
+): StrokeBounds =
+    if (!outside) {
         val inset = strokeWidth / 2f
         StrokeBounds(
             topLeft = Offset(inset, inset),
-            size = Size(
-                (drawSize.width - strokeWidth).coerceAtLeast(0f),
-                (drawSize.height - strokeWidth).coerceAtLeast(0f)
-            ),
-            cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx)
+            size =
+                Size(
+                    (drawSize.width - strokeWidth).coerceAtLeast(0f),
+                    (drawSize.height - strokeWidth).coerceAtLeast(0f),
+                ),
+            cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
         )
     } else {
         val outset = strokeWidth / 2f
         StrokeBounds(
             topLeft = Offset(-outset, -outset),
-            size = Size(
-                drawSize.width + strokeWidth,
-                drawSize.height + strokeWidth
-            ),
-            cornerRadius = CornerRadius(
-                cornerRadiusPx + outset,
-                cornerRadiusPx + outset
-            )
+            size =
+                Size(
+                    drawSize.width + strokeWidth,
+                    drawSize.height + strokeWidth,
+                ),
+            cornerRadius =
+                CornerRadius(
+                    cornerRadiusPx + outset,
+                    cornerRadiusPx + outset,
+                ),
         )
     }
-}
 
 internal fun cornerRadiusPx(
     shape: Shape,
     size: Size,
-    density: Density
-): Float {
-    return when (shape) {
+    density: Density,
+): Float =
+    when (shape) {
         is RoundedCornerShape -> {
             val topStart = shape.topStart.toPx(size, density)
             val topEnd = shape.topEnd.toPx(size, density)
@@ -163,9 +191,11 @@ internal fun cornerRadiusPx(
             val bottomStart = shape.bottomStart.toPx(size, density)
             maxOf(topStart, topEnd, bottomEnd, bottomStart)
         }
-        else -> 0f
+
+        else -> {
+            0f
+        }
     }
-}
 
 /**
  * Paints focus chrome for [itemSize] with origin at [itemTopLeft] in the current draw scope.
@@ -181,7 +211,7 @@ internal fun DrawScope.drawFocusChrome(
     placementOutside: Boolean,
     pulseAlpha: Float = 1f,
     marchPhase: Float = 0f,
-    gradientPhase: Float = 0f
+    gradientPhase: Float = 0f,
 ) {
     val strokeWidth = thickness.toPx()
     val radius = cornerRadiusPx(shape, itemSize, this)
@@ -189,16 +219,18 @@ internal fun DrawScope.drawFocusChrome(
 
     when (borderStyle) {
         FocusBorderStyle.Solid,
-        FocusBorderStyle.Pulsing -> {
+        FocusBorderStyle.Pulsing,
+        -> {
             val bounds = strokeBounds(itemSize, strokeWidth, placementOutside, radius)
             drawRoundRect(
                 color = tinted,
                 topLeft = itemTopLeft + bounds.topLeft,
                 size = bounds.size,
                 cornerRadius = bounds.cornerRadius,
-                style = Stroke(width = strokeWidth)
+                style = Stroke(width = strokeWidth),
             )
         }
+
         FocusBorderStyle.Double -> {
             val outerPx = strokeWidth
             val innerPx = (strokeWidth * 0.55f).coerceAtLeast(1f)
@@ -209,41 +241,46 @@ internal fun DrawScope.drawFocusChrome(
                 topLeft = itemTopLeft + outerBounds.topLeft,
                 size = outerBounds.size,
                 cornerRadius = outerBounds.cornerRadius,
-                style = Stroke(width = outerPx)
+                style = Stroke(width = outerPx),
             )
-            val innerOffset = if (placementOutside) {
-                -(outerPx + gap + innerPx / 2f)
-            } else {
-                outerPx + gap + innerPx / 2f
-            }
-            val rect = if (placementOutside) {
-                Size(
-                    (itemSize.width + innerOffset * 2f).coerceAtLeast(0f),
-                    (itemSize.height + innerOffset * 2f).coerceAtLeast(0f)
-                )
-            } else {
-                Size(
-                    (itemSize.width - innerOffset * 2f).coerceAtLeast(0f),
-                    (itemSize.height - innerOffset * 2f).coerceAtLeast(0f)
-                )
-            }
-            val topLeft = if (placementOutside) {
-                Offset(-innerOffset, -innerOffset)
-            } else {
-                Offset(innerOffset, innerOffset)
-            }
+            val innerOffset =
+                if (placementOutside) {
+                    -(outerPx + gap + innerPx / 2f)
+                } else {
+                    outerPx + gap + innerPx / 2f
+                }
+            val rect =
+                if (placementOutside) {
+                    Size(
+                        (itemSize.width + innerOffset * 2f).coerceAtLeast(0f),
+                        (itemSize.height + innerOffset * 2f).coerceAtLeast(0f),
+                    )
+                } else {
+                    Size(
+                        (itemSize.width - innerOffset * 2f).coerceAtLeast(0f),
+                        (itemSize.height - innerOffset * 2f).coerceAtLeast(0f),
+                    )
+                }
+            val topLeft =
+                if (placementOutside) {
+                    Offset(-innerOffset, -innerOffset)
+                } else {
+                    Offset(innerOffset, innerOffset)
+                }
             val cornerAdj = if (placementOutside) gap else -gap
             drawRoundRect(
                 color = tinted.copy(alpha = tinted.alpha * 0.85f),
                 topLeft = itemTopLeft + topLeft,
                 size = rect,
-                cornerRadius = CornerRadius(
-                    (radius + cornerAdj).coerceAtLeast(0f),
-                    (radius + cornerAdj).coerceAtLeast(0f)
-                ),
-                style = Stroke(width = innerPx)
+                cornerRadius =
+                    CornerRadius(
+                        (radius + cornerAdj).coerceAtLeast(0f),
+                        (radius + cornerAdj).coerceAtLeast(0f),
+                    ),
+                style = Stroke(width = innerPx),
             )
         }
+
         FocusBorderStyle.Glow -> {
             val bounds = strokeBounds(itemSize, strokeWidth, placementOutside, radius)
             drawRoundRect(
@@ -251,43 +288,46 @@ internal fun DrawScope.drawFocusChrome(
                 topLeft = itemTopLeft + bounds.topLeft,
                 size = bounds.size,
                 cornerRadius = bounds.cornerRadius,
-                style = Stroke(width = strokeWidth)
+                style = Stroke(width = strokeWidth),
             )
             listOf(2.5f to 0.18f, 4f to 0.10f, 6f to 0.05f).forEach { (spread, alpha) ->
                 val spreadPx = strokeWidth * spread
-                val layer = if (placementOutside) {
-                    val outset = spreadPx / 2f
-                    Triple(
-                        Offset(-outset, -outset),
-                        Size(itemSize.width + spreadPx, itemSize.height + spreadPx),
-                        CornerRadius(radius + spreadPx / 2f, radius + spreadPx / 2f)
-                    )
-                } else {
-                    val inset = spreadPx / 2f
-                    Triple(
-                        Offset(inset, inset),
-                        Size(itemSize.width - spreadPx, itemSize.height - spreadPx),
-                        CornerRadius(radius + spreadPx / 2f, radius + spreadPx / 2f)
-                    )
-                }
+                val layer =
+                    if (placementOutside) {
+                        val outset = spreadPx / 2f
+                        Triple(
+                            Offset(-outset, -outset),
+                            Size(itemSize.width + spreadPx, itemSize.height + spreadPx),
+                            CornerRadius(radius + spreadPx / 2f, radius + spreadPx / 2f),
+                        )
+                    } else {
+                        val inset = spreadPx / 2f
+                        Triple(
+                            Offset(inset, inset),
+                            Size(itemSize.width - spreadPx, itemSize.height - spreadPx),
+                            CornerRadius(radius + spreadPx / 2f, radius + spreadPx / 2f),
+                        )
+                    }
                 drawRoundRect(
                     color = color.copy(alpha = alpha * pulseAlpha),
                     topLeft = itemTopLeft + layer.first,
                     size = layer.second,
                     cornerRadius = layer.third,
-                    style = Stroke(width = spreadPx)
+                    style = Stroke(width = spreadPx),
                 )
             }
         }
+
         FocusBorderStyle.CornerBrackets -> {
             val arm = min(itemSize.width, itemSize.height) * 0.22f
             val edgeInset = if (placementOutside) -strokeWidth / 2f else strokeWidth / 2f
-            val corners = listOf(
-                Offset(edgeInset, edgeInset),
-                Offset(itemSize.width - edgeInset, edgeInset),
-                Offset(edgeInset, itemSize.height - edgeInset),
-                Offset(itemSize.width - edgeInset, itemSize.height - edgeInset)
-            )
+            val corners =
+                listOf(
+                    Offset(edgeInset, edgeInset),
+                    Offset(itemSize.width - edgeInset, edgeInset),
+                    Offset(edgeInset, itemSize.height - edgeInset),
+                    Offset(itemSize.width - edgeInset, itemSize.height - edgeInset),
+                )
             corners.forEachIndexed { index, origin ->
                 val horizontalEnd = if (index % 2 == 0) origin.x + arm else origin.x - arm
                 val verticalEnd = if (index < 2) origin.y + arm else origin.y - arm
@@ -296,16 +336,17 @@ internal fun DrawScope.drawFocusChrome(
                     color = tinted,
                     start = start,
                     end = itemTopLeft + Offset(horizontalEnd, origin.y),
-                    strokeWidth = strokeWidth
+                    strokeWidth = strokeWidth,
                 )
                 drawLine(
                     color = tinted,
                     start = start,
                     end = itemTopLeft + Offset(origin.x, verticalEnd),
-                    strokeWidth = strokeWidth
+                    strokeWidth = strokeWidth,
                 )
             }
         }
+
         FocusBorderStyle.GradientPulse -> {
             val coreAlpha = 0.55f + gradientPhase * 0.45f
             val haloAlpha = 0.08f + gradientPhase * 0.14f
@@ -315,95 +356,112 @@ internal fun DrawScope.drawFocusChrome(
                 topLeft = itemTopLeft + bounds.topLeft,
                 size = bounds.size,
                 cornerRadius = bounds.cornerRadius,
-                style = Stroke(width = strokeWidth)
+                style = Stroke(width = strokeWidth),
             )
             val spreadPx = strokeWidth * 3.5f
-            val layer = if (placementOutside) {
-                val outset = spreadPx / 2f
-                Triple(
-                    Offset(-outset, -outset),
-                    Size(itemSize.width + spreadPx, itemSize.height + spreadPx),
-                    CornerRadius(radius + spreadPx / 3f, radius + spreadPx / 3f)
-                )
-            } else {
-                val inset = spreadPx / 2f
-                Triple(
-                    Offset(inset, inset),
-                    Size(itemSize.width - spreadPx, itemSize.height - spreadPx),
-                    CornerRadius(radius + spreadPx / 3f, radius + spreadPx / 3f)
-                )
-            }
+            val layer =
+                if (placementOutside) {
+                    val outset = spreadPx / 2f
+                    Triple(
+                        Offset(-outset, -outset),
+                        Size(itemSize.width + spreadPx, itemSize.height + spreadPx),
+                        CornerRadius(radius + spreadPx / 3f, radius + spreadPx / 3f),
+                    )
+                } else {
+                    val inset = spreadPx / 2f
+                    Triple(
+                        Offset(inset, inset),
+                        Size(itemSize.width - spreadPx, itemSize.height - spreadPx),
+                        CornerRadius(radius + spreadPx / 3f, radius + spreadPx / 3f),
+                    )
+                }
             drawRoundRect(
                 color = color.copy(alpha = haloAlpha * pulseAlpha),
                 topLeft = itemTopLeft + layer.first,
                 size = layer.second,
                 cornerRadius = layer.third,
-                style = Stroke(width = spreadPx)
+                style = Stroke(width = spreadPx),
             )
         }
+
         FocusBorderStyle.Neon -> {
             val bounds = strokeBounds(itemSize, strokeWidth, placementOutside, radius)
             val glowSpread = strokeWidth * 2.8f
             val glowOffset = if (placementOutside) glowSpread / 2f else -glowSpread / 2f
             drawRoundRect(
                 color = color.copy(alpha = 0.35f * pulseAlpha),
-                topLeft = itemTopLeft + Offset(
-                    bounds.topLeft.x + glowOffset,
-                    bounds.topLeft.y + glowOffset
-                ),
-                size = Size(
-                    bounds.size.width + glowSpread,
-                    bounds.size.height + glowSpread
-                ),
-                cornerRadius = CornerRadius(
-                    bounds.cornerRadius.x + glowSpread / 2f,
-                    bounds.cornerRadius.y + glowSpread / 2f
-                ),
-                style = Stroke(width = strokeWidth + glowSpread)
+                topLeft =
+                    itemTopLeft +
+                        Offset(
+                            bounds.topLeft.x + glowOffset,
+                            bounds.topLeft.y + glowOffset,
+                        ),
+                size =
+                    Size(
+                        bounds.size.width + glowSpread,
+                        bounds.size.height + glowSpread,
+                    ),
+                cornerRadius =
+                    CornerRadius(
+                        bounds.cornerRadius.x + glowSpread / 2f,
+                        bounds.cornerRadius.y + glowSpread / 2f,
+                    ),
+                style = Stroke(width = strokeWidth + glowSpread),
             )
             drawRoundRect(
                 color = Color.White.copy(alpha = 0.55f * pulseAlpha),
                 topLeft = itemTopLeft + bounds.topLeft,
                 size = bounds.size,
                 cornerRadius = bounds.cornerRadius,
-                style = Stroke(width = strokeWidth * 0.35f)
+                style = Stroke(width = strokeWidth * 0.35f),
             )
             drawRoundRect(
                 color = tinted,
                 topLeft = itemTopLeft + bounds.topLeft,
                 size = bounds.size,
                 cornerRadius = bounds.cornerRadius,
-                style = Stroke(width = strokeWidth)
+                style = Stroke(width = strokeWidth),
             )
         }
+
         FocusBorderStyle.Dotted,
         FocusBorderStyle.Dashed,
-        FocusBorderStyle.MarchingAnts -> {
-            val dash = when (borderStyle) {
-                FocusBorderStyle.Dotted -> floatArrayOf(strokeWidth, strokeWidth * 1.5f)
-                FocusBorderStyle.Dashed -> floatArrayOf(strokeWidth * 3f, strokeWidth * 2f)
-                FocusBorderStyle.MarchingAnts -> floatArrayOf(strokeWidth * 2f, strokeWidth * 2f)
-                FocusBorderStyle.Solid,
-                FocusBorderStyle.Pulsing,
-                FocusBorderStyle.Double,
-                FocusBorderStyle.Glow,
-                FocusBorderStyle.CornerBrackets,
-                FocusBorderStyle.GradientPulse,
-                FocusBorderStyle.Neon -> floatArrayOf()
-            }
-            val pathEffect = when (borderStyle) {
-                FocusBorderStyle.MarchingAnts ->
-                    PathEffect.dashPathEffect(dash, marchPhase)
-                else ->
-                    PathEffect.dashPathEffect(dash, 0f)
-            }
+        FocusBorderStyle.MarchingAnts,
+        -> {
+            val dash =
+                when (borderStyle) {
+                    FocusBorderStyle.Dotted -> floatArrayOf(strokeWidth, strokeWidth * 1.5f)
+
+                    FocusBorderStyle.Dashed -> floatArrayOf(strokeWidth * 3f, strokeWidth * 2f)
+
+                    FocusBorderStyle.MarchingAnts -> floatArrayOf(strokeWidth * 2f, strokeWidth * 2f)
+
+                    FocusBorderStyle.Solid,
+                    FocusBorderStyle.Pulsing,
+                    FocusBorderStyle.Double,
+                    FocusBorderStyle.Glow,
+                    FocusBorderStyle.CornerBrackets,
+                    FocusBorderStyle.GradientPulse,
+                    FocusBorderStyle.Neon,
+                    -> floatArrayOf()
+                }
+            val pathEffect =
+                when (borderStyle) {
+                    FocusBorderStyle.MarchingAnts -> {
+                        PathEffect.dashPathEffect(dash, marchPhase)
+                    }
+
+                    else -> {
+                        PathEffect.dashPathEffect(dash, 0f)
+                    }
+                }
             val bounds = strokeBounds(itemSize, strokeWidth, placementOutside, radius)
             drawRoundRect(
                 color = tinted,
                 topLeft = itemTopLeft + bounds.topLeft,
                 size = bounds.size,
                 cornerRadius = bounds.cornerRadius,
-                style = Stroke(width = strokeWidth, pathEffect = pathEffect)
+                style = Stroke(width = strokeWidth, pathEffect = pathEffect),
             )
         }
     }
@@ -413,179 +471,200 @@ private fun Modifier.placementBorder(
     color: Color,
     thickness: Dp,
     shape: Shape,
-    placement: FocusPlacement
-): Modifier = when (placement) {
-    FocusPlacement.Inside -> border(width = thickness, color = color, shape = shape)
-    FocusPlacement.Outside -> drawBehind {
-        drawFocusChrome(
-            itemTopLeft = Offset.Zero,
-            itemSize = size,
-            color = color,
-            thickness = thickness,
-            borderStyle = FocusBorderStyle.Solid,
-            shape = shape,
-            placementOutside = true
-        )
+    placement: FocusPlacement,
+): Modifier =
+    when (placement) {
+        FocusPlacement.Inside -> {
+            border(width = thickness, color = color, shape = shape)
+        }
+
+        FocusPlacement.Outside -> {
+            drawBehind {
+                drawFocusChrome(
+                    itemTopLeft = Offset.Zero,
+                    itemSize = size,
+                    color = color,
+                    thickness = thickness,
+                    borderStyle = FocusBorderStyle.Solid,
+                    shape = shape,
+                    placementOutside = true,
+                )
+            }
+        }
     }
-}
 
 private fun Modifier.pulsingBorder(
     color: Color,
     thickness: Dp,
     shape: Shape,
-    placement: FocusPlacement
-): Modifier = composed {
-    val transition = rememberInfiniteTransition(label = "focus_pulse")
-    val alpha by transition.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "focus_pulse_alpha"
-    )
-    when (placement) {
-        FocusPlacement.Inside -> border(width = thickness, color = color.copy(alpha = alpha), shape = shape)
-        FocusPlacement.Outside -> drawBehind {
-            drawFocusChrome(
-                itemTopLeft = Offset.Zero,
-                itemSize = size,
-                color = color,
-                thickness = thickness,
-                borderStyle = FocusBorderStyle.Solid,
-                shape = shape,
-                placementOutside = true,
-                pulseAlpha = alpha
-            )
+    placement: FocusPlacement,
+): Modifier =
+    composed {
+        val transition = rememberInfiniteTransition(label = "focus_pulse")
+        val alpha by transition.animateFloat(
+            initialValue = 0.45f,
+            targetValue = 1f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(900, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+            label = "focus_pulse_alpha",
+        )
+        when (placement) {
+            FocusPlacement.Inside -> {
+                border(width = thickness, color = color.copy(alpha = alpha), shape = shape)
+            }
+
+            FocusPlacement.Outside -> {
+                drawBehind {
+                    drawFocusChrome(
+                        itemTopLeft = Offset.Zero,
+                        itemSize = size,
+                        color = color,
+                        thickness = thickness,
+                        borderStyle = FocusBorderStyle.Solid,
+                        shape = shape,
+                        placementOutside = true,
+                        pulseAlpha = alpha,
+                    )
+                }
+            }
         }
     }
-}
 
 private fun Modifier.doubleBorder(
     color: Color,
     thickness: Dp,
     shape: Shape,
-    placement: FocusPlacement
-): Modifier = drawBehind {
-    drawFocusChrome(
-        itemTopLeft = Offset.Zero,
-        itemSize = size,
-        color = color,
-        thickness = thickness,
-        borderStyle = FocusBorderStyle.Double,
-        shape = shape,
-        placementOutside = placement == FocusPlacement.Outside
-    )
-}
-
-private fun Modifier.glowBorder(
-    color: Color,
-    thickness: Dp,
-    shape: Shape,
-    placement: FocusPlacement
-): Modifier = drawBehind {
-    drawFocusChrome(
-        itemTopLeft = Offset.Zero,
-        itemSize = size,
-        color = color,
-        thickness = thickness,
-        borderStyle = FocusBorderStyle.Glow,
-        shape = shape,
-        placementOutside = placement == FocusPlacement.Outside
-    )
-}
-
-private fun Modifier.cornerBracketsBorder(
-    color: Color,
-    thickness: Dp,
-    placement: FocusPlacement
-): Modifier = drawBehind {
-    drawFocusChrome(
-        itemTopLeft = Offset.Zero,
-        itemSize = size,
-        color = color,
-        thickness = thickness,
-        borderStyle = FocusBorderStyle.CornerBrackets,
-        shape = RoundedCornerShape(0.dp),
-        placementOutside = placement == FocusPlacement.Outside
-    )
-}
-
-private fun Modifier.gradientPulseBorder(
-    color: Color,
-    thickness: Dp,
-    shape: Shape,
-    placement: FocusPlacement
-): Modifier = composed {
-    val transition = rememberInfiniteTransition(label = "focus_gradient_pulse")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "focus_gradient_phase"
-    )
+    placement: FocusPlacement,
+): Modifier =
     drawBehind {
         drawFocusChrome(
             itemTopLeft = Offset.Zero,
             itemSize = size,
             color = color,
             thickness = thickness,
-            borderStyle = FocusBorderStyle.GradientPulse,
+            borderStyle = FocusBorderStyle.Double,
             shape = shape,
             placementOutside = placement == FocusPlacement.Outside,
-            gradientPhase = phase
         )
     }
-}
+
+private fun Modifier.glowBorder(
+    color: Color,
+    thickness: Dp,
+    shape: Shape,
+    placement: FocusPlacement,
+): Modifier =
+    drawBehind {
+        drawFocusChrome(
+            itemTopLeft = Offset.Zero,
+            itemSize = size,
+            color = color,
+            thickness = thickness,
+            borderStyle = FocusBorderStyle.Glow,
+            shape = shape,
+            placementOutside = placement == FocusPlacement.Outside,
+        )
+    }
+
+private fun Modifier.cornerBracketsBorder(
+    color: Color,
+    thickness: Dp,
+    placement: FocusPlacement,
+): Modifier =
+    drawBehind {
+        drawFocusChrome(
+            itemTopLeft = Offset.Zero,
+            itemSize = size,
+            color = color,
+            thickness = thickness,
+            borderStyle = FocusBorderStyle.CornerBrackets,
+            shape = RoundedCornerShape(0.dp),
+            placementOutside = placement == FocusPlacement.Outside,
+        )
+    }
+
+private fun Modifier.gradientPulseBorder(
+    color: Color,
+    thickness: Dp,
+    shape: Shape,
+    placement: FocusPlacement,
+): Modifier =
+    composed {
+        val transition = rememberInfiniteTransition(label = "focus_gradient_pulse")
+        val phase by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(1400, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+            label = "focus_gradient_phase",
+        )
+        drawBehind {
+            drawFocusChrome(
+                itemTopLeft = Offset.Zero,
+                itemSize = size,
+                color = color,
+                thickness = thickness,
+                borderStyle = FocusBorderStyle.GradientPulse,
+                shape = shape,
+                placementOutside = placement == FocusPlacement.Outside,
+                gradientPhase = phase,
+            )
+        }
+    }
 
 private fun Modifier.neonBorder(
     color: Color,
     thickness: Dp,
     shape: Shape,
-    placement: FocusPlacement
-): Modifier = drawBehind {
-    drawFocusChrome(
-        itemTopLeft = Offset.Zero,
-        itemSize = size,
-        color = color,
-        thickness = thickness,
-        borderStyle = FocusBorderStyle.Neon,
-        shape = shape,
-        placementOutside = placement == FocusPlacement.Outside
-    )
-}
+    placement: FocusPlacement,
+): Modifier =
+    drawBehind {
+        drawFocusChrome(
+            itemTopLeft = Offset.Zero,
+            itemSize = size,
+            color = color,
+            thickness = thickness,
+            borderStyle = FocusBorderStyle.Neon,
+            shape = shape,
+            placementOutside = placement == FocusPlacement.Outside,
+        )
+    }
 
 private fun Modifier.styledStrokeBorder(
     color: Color,
     thickness: Dp,
     placement: FocusPlacement,
     borderStyle: FocusBorderStyle,
-    shape: Shape
-): Modifier = composed {
-    val transition = rememberInfiniteTransition(label = "focus_march")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 24f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "focus_march_phase"
-    )
-    drawBehind {
-        drawFocusChrome(
-            itemTopLeft = Offset.Zero,
-            itemSize = size,
-            color = color,
-            thickness = thickness,
-            borderStyle = borderStyle,
-            shape = shape,
-            placementOutside = placement == FocusPlacement.Outside,
-            marchPhase = phase
+    shape: Shape,
+): Modifier =
+    composed {
+        val transition = rememberInfiniteTransition(label = "focus_march")
+        val phase by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 24f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(600, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+            label = "focus_march_phase",
         )
+        drawBehind {
+            drawFocusChrome(
+                itemTopLeft = Offset.Zero,
+                itemSize = size,
+                color = color,
+                thickness = thickness,
+                borderStyle = borderStyle,
+                shape = shape,
+                placementOutside = placement == FocusPlacement.Outside,
+                marchPhase = phase,
+            )
+        }
     }
-}

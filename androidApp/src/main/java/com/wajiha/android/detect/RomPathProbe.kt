@@ -6,10 +6,14 @@ package com.wajiha.android.detect
 interface RomPathProbe {
     val probeId: String
     val supportedPackages: Set<String>
+
     /** Lower values are tried first when multiple probes match. */
     val priority: Int
 
-    suspend fun probe(packageName: String, sessionStartedAt: Long): RomPathCandidate?
+    suspend fun probe(
+        packageName: String,
+        sessionStartedAt: Long,
+    ): RomPathCandidate?
 }
 
 data class RomPathCandidate(
@@ -19,7 +23,7 @@ data class RomPathCandidate(
     val fileNameHint: String? = null,
     val probeId: String,
     val platformHint: String? = null,
-    val timestamp: Long? = null
+    val timestamp: Long? = null,
 )
 
 data class ResolvedGame(
@@ -29,7 +33,7 @@ data class ResolvedGame(
     val boxartPath: String? = null,
     val heroPath: String? = null,
     val confidence: MatchConfidence,
-    val source: String
+    val source: String,
 )
 
 enum class MatchConfidence {
@@ -37,5 +41,5 @@ enum class MatchConfidence {
     NORMALIZED_PATH,
     FILENAME,
     SERIAL,
-    FILENAME_FALLBACK
+    FILENAME_FALLBACK,
 }

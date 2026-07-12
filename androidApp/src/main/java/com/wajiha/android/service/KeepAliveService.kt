@@ -19,16 +19,21 @@ import com.wajiha.android.MainActivity
  * being killed under memory pressure.
  */
 class KeepAliveService : Service() {
-
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int,
+    ): Int {
         startForeground(
             NOTIFICATION_ID,
             buildNotification(),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            } else 0
+            } else {
+                0
+            },
         )
         return START_STICKY
     }
@@ -39,16 +44,18 @@ class KeepAliveService : Service() {
             NotificationChannel(
                 CHANNEL_ID,
                 "Game session",
-                NotificationManager.IMPORTANCE_MIN
-            ).apply { setShowBadge(false) }
+                NotificationManager.IMPORTANCE_MIN,
+            ).apply { setShowBadge(false) },
         )
-        val contentIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
-        )
-        return Notification.Builder(this, CHANNEL_ID)
+        val contentIntent =
+            PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE,
+            )
+        return Notification
+            .Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle("Wajiha is tracking your game session")
             .setContentIntent(contentIntent)

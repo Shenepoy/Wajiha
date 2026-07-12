@@ -19,56 +19,63 @@ import com.wajiha.log.WajihaTags
 fun handleGamepadKey(
     activity: ComponentActivity,
     event: KeyEvent,
-    dispatch: (KeyEvent) -> Boolean
+    dispatch: (KeyEvent) -> Boolean,
 ): Boolean {
     if (tryDispatchTopLayerPreviewKey(event)) return true
     return when (event.keyCode) {
-    KeyEvent.KEYCODE_BUTTON_A -> {
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            WajihaLog.d(
-                WajihaTags.GAMEPAD,
-                "map: BUTTON_A → DPAD_CENTER (confirm)"
+        KeyEvent.KEYCODE_BUTTON_A -> {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                WajihaLog.d(
+                    WajihaTags.GAMEPAD,
+                    "map: BUTTON_A → DPAD_CENTER (confirm)",
+                )
+            }
+            dispatch(
+                KeyEvent(
+                    event.downTime,
+                    event.eventTime,
+                    event.action,
+                    KeyEvent.KEYCODE_DPAD_CENTER,
+                    event.repeatCount,
+                ),
             )
+            true
         }
-        dispatch(
-            KeyEvent(
-                event.downTime,
-                event.eventTime,
-                event.action,
-                KeyEvent.KEYCODE_DPAD_CENTER,
-                event.repeatCount
-            )
-        )
-        true
-    }
-    KeyEvent.KEYCODE_BUTTON_B -> {
-        if (event.action == KeyEvent.ACTION_UP) {
-            WajihaLog.d(WajihaTags.GAMEPAD, "map: BUTTON_B → back")
-            activity.onBackPressedDispatcher.onBackPressed()
+
+        KeyEvent.KEYCODE_BUTTON_B -> {
+            if (event.action == KeyEvent.ACTION_UP) {
+                WajihaLog.d(WajihaTags.GAMEPAD, "map: BUTTON_B → back")
+                activity.onBackPressedDispatcher.onBackPressed()
+            }
+            true
         }
-        true
-    }
-    KeyEvent.KEYCODE_BUTTON_X -> {
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            WajihaLog.d(WajihaTags.GAMEPAD, "map: BUTTON_X → pass-through (settings)")
+
+        KeyEvent.KEYCODE_BUTTON_X -> {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                WajihaLog.d(WajihaTags.GAMEPAD, "map: BUTTON_X → pass-through (settings)")
+            }
+            dispatch(event)
+            true
         }
-        dispatch(event)
-        true
-    }
-    KeyEvent.KEYCODE_BUTTON_Y,
-    KeyEvent.KEYCODE_BUTTON_L1,
-    KeyEvent.KEYCODE_BUTTON_R1,
-    KeyEvent.KEYCODE_PAGE_UP,
-    KeyEvent.KEYCODE_PAGE_DOWN -> {
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            WajihaLog.d(
-                WajihaTags.GAMEPAD,
-                "map: shoulder/Y keyCode=${event.keyCode} → pass-through"
-            )
+
+        KeyEvent.KEYCODE_BUTTON_Y,
+        KeyEvent.KEYCODE_BUTTON_L1,
+        KeyEvent.KEYCODE_BUTTON_R1,
+        KeyEvent.KEYCODE_PAGE_UP,
+        KeyEvent.KEYCODE_PAGE_DOWN,
+        -> {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                WajihaLog.d(
+                    WajihaTags.GAMEPAD,
+                    "map: shoulder/Y keyCode=${event.keyCode} → pass-through",
+                )
+            }
+            dispatch(event)
+            true
         }
-        dispatch(event)
-        true
-    }
-    else -> false
+
+        else -> {
+            false
+        }
     }
 }

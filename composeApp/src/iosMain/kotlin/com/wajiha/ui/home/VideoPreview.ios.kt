@@ -7,7 +7,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 
 @Composable
-actual fun VideoPreview(path: String, modifier: Modifier) {
+actual fun VideoPreview(
+    path: String,
+    modifier: Modifier,
+) {
     // Video previews not supported on this platform yet
     Box(modifier = modifier.background(Color.Black))
 }

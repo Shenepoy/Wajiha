@@ -19,27 +19,32 @@ import org.koin.dsl.module
  * Shared Koin bootstrap. Platform hosts call this with their own modules
  * (Android context bindings, actual implementations, etc.).
  */
-fun initKoin(platformModules: List<Module> = emptyList(), config: KoinApplication.() -> Unit = {}) {
+fun initKoin(
+    platformModules: List<Module> = emptyList(),
+    config: KoinApplication.() -> Unit = {},
+) {
     startKoin {
         config()
         modules(sharedModules() + platformModules)
     }
 }
 
-val stateModule: Module = module {
-    single { DualScreenStore() }
-    single { SystemNotificationStore() }
-}
+val stateModule: Module =
+    module {
+        single { DualScreenStore() }
+        single { SystemNotificationStore() }
+    }
 
-val uiModule: Module = module {
-    single { UiFeedback(get()) }
-    single { HomeViewModel(get(), get(), get(), get()) }
-    single { SettingsViewModel(get(), get(), get(), get(), get()) }
-    single { PlatformSettingsViewModel(get(), get(), get()) }
-    single { ScraperViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
-    single { ScrapeReviewViewModel(get(), get(), get()) }
-    single { GameDetailViewModel(get(), get(), get(), get(), get(), get()) }
-    single { RaViewModel(get(), get()) }
-}
+val uiModule: Module =
+    module {
+        single { UiFeedback(get()) }
+        single { HomeViewModel(get(), get(), get(), get()) }
+        single { SettingsViewModel(get(), get(), get(), get(), get()) }
+        single { PlatformSettingsViewModel(get(), get(), get()) }
+        single { ScraperViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
+        single { ScrapeReviewViewModel(get(), get(), get()) }
+        single { GameDetailViewModel(get(), get(), get(), get(), get(), get()) }
+        single { RaViewModel(get(), get()) }
+    }
 
 fun sharedModules(): List<Module> = listOf(dataModule, scraperModule, stateModule, uiModule)

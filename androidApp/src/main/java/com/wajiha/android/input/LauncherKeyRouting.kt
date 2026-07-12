@@ -10,7 +10,7 @@ fun ComponentActivity.dispatchLauncherKeyEvent(
     event: KeyEvent,
     gamepadGate: GamepadGate,
     gamepadKeyRouter: GamepadKeyRouter,
-    fallback: (KeyEvent) -> Boolean
+    fallback: (KeyEvent) -> Boolean,
 ): Boolean {
     if (gamepadGate.shouldBlockGamepad()) return false
     return gamepadKeyRouter.dispatch(owner, event) { remappedOrRaw ->

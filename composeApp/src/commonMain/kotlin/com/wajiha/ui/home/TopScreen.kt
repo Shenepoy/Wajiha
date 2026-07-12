@@ -64,7 +64,7 @@ fun TopScreen(
     platformName: String?,
     heroContext: HeroContext = HeroContext.GameLibrary,
     contentFocusRequester: FocusRequester? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     val isDark = scheme.onBackground.luminance() > 0.5f
@@ -72,13 +72,14 @@ fun TopScreen(
     val settingsRepository = koinInject<SettingsRepository>()
     val settings by settingsRepository.settings.collectAsState(initial = AppSettings())
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(frameTop, scheme.background)
-                )
-            )
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(frameTop, scheme.background),
+                    ),
+                ),
     ) {
         AnimatedContent(
             targetState = heroContext,
@@ -86,26 +87,43 @@ fun TopScreen(
             transitionSpec = {
                 fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
             },
-            label = "hero-context"
+            label = "hero-context",
         ) { context ->
             when (context) {
-                is HeroContext.GameLibrary -> GameLibraryHero(
-                    focused,
-                    platformName,
-                    settings,
-                    contentFocusRequester
-                )
-                is HeroContext.Settings -> SettingsHero(context, contentFocusRequester)
-                is HeroContext.Apps -> AppsHero(context, contentFocusRequester)
-                is HeroContext.System -> SystemHero(context, contentFocusRequester)
-                is HeroContext.GameDetail -> GameDetailHero(
-                    context.gameId,
-                    settings,
-                    contentFocusRequester
-                )
-                is HeroContext.ScrapeReview -> ScrapeReviewSlotHero(
-                    contentFocusRequester = contentFocusRequester
-                )
+                is HeroContext.GameLibrary -> {
+                    GameLibraryHero(
+                        focused,
+                        platformName,
+                        settings,
+                        contentFocusRequester,
+                    )
+                }
+
+                is HeroContext.Settings -> {
+                    SettingsHero(context, contentFocusRequester)
+                }
+
+                is HeroContext.Apps -> {
+                    AppsHero(context, contentFocusRequester)
+                }
+
+                is HeroContext.System -> {
+                    SystemHero(context, contentFocusRequester)
+                }
+
+                is HeroContext.GameDetail -> {
+                    GameDetailHero(
+                        context.gameId,
+                        settings,
+                        contentFocusRequester,
+                    )
+                }
+
+                is HeroContext.ScrapeReview -> {
+                    ScrapeReviewSlotHero(
+                        contentFocusRequester = contentFocusRequester,
+                    )
+                }
             }
         }
         TopStatusBar()
@@ -117,27 +135,28 @@ private fun GameLibraryHero(
     focused: GameTile?,
     platformName: String?,
     settings: AppSettings,
-    contentFocusRequester: FocusRequester? = null
+    contentFocusRequester: FocusRequester? = null,
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .then(
-                if (contentFocusRequester != null) {
-                    Modifier
-                        .focusRequester(contentFocusRequester)
-                        .wajihaGamepadFocus()
-                } else {
-                    Modifier
-                }
-            )
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .then(
+                    if (contentFocusRequester != null) {
+                        Modifier
+                            .focusRequester(contentFocusRequester)
+                            .wajihaGamepadFocus()
+                    } else {
+                        Modifier
+                    },
+                ),
     ) {
         AnimatedContent(
             targetState = focused != null,
             transitionSpec = {
                 fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
             },
-            label = "hero-mode"
+            label = "hero-mode",
         ) { hasFocus ->
             if (!hasFocus) {
                 IdleHero()
@@ -157,13 +176,13 @@ private fun IdleHero() {
                 text = "Wajiha",
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Bold,
-                color = scheme.primary
+                color = scheme.primary,
             )
             Text(
                 text = "Pick a game on the touch screen",
                 style = MaterialTheme.typography.bodyMedium,
                 color = scheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp)
+                modifier = Modifier.padding(top = 8.dp),
             )
         }
     }
@@ -175,54 +194,58 @@ private fun ContextHeroFrame(
     subtitle: String? = null,
     hint: String? = null,
     accent: Color? = null,
-    contentFocusRequester: FocusRequester? = null
+    contentFocusRequester: FocusRequester? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val accentColor = accent ?: scheme.primary
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .then(
-                if (contentFocusRequester != null) {
-                    Modifier
-                        .focusRequester(contentFocusRequester)
-                        .wajihaGamepadFocus()
-                } else {
-                    Modifier
-                }
-            )
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .then(
+                    if (contentFocusRequester != null) {
+                        Modifier
+                            .focusRequester(contentFocusRequester)
+                            .wajihaGamepadFocus()
+                    } else {
+                        Modifier
+                    },
+                ),
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            accentColor.copy(alpha = 0.22f),
-                            scheme.background.copy(alpha = 0.95f)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(
+                            colors =
+                                listOf(
+                                    accentColor.copy(alpha = 0.22f),
+                                    scheme.background.copy(alpha = 0.95f),
+                                ),
+                            radius = 900f,
                         ),
-                        radius = 900f
-                    )
-                )
+                    ),
         )
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 32.dp, vertical = 28.dp),
-            verticalArrangement = Arrangement.Center
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 32.dp, vertical = 28.dp),
+            verticalArrangement = Arrangement.Center,
         ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
-                color = accentColor
+                color = accentColor,
             )
             subtitle?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.headlineSmall,
                     color = scheme.onBackground,
-                    modifier = Modifier.padding(top = 10.dp)
+                    modifier = Modifier.padding(top = 10.dp),
                 )
             }
             hint?.let {
@@ -230,7 +253,7 @@ private fun ContextHeroFrame(
                     text = it,
                     style = MaterialTheme.typography.bodyLarge,
                     color = scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp)
+                    modifier = Modifier.padding(top = 16.dp),
                 )
             }
         }
@@ -240,13 +263,13 @@ private fun ContextHeroFrame(
 @Composable
 private fun SettingsHero(
     context: HeroContext.Settings,
-    contentFocusRequester: FocusRequester? = null
+    contentFocusRequester: FocusRequester? = null,
 ) {
     ContextHeroFrame(
         title = "Wajiha Settings",
         subtitle = context.sectionLabel,
         hint = "Settings open on the bottom screen  ·  L1 / R1 switch sections",
-        contentFocusRequester = contentFocusRequester
+        contentFocusRequester = contentFocusRequester,
     )
 }
 
@@ -254,7 +277,7 @@ private fun SettingsHero(
 private fun GameDetailHero(
     gameId: Long,
     settings: AppSettings,
-    contentFocusRequester: FocusRequester? = null
+    contentFocusRequester: FocusRequester? = null,
 ) {
     val viewModel = koinInject<GameDetailViewModel>()
     LaunchedEffect(gameId) { viewModel.open(gameId) }
@@ -266,7 +289,32 @@ private fun GameDetailHero(
 
     if (game == null) {
         Box(
-            modifier = Modifier
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (contentFocusRequester != null) {
+                            Modifier
+                                .focusRequester(contentFocusRequester)
+                                .wajihaGamepadFocus()
+                        } else {
+                            Modifier
+                        },
+                    ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "Loading…",
+                style = MaterialTheme.typography.bodyLarge,
+                color = scheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+
+    Box(
+        modifier =
+            Modifier
                 .fillMaxSize()
                 .then(
                     if (contentFocusRequester != null) {
@@ -275,31 +323,8 @@ private fun GameDetailHero(
                             .wajihaGamepadFocus()
                     } else {
                         Modifier
-                    }
+                    },
                 ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "Loading…",
-                style = MaterialTheme.typography.bodyLarge,
-                color = scheme.onSurfaceVariant
-            )
-        }
-        return
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .then(
-                if (contentFocusRequester != null) {
-                    Modifier
-                        .focusRequester(contentFocusRequester)
-                        .wajihaGamepadFocus()
-                } else {
-                    Modifier
-                }
-            )
     ) {
         if (settings.topHeroBackdrop) {
             heroPath?.let { backdrop ->
@@ -307,76 +332,81 @@ private fun GameDetailHero(
                     model = backdrop,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 )
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    scheme.background.copy(alpha = 0.55f),
-                                    scheme.background.copy(alpha = 0.92f)
-                                )
-                            )
-                        )
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors =
+                                        listOf(
+                                            scheme.background.copy(alpha = 0.55f),
+                                            scheme.background.copy(alpha = 0.92f),
+                                        ),
+                                ),
+                            ),
                 )
             }
         }
         Row(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.Top,
         ) {
             if (settings.topHeroCover) {
                 val coverShape = RoundedCornerShape(12.dp)
                 Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .aspectRatio(3f / 4f)
-                        .clip(coverShape)
-                        .then(
-                            if (settings.topHeroCoverBorder) {
-                                Modifier.border(
-                                    width = 1.dp,
-                                    color = scheme.outline.copy(alpha = 0.35f),
-                                    shape = coverShape
-                                )
-                            } else {
-                                Modifier
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .fillMaxHeight()
+                            .aspectRatio(3f / 4f)
+                            .clip(coverShape)
+                            .then(
+                                if (settings.topHeroCoverBorder) {
+                                    Modifier.border(
+                                        width = 1.dp,
+                                        color = scheme.outline.copy(alpha = 0.35f),
+                                        shape = coverShape,
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    contentAlignment = Alignment.Center,
                 ) {
                     if (boxartPath != null) {
                         AsyncImage(
                             model = boxartPath,
                             contentDescription = game.displayName,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
                         )
                     } else {
                         Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(scheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .background(scheme.surfaceVariant),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 text = game.displayName.take(2).uppercase(),
                                 style = MaterialTheme.typography.displayLarge,
-                                color = scheme.primary
+                                color = scheme.primary,
                             )
                         }
                     }
                 }
             }
             Column(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.Top
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.Top,
             ) {
                 if (settings.topHeroTitle) {
                     Text(
@@ -384,7 +414,7 @@ private fun GameDetailHero(
                         style = MaterialTheme.typography.headlineLarge,
                         color = scheme.onBackground,
                         maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 if (settings.topHeroPlatform) {
@@ -393,9 +423,10 @@ private fun GameDetailHero(
                             text = platform,
                             style = MaterialTheme.typography.labelLarge,
                             color = scheme.primary,
-                            modifier = Modifier.padding(
-                                top = if (settings.topHeroTitle) 6.dp else 0.dp
-                            )
+                            modifier =
+                                Modifier.padding(
+                                    top = if (settings.topHeroTitle) 6.dp else 0.dp,
+                                ),
                         )
                     }
                 }
@@ -404,7 +435,7 @@ private fun GameDetailHero(
                         text = "★ Favorite",
                         style = MaterialTheme.typography.labelMedium,
                         color = scheme.tertiary,
-                        modifier = Modifier.padding(top = 8.dp)
+                        modifier = Modifier.padding(top = 8.dp),
                     )
                 }
                 if (settings.topHeroSectionHint) {
@@ -412,7 +443,7 @@ private fun GameDetailHero(
                         text = "Launch, emulator, and scraper on the bottom screen  ·  L1 / R1 switch tabs",
                         style = MaterialTheme.typography.labelMedium,
                         color = scheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp)
+                        modifier = Modifier.padding(top = 8.dp),
                     )
                 }
                 GameDetailMetadataPanel(
@@ -420,12 +451,13 @@ private fun GameDetailHero(
                     platformName = state.platform?.name,
                     totalPlaytimeSec = state.totalPlaytimeSec,
                     style = MetadataPanelStyle.Full,
-                    visibility = MetadataPanelVisibility(
-                        metadata = settings.topHeroMetadata,
-                        description = settings.topHeroDescription,
-                        playStats = settings.topHeroPlayStats
-                    ),
-                    modifier = Modifier.padding(top = 12.dp)
+                    visibility =
+                        MetadataPanelVisibility(
+                            metadata = settings.topHeroMetadata,
+                            description = settings.topHeroDescription,
+                            playStats = settings.topHeroPlayStats,
+                        ),
+                    modifier = Modifier.padding(top = 12.dp),
                 )
             }
         }
@@ -435,53 +467,57 @@ private fun GameDetailHero(
 @Composable
 private fun AppsHero(
     context: HeroContext.Apps,
-    contentFocusRequester: FocusRequester? = null
+    contentFocusRequester: FocusRequester? = null,
 ) {
-    val countLine = when (context.appCount) {
-        0 -> "No apps found"
-        1 -> "1 app installed"
-        else -> "${context.appCount} apps installed"
-    }
+    val countLine =
+        when (context.appCount) {
+            0 -> "No apps found"
+            1 -> "1 app installed"
+            else -> "${context.appCount} apps installed"
+        }
     ContextHeroFrame(
         title = "Apps",
         subtitle = context.focusedLabel ?: countLine,
-        hint = context.focusedLabel?.let { countLine }
-            ?: "A to launch  ·  B back to games",
-        contentFocusRequester = contentFocusRequester
+        hint =
+            context.focusedLabel?.let { countLine }
+                ?: "A to launch  ·  B back to games",
+        contentFocusRequester = contentFocusRequester,
     )
 }
 
 @Composable
 private fun SystemHero(
     context: HeroContext.System,
-    contentFocusRequester: FocusRequester? = null
+    contentFocusRequester: FocusRequester? = null,
 ) {
     val controls = koinInject<SystemControls>()
     val liveStatus by controls.status.collectAsState()
-    val battery = if (liveStatus.batteryPercent >= 0) {
-        liveStatus.batteryPercent
-    } else {
-        context.batteryPercent
-    }
+    val battery =
+        if (liveStatus.batteryPercent >= 0) {
+            liveStatus.batteryPercent
+        } else {
+            context.batteryPercent
+        }
     val charging = liveStatus.charging || context.charging
     val wifiOn = liveStatus.wifiEnabled || context.wifiEnabled
-    val statusLine = buildList {
-        if (battery >= 0) {
-            add(
-                buildString {
-                    append("Battery $battery%")
-                    if (charging) append(" ⚡")
-                }
-            )
-        }
-        add(if (wifiOn) "Wi‑Fi on" else "Wi‑Fi off")
-    }.joinToString("  ·  ")
+    val statusLine =
+        buildList {
+            if (battery >= 0) {
+                add(
+                    buildString {
+                        append("Battery $battery%")
+                        if (charging) append(" ⚡")
+                    },
+                )
+            }
+            add(if (wifiOn) "Wi‑Fi on" else "Wi‑Fi off")
+        }.joinToString("  ·  ")
     ContextHeroFrame(
         title = "System",
         subtitle = statusLine.ifBlank { "Quick settings" },
         hint = "Brightness, volume, and device controls below",
         accent = MaterialTheme.colorScheme.tertiary,
-        contentFocusRequester = contentFocusRequester
+        contentFocusRequester = contentFocusRequester,
     )
 }
 
@@ -489,21 +525,22 @@ private fun SystemHero(
 private fun HeroArtworkTransition(
     tile: GameTile,
     modifier: Modifier = Modifier,
-    content: @Composable (GameTile) -> Unit
+    content: @Composable (GameTile) -> Unit,
 ) {
     AnimatedContent(
         targetState = tile,
         modifier = modifier,
         contentKey = { it.game.id },
         transitionSpec = {
-            (fadeIn(WajihaMotion.fadeInSpec()) +
-                slideInHorizontally(WajihaMotion.fadeInSpec()) { it / 24 })
-                .togetherWith(
-                    fadeOut(WajihaMotion.fadeOutSpec()) +
-                        slideOutHorizontally(WajihaMotion.fadeOutSpec()) { -it / 24 }
-                )
+            (
+                fadeIn(WajihaMotion.fadeInSpec()) +
+                    slideInHorizontally(WajihaMotion.fadeInSpec()) { it / 24 }
+            ).togetherWith(
+                fadeOut(WajihaMotion.fadeOutSpec()) +
+                    slideOutHorizontally(WajihaMotion.fadeOutSpec()) { -it / 24 },
+            )
         },
-        label = "hero-artwork"
+        label = "hero-artwork",
     ) { current ->
         content(current)
     }
@@ -513,7 +550,7 @@ private fun HeroArtworkTransition(
 private fun HeroMetadataTransition(
     tile: GameTile,
     modifier: Modifier = Modifier,
-    content: @Composable (GameTile) -> Unit
+    content: @Composable (GameTile) -> Unit,
 ) {
     AnimatedContent(
         targetState = tile,
@@ -522,14 +559,18 @@ private fun HeroMetadataTransition(
         transitionSpec = {
             fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
         },
-        label = "hero-metadata"
+        label = "hero-metadata",
     ) { current ->
         content(current)
     }
 }
 
 @Composable
-private fun GameHero(tile: GameTile, platformName: String?, settings: AppSettings) {
+private fun GameHero(
+    tile: GameTile,
+    platformName: String?,
+    settings: AppSettings,
+) {
     val scheme = MaterialTheme.colorScheme
     val backdrop = tile.heroPath ?: tile.boxartPath
     val showCover = settings.topHeroCover
@@ -538,7 +579,7 @@ private fun GameHero(tile: GameTile, platformName: String?, settings: AppSetting
         if (settings.topHeroBackdrop) {
             HeroArtworkTransition(
                 tile = tile,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
             ) { current ->
                 val currentBackdrop = current.heroPath ?: current.boxartPath
                 if (currentBackdrop != null) {
@@ -546,78 +587,87 @@ private fun GameHero(tile: GameTile, platformName: String?, settings: AppSetting
                         model = currentBackdrop,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
             if (backdrop != null) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    scheme.background.copy(alpha = 0.55f),
-                                    scheme.background.copy(alpha = 0.92f)
-                                )
-                            )
-                        )
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors =
+                                        listOf(
+                                            scheme.background.copy(alpha = 0.55f),
+                                            scheme.background.copy(alpha = 0.92f),
+                                        ),
+                                ),
+                            ),
                 )
             }
         }
         Row(
             modifier = Modifier.fillMaxSize().padding(24.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp)
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             if (showCover) {
                 val coverShape = RoundedCornerShape(12.dp)
                 Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .aspectRatio(3f / 4f)
-                        .clip(coverShape)
-                        .then(
-                            if (settings.topHeroCoverBorder) {
-                                Modifier.border(
-                                    width = 1.dp,
-                                    color = scheme.outline.copy(alpha = 0.35f),
-                                    shape = coverShape
-                                )
-                            } else {
-                                Modifier
-                            }
-                        )
+                    modifier =
+                        Modifier
+                            .fillMaxHeight()
+                            .aspectRatio(3f / 4f)
+                            .clip(coverShape)
+                            .then(
+                                if (settings.topHeroCoverBorder) {
+                                    Modifier.border(
+                                        width = 1.dp,
+                                        color = scheme.outline.copy(alpha = 0.35f),
+                                        shape = coverShape,
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            ),
                 ) {
                     HeroArtworkTransition(
                         tile = tile,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     ) { current ->
                         when {
                             current.videoPath != null -> {
                                 VideoPreview(
                                     path = current.videoPath,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier.fillMaxSize(),
                                 )
                             }
+
                             current.boxartPath != null -> {
                                 AsyncImage(
                                     model = current.boxartPath,
                                     contentDescription = current.game.displayName,
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier.fillMaxSize(),
                                 )
                             }
+
                             else -> {
                                 Box(
                                     contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(scheme.surfaceVariant)
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .background(scheme.surfaceVariant),
                                 ) {
                                     Text(
-                                        text = current.game.displayName.take(2).uppercase(),
+                                        text =
+                                            current.game.displayName
+                                                .take(2)
+                                                .uppercase(),
                                         style = MaterialTheme.typography.displayLarge,
-                                        color = scheme.primary
+                                        color = scheme.primary,
                                     )
                                 }
                             }
@@ -626,17 +676,18 @@ private fun GameHero(tile: GameTile, platformName: String?, settings: AppSetting
                     if (showLogo) {
                         HeroArtworkTransition(
                             tile = tile,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth(0.85f)
-                                .padding(12.dp)
+                            modifier =
+                                Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth(0.85f)
+                                    .padding(12.dp),
                         ) { current ->
                             current.logoPath?.let { logo ->
                                 AsyncImage(
                                     model = logo,
                                     contentDescription = null,
                                     contentScale = ContentScale.Fit,
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                         }
@@ -645,9 +696,10 @@ private fun GameHero(tile: GameTile, platformName: String?, settings: AppSetting
             }
             HeroMetadataTransition(
                 tile = tile,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(1f)
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .weight(1f),
             ) { current ->
                 GameHeroMetadata(current, platformName, settings)
             }
@@ -659,7 +711,7 @@ private fun GameHero(tile: GameTile, platformName: String?, settings: AppSetting
 private fun GameHeroMetadata(
     tile: GameTile,
     platformName: String?,
-    settings: AppSettings
+    settings: AppSettings,
 ) {
     val scheme = MaterialTheme.colorScheme
     val showPlatformRow =
@@ -667,12 +719,12 @@ private fun GameHeroMetadata(
             (settings.topHeroPlatform && platformName != null)
     Column(
         modifier = Modifier.fillMaxHeight(),
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         if (showPlatformRow) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (settings.topHeroPlatformIcon) {
                     tile.iconPath?.let { icon ->
@@ -680,9 +732,10 @@ private fun GameHeroMetadata(
                             model = icon,
                             contentDescription = null,
                             contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
+                            modifier =
+                                Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(8.dp)),
                         )
                     }
                 }
@@ -691,7 +744,7 @@ private fun GameHeroMetadata(
                         Text(
                             text = it,
                             style = MaterialTheme.typography.labelLarge,
-                            color = scheme.primary
+                            color = scheme.primary,
                         )
                     }
                 }
@@ -704,23 +757,24 @@ private fun GameHeroMetadata(
                 color = scheme.onBackground,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = if (showPlatformRow) 4.dp else 0.dp)
+                modifier = Modifier.padding(top = if (showPlatformRow) 4.dp else 0.dp),
             )
         }
         if (settings.topHeroMetadata) {
-            val meta = listOfNotNull(
-                tile.game.developer,
-                tile.game.releaseDate?.take(4),
-                tile.game.genre,
-                tile.game.region?.uppercase(),
-                tile.game.ageRating
-            ).joinToString("  ·  ")
+            val meta =
+                listOfNotNull(
+                    tile.game.developer,
+                    tile.game.releaseDate?.take(4),
+                    tile.game.genre,
+                    tile.game.region?.uppercase(),
+                    tile.game.ageRating,
+                ).joinToString("  ·  ")
             if (meta.isNotEmpty()) {
                 Text(
                     text = meta,
                     style = MaterialTheme.typography.bodyLarge,
                     color = scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp)
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
         }
@@ -732,7 +786,7 @@ private fun GameHeroMetadata(
                     color = scheme.onSurfaceVariant,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 12.dp)
+                    modifier = Modifier.padding(top = 12.dp),
                 )
             }
         }
@@ -741,7 +795,7 @@ private fun GameHeroMetadata(
                 text = "Played ${tile.game.playCount}×",
                 style = MaterialTheme.typography.labelMedium,
                 color = scheme.tertiary,
-                modifier = Modifier.padding(top = 12.dp)
+                modifier = Modifier.padding(top = 12.dp),
             )
         }
     }

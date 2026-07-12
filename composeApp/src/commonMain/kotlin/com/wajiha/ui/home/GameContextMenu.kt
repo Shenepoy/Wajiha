@@ -165,30 +165,45 @@ private fun offsetForLockedSide(
     val maxY = (containerH - padPx - menuH).coerceAtLeast(minY)
 
     fun clampX(x: Float) = x.coerceIn(minX, maxX)
+
     fun clampY(y: Float) = y.coerceIn(minY, maxY)
 
     return when (side) {
-        MenuSide.Right -> IntOffset(
-            clampX(anchor.right + gapPx).roundToInt(),
-            clampY(anchor.top).roundToInt(),
-        )
-        MenuSide.Left -> IntOffset(
-            clampX(anchor.left - menuW - gapPx).roundToInt(),
-            clampY(anchor.top).roundToInt(),
-        )
-        MenuSide.Below -> IntOffset(
-            clampX(anchor.center.x - menuW / 2f).roundToInt(),
-            clampY(anchor.bottom + gapPx).roundToInt(),
-        )
-        MenuSide.Above -> IntOffset(
-            clampX(anchor.center.x - menuW / 2f).roundToInt(),
-            clampY(anchor.top - menuH - gapPx).roundToInt(),
-        )
+        MenuSide.Right -> {
+            IntOffset(
+                clampX(anchor.right + gapPx).roundToInt(),
+                clampY(anchor.top).roundToInt(),
+            )
+        }
+
+        MenuSide.Left -> {
+            IntOffset(
+                clampX(anchor.left - menuW - gapPx).roundToInt(),
+                clampY(anchor.top).roundToInt(),
+            )
+        }
+
+        MenuSide.Below -> {
+            IntOffset(
+                clampX(anchor.center.x - menuW / 2f).roundToInt(),
+                clampY(anchor.bottom + gapPx).roundToInt(),
+            )
+        }
+
+        MenuSide.Above -> {
+            IntOffset(
+                clampX(anchor.center.x - menuW / 2f).roundToInt(),
+                clampY(anchor.top - menuH - gapPx).roundToInt(),
+            )
+        }
     }
 }
 
 /** Inflate layout bounds to match [GamepadTile] selected scale so the cutout fits the ring. */
-private fun inflateForTileScale(rect: Rect, scale: Float): Rect {
+private fun inflateForTileScale(
+    rect: Rect,
+    scale: Float,
+): Rect {
     if (scale == 1f) return rect
     val cx = rect.center.x
     val cy = rect.center.y
@@ -199,7 +214,7 @@ private fun inflateForTileScale(rect: Rect, scale: Float): Rect {
 
 data class GameContextTarget(
     val gameId: Long,
-    val gameName: String
+    val gameName: String,
 )
 
 @Composable
@@ -221,19 +236,21 @@ private fun ContextMenuTitleText(
     val density = LocalDensity.current
 
     BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(WajihaShapes.focus),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(WajihaShapes.focus),
     ) {
         val containerWidthPx = with(density) { maxWidth.toPx() }
-        val textLayoutResult = remember(text, containerWidthPx) {
-            textMeasurer.measure(
-                text = text,
-                style = textStyle.copy(fontWeight = FontWeight.SemiBold),
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
+        val textLayoutResult =
+            remember(text, containerWidthPx) {
+                textMeasurer.measure(
+                    text = text,
+                    style = textStyle.copy(fontWeight = FontWeight.SemiBold),
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
         val textWidthPx = textLayoutResult.size.width.toFloat()
         val scrollDistance = (textWidthPx - containerWidthPx).coerceAtLeast(0f)
         val overflow = scrollDistance > 0f
@@ -244,9 +261,10 @@ private fun ContextMenuTitleText(
                 offsetX.snapTo(0f)
                 return@LaunchedEffect
             }
-            val durationMs = ((scrollDistance / ContextMenuMarqueePxPerSec) * 1000f)
-                .roundToInt()
-                .coerceIn(1500, 10_000)
+            val durationMs =
+                ((scrollDistance / ContextMenuMarqueePxPerSec) * 1000f)
+                    .roundToInt()
+                    .coerceIn(1500, 10_000)
             while (true) {
                 offsetX.snapTo(0f)
                 delay(ContextMenuMarqueeIdleMs.toLong())
@@ -284,67 +302,79 @@ private fun ContextMenuRow(
 ) {
     var focused by remember { mutableStateOf(false) }
     val rowHeight = if (nested) ContextMenuNestedRowHeight else ContextMenuRowHeight
-    val startPad = when {
-        nested && icon != null -> WajihaSpacing.sm
-        nested -> WajihaSpacing.sm + ContextMenuIconSlot + WajihaSpacing.xs
-        else -> WajihaSpacing.sm
-    }
-    val labelColor = when {
-        destructive -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-    val iconColor = when {
-        destructive -> MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
-        nested -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val startPad =
+        when {
+            nested && icon != null -> WajihaSpacing.sm
+            nested -> WajihaSpacing.sm + ContextMenuIconSlot + WajihaSpacing.xs
+            else -> WajihaSpacing.sm
+        }
+    val labelColor =
+        when {
+            destructive -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurface
+        }
+    val iconColor =
+        when {
+            destructive -> MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+            nested -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
 
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = rowHeight)
-            .clip(WajihaShapes.focus)
-            .wajihaFocusIndicator(highlighted = focused, shape = WajihaShapes.focus)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { state ->
-                focused = state.isFocused
-                if (state.isFocused) onFocusGained()
-            }
-            .wajihaGamepadFocus()
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when {
-                    expandable -> when {
-                        !expanded && (
-                            event.key == Key.DirectionRight ||
-                                GamepadKeys.isConfirm(event.type, event.key)
-                            ) -> {
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = rowHeight)
+                .clip(WajihaShapes.focus)
+                .wajihaFocusIndicator(highlighted = focused, shape = WajihaShapes.focus)
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .onFocusChanged { state ->
+                    focused = state.isFocused
+                    if (state.isFocused) onFocusGained()
+                }.wajihaGamepadFocus()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when {
+                        expandable -> {
+                            when {
+                                !expanded && (
+                                    event.key == Key.DirectionRight ||
+                                        GamepadKeys.isConfirm(event.type, event.key)
+                                ) -> {
+                                    onClick()
+                                    true
+                                }
+
+                                expanded && (
+                                    event.key == Key.DirectionLeft ||
+                                        event.key == Key.DirectionUp
+                                ) -> {
+                                    onClick()
+                                    true
+                                }
+
+                                else -> {
+                                    false
+                                }
+                            }
+                        }
+
+                        GamepadKeys.isConfirm(event.type, event.key) -> {
                             onClick()
                             true
                         }
-                        expanded && (
-                            event.key == Key.DirectionLeft ||
-                                event.key == Key.DirectionUp
-                            ) -> {
-                            onClick()
-                            true
+
+                        else -> {
+                            false
                         }
-                        else -> false
                     }
-                    GamepadKeys.isConfirm(event.type, event.key) -> {
-                        onClick()
-                        true
-                    }
-                    else -> false
-                }
-            }
-            .pointerInput(onClick) { detectTapGestures { onClick() } }
-            .padding(
-                start = startPad,
-                end = WajihaSpacing.sm,
-                top = 2.dp,
-                bottom = 2.dp,
-            ),
+                }.pointerInput(onClick) { detectTapGestures { onClick() } }
+                .padding(
+                    start = startPad,
+                    end = WajihaSpacing.sm,
+                    top = 2.dp,
+                    bottom = 2.dp,
+                ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
     ) {
@@ -358,15 +388,17 @@ private fun ContextMenuRow(
         }
         Text(
             text = label,
-            style = if (nested) {
-                MaterialTheme.typography.bodySmall
-            } else {
-                MaterialTheme.typography.bodyMedium
-            },
-            fontWeight = when {
-                nested -> FontWeight.Normal
-                else -> FontWeight.Medium
-            },
+            style =
+                if (nested) {
+                    MaterialTheme.typography.bodySmall
+                } else {
+                    MaterialTheme.typography.bodyMedium
+                },
+            fontWeight =
+                when {
+                    nested -> FontWeight.Normal
+                    else -> FontWeight.Medium
+                },
             color = labelColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -411,41 +443,45 @@ private fun ContextMenuDimScrim(
 ) {
     val scrimColor = Color.Black.copy(alpha = scrimAlpha)
     val density = LocalDensity.current
-    val tileCornerRadiusPx = with(density) {
-        WajihaShapes.tileCornerRadius.toPx() * WajihaFocus.selectedScale
-    }
+    val tileCornerRadiusPx =
+        with(density) {
+            WajihaShapes.tileCornerRadius.toPx() * WajihaFocus.selectedScale
+        }
     var overlayRootBounds by remember { mutableStateOf<Rect?>(null) }
 
-    val localTileCutout = remember(tileCutoutRoot, overlayRootBounds) {
-        val overlay = overlayRootBounds ?: return@remember null
-        val tile = tileCutoutRoot ?: return@remember null
-        val scaled = inflateForTileScale(tile, WajihaFocus.selectedScale)
-        Rect(
-            left = scaled.left - overlay.left,
-            top = scaled.top - overlay.top,
-            right = scaled.right - overlay.left,
-            bottom = scaled.bottom - overlay.top,
-        )
-    }
+    val localTileCutout =
+        remember(tileCutoutRoot, overlayRootBounds) {
+            val overlay = overlayRootBounds ?: return@remember null
+            val tile = tileCutoutRoot ?: return@remember null
+            val scaled = inflateForTileScale(tile, WajihaFocus.selectedScale)
+            Rect(
+                left = scaled.left - overlay.left,
+                top = scaled.top - overlay.top,
+                right = scaled.right - overlay.left,
+                bottom = scaled.bottom - overlay.top,
+            )
+        }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .onGloballyPositioned { overlayRootBounds = it.boundsInRoot() }
-            .pointerInput(localTileCutout, tileCornerRadiusPx) {
-                detectTapGestures { offset ->
-                    val cutout = localTileCutout
-                    if (cutout != null && isOffsetInTileCutout(
-                            offset = offset,
-                            cutout = cutout,
-                            cornerRadiusPx = tileCornerRadiusPx,
-                        )
-                    ) {
-                        return@detectTapGestures
+        modifier =
+            modifier
+                .fillMaxSize()
+                .onGloballyPositioned { overlayRootBounds = it.boundsInRoot() }
+                .pointerInput(localTileCutout, tileCornerRadiusPx) {
+                    detectTapGestures { offset ->
+                        val cutout = localTileCutout
+                        if (cutout != null &&
+                            isOffsetInTileCutout(
+                                offset = offset,
+                                cutout = cutout,
+                                cornerRadiusPx = tileCornerRadiusPx,
+                            )
+                        ) {
+                            return@detectTapGestures
+                        }
+                        onDismiss()
                     }
-                    onDismiss()
-                }
-            }
+                },
     ) {
         val cutout = localTileCutout
 
@@ -457,22 +493,27 @@ private fun ContextMenuDimScrim(
                 drawRect(scrimColor, topLeft = Offset.Zero, size = Size(w, h))
                 return@Canvas
             }
-            val scrimPath = buildScrimPath(
-                width = w,
-                height = h,
-                cutout = cutout,
-                cornerRadiusPx = tileCornerRadiusPx,
-            )
+            val scrimPath =
+                buildScrimPath(
+                    width = w,
+                    height = h,
+                    cutout = cutout,
+                    cornerRadiusPx = tileCornerRadiusPx,
+                )
             drawPath(scrimPath, scrimColor)
         }
     }
 }
 
-private fun tileCutoutRoundRect(cutout: Rect, cornerRadiusPx: Float): RoundRect {
-    val cornerRadius = CornerRadius(
-        x = cornerRadiusPx.coerceAtMost(cutout.width / 2f),
-        y = cornerRadiusPx.coerceAtMost(cutout.height / 2f),
-    )
+private fun tileCutoutRoundRect(
+    cutout: Rect,
+    cornerRadiusPx: Float,
+): RoundRect {
+    val cornerRadius =
+        CornerRadius(
+            x = cornerRadiusPx.coerceAtMost(cutout.width / 2f),
+            y = cornerRadiusPx.coerceAtMost(cutout.height / 2f),
+        )
     return RoundRect(
         left = cutout.left,
         top = cutout.top,
@@ -491,12 +532,13 @@ private fun buildScrimPath(
     cutout: Rect,
     cornerRadiusPx: Float,
 ): Path {
-    val clamped = Rect(
-        left = cutout.left.coerceIn(0f, width),
-        top = cutout.top.coerceIn(0f, height),
-        right = cutout.right.coerceIn(0f, width),
-        bottom = cutout.bottom.coerceIn(0f, height),
-    )
+    val clamped =
+        Rect(
+            left = cutout.left.coerceIn(0f, width),
+            top = cutout.top.coerceIn(0f, height),
+            right = cutout.right.coerceIn(0f, width),
+            bottom = cutout.bottom.coerceIn(0f, height),
+        )
     return Path().apply {
         fillType = PathFillType.EvenOdd
         addRect(Rect(0f, 0f, width, height))
@@ -515,17 +557,22 @@ private fun collapseSubmenus(
     deleteExpanded: Boolean,
     onOpenExpandedChange: (Boolean) -> Unit,
     onDeleteExpandedChange: (Boolean) -> Unit,
-): Boolean = when {
-    openExpanded -> {
-        onOpenExpandedChange(false)
-        true
+): Boolean =
+    when {
+        openExpanded -> {
+            onOpenExpandedChange(false)
+            true
+        }
+
+        deleteExpanded -> {
+            onDeleteExpandedChange(false)
+            true
+        }
+
+        else -> {
+            false
+        }
     }
-    deleteExpanded -> {
-        onDeleteExpandedChange(false)
-        true
-    }
-    else -> false
-}
 
 /**
  * Context menu for a game tile: side-attached popover beside the focused tile.
@@ -542,7 +589,7 @@ fun GameContextMenu(
     onOpenInfo: (gameId: Long) -> Unit,
     onRemoveFromLibrary: (gameId: Long) -> Unit,
     onDeleteFile: (gameId: Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     if (target == null) return
 
@@ -655,13 +702,14 @@ fun GameContextMenu(
     BackHandler(enabled = pendingConfirm == PendingConfirm.None) { handleBack() }
 
     BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                if (pendingConfirm != PendingConfirm.None) return@onPreviewKeyEvent false
-                if (GamepadKeys.isBack(event.type, event.key)) handleBack() else false
-            }
+        modifier =
+            modifier
+                .fillMaxSize()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    if (pendingConfirm != PendingConfirm.None) return@onPreviewKeyEvent false
+                    if (GamepadKeys.isBack(event.type, event.key)) handleBack() else false
+                },
     ) {
         ContextMenuDimScrim(
             tileCutoutRoot = anchorBounds,
@@ -670,72 +718,77 @@ fun GameContextMenu(
             },
         )
 
-        val menuOffset = remember(
-            anchorBounds,
-            constraints.maxWidth,
-            constraints.maxHeight,
-            menuSize,
-            lockedSide,
-        ) {
-            with(density) {
-                val menuW = if (menuSize.width > 0) {
-                    menuSize.width.toFloat()
-                } else {
-                    ContextMenuWidth.toPx()
-                }
-                val menuH = if (menuSize.height > 0) {
-                    menuSize.height.toFloat()
-                } else {
-                    196.dp.toPx()
-                }
-                val gapPx = gap.toPx()
-                val padPx = WajihaSpacing.sm.toPx()
-                val cw = constraints.maxWidth.toFloat()
-                val ch = constraints.maxHeight.toFloat()
+        val menuOffset =
+            remember(
+                anchorBounds,
+                constraints.maxWidth,
+                constraints.maxHeight,
+                menuSize,
+                lockedSide,
+            ) {
+                with(density) {
+                    val menuW =
+                        if (menuSize.width > 0) {
+                            menuSize.width.toFloat()
+                        } else {
+                            ContextMenuWidth.toPx()
+                        }
+                    val menuH =
+                        if (menuSize.height > 0) {
+                            menuSize.height.toFloat()
+                        } else {
+                            196.dp.toPx()
+                        }
+                    val gapPx = gap.toPx()
+                    val padPx = WajihaSpacing.sm.toPx()
+                    val cw = constraints.maxWidth.toFloat()
+                    val ch = constraints.maxHeight.toFloat()
 
-                if (anchorBounds != null) {
-                    val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
-                    val side = lockedSide ?: chooseMenuSide(
-                        anchor = anchor,
-                        menuW = menuW,
-                        menuH = menuH,
-                        containerW = cw,
-                        containerH = ch,
-                        gapPx = gapPx,
-                        padPx = padPx,
-                    )
-                    offsetForLockedSide(
-                        side = side,
-                        anchor = anchor,
-                        menuW = menuW,
-                        menuH = menuH,
-                        containerW = cw,
-                        containerH = ch,
-                        gapPx = gapPx,
-                        padPx = padPx,
-                    )
-                } else {
-                    IntOffset(
-                        (cw - menuW - padPx).roundToInt().coerceAtLeast(padPx.roundToInt()),
-                        padPx.roundToInt(),
-                    )
+                    if (anchorBounds != null) {
+                        val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
+                        val side =
+                            lockedSide ?: chooseMenuSide(
+                                anchor = anchor,
+                                menuW = menuW,
+                                menuH = menuH,
+                                containerW = cw,
+                                containerH = ch,
+                                gapPx = gapPx,
+                                padPx = padPx,
+                            )
+                        offsetForLockedSide(
+                            side = side,
+                            anchor = anchor,
+                            menuW = menuW,
+                            menuH = menuH,
+                            containerW = cw,
+                            containerH = ch,
+                            gapPx = gapPx,
+                            padPx = padPx,
+                        )
+                    } else {
+                        IntOffset(
+                            (cw - menuW - padPx).roundToInt().coerceAtLeast(padPx.roundToInt()),
+                            padPx.roundToInt(),
+                        )
+                    }
                 }
             }
-        }
 
         LaunchedEffect(menuSize, anchorBounds, constraints.maxWidth, constraints.maxHeight) {
             if (lockedSide == null && menuSize != IntSize.Zero && anchorBounds != null) {
                 with(density) {
                     val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
-                    lockedSide = chooseMenuSide(
-                        anchor = anchor,
-                        menuW = menuSize.width.toFloat(),
-                        menuH = menuSize.height.toFloat(),
-                        containerW = constraints.maxWidth.toFloat(),
-                        containerH = constraints.maxHeight.toFloat(),
-                        gapPx = gap.toPx(),
-                        padPx = WajihaSpacing.sm.toPx(),
-                    )
+                    lockedSide =
+                        chooseMenuSide(
+                            anchor = anchor,
+                            menuW = menuSize.width.toFloat(),
+                            menuH = menuSize.height.toFloat(),
+                            containerW = constraints.maxWidth.toFloat(),
+                            containerH = constraints.maxHeight.toFloat(),
+                            gapPx = gap.toPx(),
+                            padPx = WajihaSpacing.sm.toPx(),
+                        )
                 }
             }
         }
@@ -743,17 +796,18 @@ fun GameContextMenu(
         val menuPlaced = menuSize != IntSize.Zero
 
         Box(
-            modifier = Modifier
-                .zIndex(1f)
-                .alpha(if (menuPlaced) 1f else 0f)
-                .offset { menuOffset },
+            modifier =
+                Modifier
+                    .zIndex(1f)
+                    .alpha(if (menuPlaced) 1f else 0f)
+                    .offset { menuOffset },
         ) {
             Column(
-                modifier = Modifier
-                    .onSizeChanged { size ->
-                        if (size != IntSize.Zero) menuSize = size
-                    }
-                    .width(ContextMenuWidth),
+                modifier =
+                    Modifier
+                        .onSizeChanged { size ->
+                            if (size != IntSize.Zero) menuSize = size
+                        }.width(ContextMenuWidth),
             ) {
                 Surface(
                     shape = WajihaShapes.chip,
@@ -763,10 +817,11 @@ fun GameContextMenu(
                 ) {
                     ContextMenuTitleText(
                         text = target.gameName,
-                        modifier = Modifier.padding(
-                            horizontal = WajihaSpacing.sm,
-                            vertical = WajihaSpacing.xs,
-                        ),
+                        modifier =
+                            Modifier.padding(
+                                horizontal = WajihaSpacing.sm,
+                                vertical = WajihaSpacing.xs,
+                            ),
                     )
                 }
 
@@ -779,7 +834,7 @@ fun GameContextMenu(
                     shadowElevation = 3.dp,
                 ) {
                     CompositionLocalProvider(
-                        LocalGamepadFocusChromeScope provides GamepadFocusChromeScope.Menu
+                        LocalGamepadFocusChromeScope provides GamepadFocusChromeScope.Menu,
                     ) {
                         Column(
                             modifier = Modifier.padding(vertical = WajihaSpacing.xs),
@@ -874,8 +929,9 @@ fun GameContextMenu(
     WajihaDialog(
         visible = pendingConfirm == PendingConfirm.RemoveFromLibrary,
         title = "Remove from Wajiha?",
-        message = "\"${target.gameName}\" will be removed from your library. " +
-            "The ROM file on disk is kept.",
+        message =
+            "\"${target.gameName}\" will be removed from your library. " +
+                "The ROM file on disk is kept.",
         onDismiss = { pendingConfirm = PendingConfirm.None },
         onConfirm = {
             pendingConfirm = PendingConfirm.None
@@ -889,8 +945,9 @@ fun GameContextMenu(
     WajihaDialog(
         visible = pendingConfirm == PendingConfirm.DeleteFile,
         title = "Delete ROM file?",
-        message = "\"${target.gameName}\" and its ROM file will be permanently deleted. " +
-            "This cannot be undone.",
+        message =
+            "\"${target.gameName}\" and its ROM file will be permanently deleted. " +
+                "This cannot be undone.",
         onDismiss = { pendingConfirm = PendingConfirm.None },
         onConfirm = {
             pendingConfirm = PendingConfirm.None

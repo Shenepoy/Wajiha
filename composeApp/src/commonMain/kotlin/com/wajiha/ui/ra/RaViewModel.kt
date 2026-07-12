@@ -20,14 +20,13 @@ data class RaUiState(
     val loading: Boolean = false,
     /** Progress for the game currently shown (now playing or selected). */
     val progress: RaGameProgress? = null,
-    val message: String? = null
+    val message: String? = null,
 )
 
 class RaViewModel(
     private val raRepository: RaRepository,
-    dualScreenStore: DualScreenStore
+    dualScreenStore: DualScreenStore,
 ) : ViewModel() {
-
     private val _state = MutableStateFlow(RaUiState())
     val state: StateFlow<RaUiState> = _state
 
@@ -40,35 +39,41 @@ class RaViewModel(
             .map { it?.gameId }
             .distinctUntilChanged()
             .onEach { gameId ->
-                if (gameId != null) loadForGame(gameId) else {
+                if (gameId != null) {
+                    loadForGame(gameId)
+                } else {
                     _state.value = _state.value.copy(progress = null)
                 }
-            }
-            .launchIn(viewModelScope)
+            }.launchIn(viewModelScope)
     }
 
     fun login() {
         _state.value = _state.value.copy(loading = true, message = null)
         viewModelScope.launch {
             val profile = raRepository.login()
-            _state.value = _state.value.copy(
-                configured = raRepository.isConfigured(),
-                profile = profile,
-                loading = false,
-                message = if (profile == null) "Login failed — check username/API key" else null
-            )
+            _state.value =
+                _state.value.copy(
+                    configured = raRepository.isConfigured(),
+                    profile = profile,
+                    loading = false,
+                    message = if (profile == null) "Login failed — check username/API key" else null,
+                )
         }
     }
 
-    fun loadForGame(gameId: Long, forceRefresh: Boolean = false) {
+    fun loadForGame(
+        gameId: Long,
+        forceRefresh: Boolean = false,
+    ) {
         _state.value = _state.value.copy(loading = true, message = null)
         viewModelScope.launch {
             val progress = raRepository.progressForGame(gameId, forceRefresh)
-            _state.value = _state.value.copy(
-                loading = false,
-                progress = progress,
-                message = if (progress == null) "No RetroAchievements data for this game" else null
-            )
+            _state.value =
+                _state.value.copy(
+                    loading = false,
+                    progress = progress,
+                    message = if (progress == null) "No RetroAchievements data for this game" else null,
+                )
         }
     }
 }

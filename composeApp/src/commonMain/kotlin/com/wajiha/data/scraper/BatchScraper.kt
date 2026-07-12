@@ -4,17 +4,17 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.wajiha.data.WajihaJson
 import com.wajiha.data.db.GameEntity
 import com.wajiha.domain.repository.GameRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import com.wajiha.data.WajihaJson
 import kotlin.concurrent.Volatile
 
 private const val MAX_ISSUES = 100
@@ -28,7 +28,7 @@ data class BatchScrapeIssue(
     val message: String,
     val platformId: String? = null,
     /** matched | partial | no_match | error — for retry filtering */
-    val outcome: GameScrapeOutcome = GameScrapeOutcome.Error
+    val outcome: GameScrapeOutcome = GameScrapeOutcome.Error,
 )
 
 @Serializable
@@ -52,28 +52,30 @@ data class BatchScrapeProgress(
      */
     val errors: Map<Long, String> = emptyMap(),
     /** @deprecated Use [errorCount] + [noMatch] + [partial]; kept for decode compat. */
-    val failed: Int = 0
+    val failed: Int = 0,
 ) {
     /** Games that did not fully succeed (partial + no match + errors). */
     val problemCount: Int get() = partial + noMatch + errorCount
 
-    fun summaryLine(): String = buildString {
-        append("$matched matched")
-        if (partial > 0) append(", $partial partial")
-        if (noMatch > 0) append(", $noMatch no match")
-        if (errorCount > 0) append(", $errorCount errors")
-        if (partial == 0 && noMatch == 0 && errorCount == 0 && failed > 0) {
-            append(", $failed failed")
+    fun summaryLine(): String =
+        buildString {
+            append("$matched matched")
+            if (partial > 0) append(", $partial partial")
+            if (noMatch > 0) append(", $noMatch no match")
+            if (errorCount > 0) append(", $errorCount errors")
+            if (partial == 0 && noMatch == 0 && errorCount == 0 && failed > 0) {
+                append(", $failed failed")
+            }
         }
-    }
 }
 
 /**
  * Persists the last [BatchScrapeProgress] snapshot so progress survives
  * process death (the WorkManager job itself is rescheduled by the system).
  */
-class BatchProgressStore(private val dataStore: DataStore<Preferences>) {
-
+class BatchProgressStore(
+    private val dataStore: DataStore<Preferences>,
+) {
     private val json = WajihaJson.Default
 
     suspend fun load(): BatchScrapeProgress? =
@@ -107,7 +109,7 @@ private fun BatchScrapeProgress.normalized(): BatchScrapeProgress {
     return copy(
         errorCount = fromErrors,
         noMatch = (failed - fromErrors).coerceAtLeast(0),
-        failed = failed
+        failed = failed,
     )
 }
 
@@ -123,7 +125,7 @@ class BatchScraper(
     private val engine: ScrapeEngine,
     private val gameRepository: GameRepository,
     private val settingsRepository: ScraperSettingsRepository,
-    private val progressStore: BatchProgressStore
+    private val progressStore: BatchProgressStore,
 ) {
     private val _progress = MutableStateFlow(BatchScrapeProgress())
     val progress: StateFlow<BatchScrapeProgress> = _progress.asStateFlow()
@@ -148,12 +150,13 @@ class BatchScraper(
         restored = true
         progressStore.load()?.let { saved ->
             if (!_progress.value.running) {
-                _progress.value = saved.copy(
-                    running = false,
-                    paused = false,
-                    currentGameName = null,
-                    statusMessage = null
-                )
+                _progress.value =
+                    saved.copy(
+                        running = false,
+                        paused = false,
+                        currentGameName = null,
+                        statusMessage = null,
+                    )
             }
         }
     }
@@ -162,18 +165,20 @@ class BatchScraper(
 
     fun pause() {
         pauseFlag.value = true
-        _progress.value = _progress.value.copy(
-            paused = true,
-            statusMessage = "Paused"
-        )
+        _progress.value =
+            _progress.value.copy(
+                paused = true,
+                statusMessage = "Paused",
+            )
     }
 
     fun resume() {
         pauseFlag.value = false
-        _progress.value = _progress.value.copy(
-            paused = false,
-            statusMessage = null
-        )
+        _progress.value =
+            _progress.value.copy(
+                paused = false,
+                statusMessage = null,
+            )
     }
 
     /**
@@ -196,11 +201,14 @@ class BatchScraper(
      * games from the last issues list (optionally filtered by [platformId]).
      */
     fun prepareRetryFailed(platformId: String? = null) {
-        val issues = _progress.value.issues.filter { issue ->
-            (issue.outcome == GameScrapeOutcome.Error ||
-                issue.outcome == GameScrapeOutcome.Partial) &&
-                (platformId == null || issue.platformId == platformId)
-        }
+        val issues =
+            _progress.value.issues.filter { issue ->
+                (
+                    issue.outcome == GameScrapeOutcome.Error ||
+                        issue.outcome == GameScrapeOutcome.Partial
+                ) &&
+                    (platformId == null || issue.platformId == platformId)
+            }
         retryGameIds = issues.map { it.gameId }.toSet()
     }
 
@@ -212,8 +220,10 @@ class BatchScraper(
         val p = _progress.value
         if (p.running) return false
         return p.issues.any { issue ->
-            (issue.outcome == GameScrapeOutcome.Error ||
-                issue.outcome == GameScrapeOutcome.Partial) &&
+            (
+                issue.outcome == GameScrapeOutcome.Error ||
+                    issue.outcome == GameScrapeOutcome.Partial
+            ) &&
                 (platformId == null || issue.platformId == platformId)
         }
     }
@@ -226,61 +236,76 @@ class BatchScraper(
     suspend fun run(
         games: List<GameEntity>,
         platformId: String? = null,
-        policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps
+        policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps,
     ) {
         val settings = settingsRepository.current()
         val retryIds = retryGameIds
         retryGameIds = null
 
-        val filtered = when {
-            retryIds != null -> games.filter { it.id in retryIds }
-            policy.mode == ScrapeRunMode.Force -> games
-            policy.mode == ScrapeRunMode.FillGaps -> {
-                val mediaByGame = gameRepository.mediaForGames(games.map { it.id })
-                games.filter { game ->
-                    game.needsGapFill(mediaByGame[game.id].orEmpty())
+        val filtered =
+            when {
+                retryIds != null -> {
+                    games.filter { it.id in retryIds }
+                }
+
+                policy.mode == ScrapeRunMode.Force -> {
+                    games
+                }
+
+                policy.mode == ScrapeRunMode.FillGaps -> {
+                    val mediaByGame = gameRepository.mediaForGames(games.map { it.id })
+                    games.filter { game ->
+                        game.needsGapFill(mediaByGame[game.id].orEmpty())
+                    }
+                }
+
+                else -> {
+                    games
                 }
             }
-            else -> games
-        }
 
         if (filtered.isEmpty()) {
-            _progress.value = BatchScrapeProgress(
-                running = false,
-                platformId = platformId,
-                statusMessage = if (retryIds != null) "Nothing to retry" else "Nothing to scrape"
-            )
+            _progress.value =
+                BatchScrapeProgress(
+                    running = false,
+                    platformId = platformId,
+                    statusMessage = if (retryIds != null) "Nothing to retry" else "Nothing to scrape",
+                )
             progressStore.save(_progress.value)
             return
         }
 
         val checkpoint = progressStore.load()
-        val canResume = retryIds == null &&
-            policy.mode == ScrapeRunMode.FillGaps &&
-            checkpoint?.running == true
-        val base = if (canResume) {
-            checkpoint.copy(paused = false, currentGameName = null, statusMessage = null)
-        } else {
-            BatchScrapeProgress(platformId = platformId)
-        }
-        _progress.value = base.copy(
-            running = true,
-            total = if (retryIds != null || !canResume) filtered.size else base.done + filtered.size,
-            platformId = platformId ?: base.platformId,
-            statusMessage = when {
-                retryIds != null -> "Retrying failed…"
-                policy.mode == ScrapeRunMode.Force -> "Force scraping…"
-                else -> null
-            },
-            matched = if (retryIds != null || !canResume) 0 else base.matched,
-            partial = if (retryIds != null || !canResume) 0 else base.partial,
-            noMatch = if (retryIds != null || !canResume) 0 else base.noMatch,
-            errorCount = if (retryIds != null || !canResume) 0 else base.errorCount,
-            done = if (retryIds != null || !canResume) 0 else base.done,
-            issues = if (retryIds != null || !canResume) emptyList() else base.issues,
-            errors = if (retryIds != null || !canResume) emptyMap() else base.errors,
-            failed = if (retryIds != null || !canResume) 0 else base.failed
-        )
+        val canResume =
+            retryIds == null &&
+                policy.mode == ScrapeRunMode.FillGaps &&
+                checkpoint?.running == true
+        val base =
+            if (canResume) {
+                checkpoint.copy(paused = false, currentGameName = null, statusMessage = null)
+            } else {
+                BatchScrapeProgress(platformId = platformId)
+            }
+        _progress.value =
+            base.copy(
+                running = true,
+                total = if (retryIds != null || !canResume) filtered.size else base.done + filtered.size,
+                platformId = platformId ?: base.platformId,
+                statusMessage =
+                    when {
+                        retryIds != null -> "Retrying failed…"
+                        policy.mode == ScrapeRunMode.Force -> "Force scraping…"
+                        else -> null
+                    },
+                matched = if (retryIds != null || !canResume) 0 else base.matched,
+                partial = if (retryIds != null || !canResume) 0 else base.partial,
+                noMatch = if (retryIds != null || !canResume) 0 else base.noMatch,
+                errorCount = if (retryIds != null || !canResume) 0 else base.errorCount,
+                done = if (retryIds != null || !canResume) 0 else base.done,
+                issues = if (retryIds != null || !canResume) emptyList() else base.issues,
+                errors = if (retryIds != null || !canResume) emptyMap() else base.errors,
+                failed = if (retryIds != null || !canResume) 0 else base.failed,
+            )
         progressStore.save(_progress.value)
         userCancelled = false
         var interrupted = false
@@ -289,22 +314,24 @@ class BatchScraper(
         try {
             for (game in filtered) {
                 pauseFlag.first { !it }
-                _progress.value = _progress.value.copy(
-                    currentGameName = game.displayName,
-                    statusMessage = if (pauseFlag.value) "Paused" else null
-                )
-                val result = try {
-                    engine.scrapeGame(game, settings, policy)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    GameScrapeResult(
-                        gameId = game.id,
-                        outcome = GameScrapeOutcome.Error,
-                        failureKind = ScrapeFailureKind.Unknown,
-                        message = e.message ?: "error"
+                _progress.value =
+                    _progress.value.copy(
+                        currentGameName = game.displayName,
+                        statusMessage = if (pauseFlag.value) "Paused" else null,
                     )
-                }
+                val result =
+                    try {
+                        engine.scrapeGame(game, settings, policy)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        GameScrapeResult(
+                            gameId = game.id,
+                            outcome = GameScrapeOutcome.Error,
+                            failureKind = ScrapeFailureKind.Unknown,
+                            message = e.message ?: "error",
+                        )
+                    }
                 _progress.value = applyResult(_progress.value, game, result)
                 val now = System.currentTimeMillis()
                 if (now - lastCheckpointAt >= CHECKPOINT_INTERVAL_MS) {
@@ -316,12 +343,13 @@ class BatchScraper(
             interrupted = true
             throw e
         } finally {
-            _progress.value = _progress.value.copy(
-                running = false,
-                paused = false,
-                currentGameName = null,
-                statusMessage = null
-            )
+            _progress.value =
+                _progress.value.copy(
+                    running = false,
+                    paused = false,
+                    currentGameName = null,
+                    statusMessage = null,
+                )
             pauseFlag.value = false
             val resumable = interrupted && !userCancelled
             withContext(NonCancellable) {
@@ -335,20 +363,20 @@ class BatchScraper(
 
     suspend fun runForPlatform(
         platformId: String?,
-        policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps
+        policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps,
     ) {
         val all = gameRepository.observeAll().first()
         run(
             games = if (platformId == null) all else all.filter { it.platformId == platformId },
             platformId = platformId,
-            policy = policy
+            policy = policy,
         )
     }
 
     private fun applyResult(
         progress: BatchScrapeProgress,
         game: GameEntity,
-        result: GameScrapeResult
+        result: GameScrapeResult,
     ): BatchScrapeProgress {
         var matched = progress.matched
         var partial = progress.partial
@@ -357,49 +385,57 @@ class BatchScraper(
         var issues = progress.issues
 
         when (result.outcome) {
-            GameScrapeOutcome.Matched -> matched++
+            GameScrapeOutcome.Matched -> {
+                matched++
+            }
+
             GameScrapeOutcome.Partial -> {
                 partial++
-                issues = appendIssue(
-                    issues,
-                    BatchScrapeIssue(
-                        gameId = game.id,
-                        gameName = game.displayName,
-                        kind = result.failureKind ?: ScrapeFailureKind.Download,
-                        message = result.message ?: "Partial — no media saved",
-                        platformId = game.platformId,
-                        outcome = GameScrapeOutcome.Partial
+                issues =
+                    appendIssue(
+                        issues,
+                        BatchScrapeIssue(
+                            gameId = game.id,
+                            gameName = game.displayName,
+                            kind = result.failureKind ?: ScrapeFailureKind.Download,
+                            message = result.message ?: "Partial — no media saved",
+                            platformId = game.platformId,
+                            outcome = GameScrapeOutcome.Partial,
+                        ),
                     )
-                )
             }
+
             GameScrapeOutcome.NoMatch -> {
                 noMatch++
-                issues = appendIssue(
-                    issues,
-                    BatchScrapeIssue(
-                        gameId = game.id,
-                        gameName = game.displayName,
-                        kind = ScrapeFailureKind.NoMatch,
-                        message = result.sourceSummaryLine() ?: "No match",
-                        platformId = game.platformId,
-                        outcome = GameScrapeOutcome.NoMatch
+                issues =
+                    appendIssue(
+                        issues,
+                        BatchScrapeIssue(
+                            gameId = game.id,
+                            gameName = game.displayName,
+                            kind = ScrapeFailureKind.NoMatch,
+                            message = result.sourceSummaryLine() ?: "No match",
+                            platformId = game.platformId,
+                            outcome = GameScrapeOutcome.NoMatch,
+                        ),
                     )
-                )
             }
+
             GameScrapeOutcome.Error -> {
                 errorCount++
                 val msg = result.message ?: "Error"
-                issues = appendIssue(
-                    issues,
-                    BatchScrapeIssue(
-                        gameId = game.id,
-                        gameName = game.displayName,
-                        kind = result.failureKind ?: ScrapeFailureKind.Unknown,
-                        message = result.sourceSummaryLine() ?: msg,
-                        platformId = game.platformId,
-                        outcome = GameScrapeOutcome.Error
+                issues =
+                    appendIssue(
+                        issues,
+                        BatchScrapeIssue(
+                            gameId = game.id,
+                            gameName = game.displayName,
+                            kind = result.failureKind ?: ScrapeFailureKind.Unknown,
+                            message = result.sourceSummaryLine() ?: msg,
+                            platformId = game.platformId,
+                            outcome = GameScrapeOutcome.Error,
+                        ),
                     )
-                )
             }
         }
 
@@ -411,13 +447,13 @@ class BatchScraper(
             errorCount = errorCount,
             // Legacy mirror for old checkpoints / helpers — prefer issue counters.
             failed = partial + noMatch + errorCount,
-            issues = issues
+            issues = issues,
         )
     }
 
     private fun appendIssue(
         issues: List<BatchScrapeIssue>,
-        issue: BatchScrapeIssue
+        issue: BatchScrapeIssue,
     ): List<BatchScrapeIssue> {
         val next = issues.filterNot { it.gameId == issue.gameId } + issue
         return if (next.size <= MAX_ISSUES) next else next.takeLast(MAX_ISSUES)

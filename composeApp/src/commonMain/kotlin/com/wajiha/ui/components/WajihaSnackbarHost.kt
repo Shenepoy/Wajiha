@@ -18,14 +18,14 @@ fun rememberWajihaSnackbarHostState(): SnackbarHostState = remember { SnackbarHo
 @Composable
 fun WajihaSnackbarHost(
     hostState: SnackbarHostState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     SnackbarHost(
         hostState = hostState,
         modifier = modifier.padding(WajihaSpacing.md),
         snackbar = { data ->
             Snackbar(snackbarData = data)
-        }
+        },
     )
 }
 
@@ -33,13 +33,13 @@ fun WajihaSnackbarHost(
 fun WajihaSnackbarScaffold(
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         content()
         WajihaSnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
 }

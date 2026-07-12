@@ -9,8 +9,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -32,7 +32,7 @@ fun GamepadFocusable(
     selected: Boolean = false,
     navHighlighted: Boolean = false,
     shape: Shape = WajihaShapes.focus,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     var pressed by remember { mutableStateOf(false) }
@@ -46,42 +46,41 @@ fun GamepadFocusable(
     }
 
     Box(
-        modifier = modifier
-            .clip(shape)
-            .wajihaPressedFeedback(pressed, shape)
-            .wajihaFocusIndicator(
-                highlighted = highlight,
-                shape = shape,
-                selected = selected || navHighlighted
-            )
-            .then(
-                if (!useCustomNav) {
-                    Modifier
-                        .onFocusChanged { focused = it.isFocused }
-                        .wajihaGamepadFocus()
-                        .onPreviewKeyEvent { event ->
-                            if (GamepadKeys.isConfirm(event.type, event.key)) {
-                                performClick()
-                                true
-                            } else {
-                                false
+        modifier =
+            modifier
+                .clip(shape)
+                .wajihaPressedFeedback(pressed, shape)
+                .wajihaFocusIndicator(
+                    highlighted = highlight,
+                    shape = shape,
+                    selected = selected || navHighlighted,
+                ).then(
+                    if (!useCustomNav) {
+                        Modifier
+                            .onFocusChanged { focused = it.isFocused }
+                            .wajihaGamepadFocus()
+                            .onPreviewKeyEvent { event ->
+                                if (GamepadKeys.isConfirm(event.type, event.key)) {
+                                    performClick()
+                                    true
+                                } else {
+                                    false
+                                }
                             }
-                        }
-                } else {
-                    Modifier
-                }
-            )
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        pressed = true
-                        val released = tryAwaitRelease()
-                        pressed = false
-                        if (released) performClick()
-                    }
-                )
-            },
-        contentAlignment = androidx.compose.ui.Alignment.Center
+                    } else {
+                        Modifier
+                    },
+                ).pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = {
+                            pressed = true
+                            val released = tryAwaitRelease()
+                            pressed = false
+                            if (released) performClick()
+                        },
+                    )
+                },
+        contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
         content()
     }

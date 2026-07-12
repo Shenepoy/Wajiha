@@ -7,8 +7,8 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.wajiha.state.NowPlayingState
-import kotlin.time.Clock
 import kotlinx.coroutines.delay
+import kotlin.time.Clock
 
 fun formatSessionElapsed(elapsedMs: Long): String {
     val totalSec = (elapsedMs / 1000).coerceAtLeast(0)
@@ -22,7 +22,7 @@ fun rememberSessionElapsedMs(session: NowPlayingState): Long {
     var elapsed by remember(
         session.packageName,
         session.sessionElapsedMs,
-        session.sessionResumedAt
+        session.sessionResumedAt,
     ) {
         mutableLongStateOf(session.activeElapsedMs())
     }

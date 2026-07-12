@@ -10,7 +10,10 @@ import android.content.Intent
  * frame is fast (Application.onCreate runs Koin + DB init).
  */
 class BootReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
+    override fun onReceive(
+        context: Context,
+        intent: Intent,
+    ) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
             intent.action != Intent.ACTION_LOCKED_BOOT_COMPLETED
         ) {

@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.SoftwareKeyboardController
  */
 fun dismissTextEdit(
     focusManager: FocusManager? = null,
-    keyboard: SoftwareKeyboardController? = null
+    keyboard: SoftwareKeyboardController? = null,
 ): Boolean {
     val wasEditing = GamepadTextEditRegistry.isEditing
     GamepadTextEditRegistry.dismissIfEditing()

@@ -20,7 +20,7 @@ fun HttpRequestBuilder.steamGridDbAuth(settings: ScraperSettings) {
 fun HttpRequestBuilder.screenScraperParams(
     settings: ScraperSettings,
     devId: String,
-    devPassword: String
+    devPassword: String,
 ) {
     parameter("devid", devId)
     parameter("devpassword", devPassword)
@@ -32,5 +32,5 @@ fun HttpRequestBuilder.screenScraperParams(
 
 fun HttpRequestBuilder.screenScraperParams(
     settings: ScraperSettings,
-    devCreds: ScreenScraperDevCredentials
+    devCreds: ScreenScraperDevCredentials,
 ) = screenScraperParams(settings, devCreds.devId, devCreds.devPassword)

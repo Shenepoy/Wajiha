@@ -20,17 +20,25 @@ import com.wajiha.ui.home.TopScreen
  * When roles are swapped, the menu moves to the primary (top) activity and the
  * hero moves to the secondary (bottom) activity — on every route, not only Home.
  */
-fun menuOnPrimary(isDual: Boolean, swapScreenRoles: Boolean): Boolean =
-    !isDual || swapScreenRoles
+fun menuOnPrimary(
+    isDual: Boolean,
+    swapScreenRoles: Boolean,
+): Boolean = !isDual || swapScreenRoles
 
-fun heroOnPrimary(isDual: Boolean, swapScreenRoles: Boolean): Boolean =
-    isDual && !swapScreenRoles
+fun heroOnPrimary(
+    isDual: Boolean,
+    swapScreenRoles: Boolean,
+): Boolean = isDual && !swapScreenRoles
 
-fun menuOnSecondary(isDual: Boolean, swapScreenRoles: Boolean): Boolean =
-    isDual && !swapScreenRoles
+fun menuOnSecondary(
+    isDual: Boolean,
+    swapScreenRoles: Boolean,
+): Boolean = isDual && !swapScreenRoles
 
-fun heroOnSecondary(isDual: Boolean, swapScreenRoles: Boolean): Boolean =
-    isDual && swapScreenRoles
+fun heroOnSecondary(
+    isDual: Boolean,
+    swapScreenRoles: Boolean,
+): Boolean = isDual && swapScreenRoles
 
 @Composable
 fun LauncherHeroPane(
@@ -39,7 +47,7 @@ fun LauncherHeroPane(
     heroContext: HeroContext,
     modifier: Modifier = Modifier,
     gamepadOwner: GamepadOwner? = null,
-    onClaimGamepad: ((GamepadOwner) -> Unit)? = null
+    onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
 ) {
     val hero = launcherHero(state, focusedGameId)
     val contentFocus = remember { FocusRequester() }
@@ -48,14 +56,14 @@ fun LauncherHeroPane(
         modifier = modifier,
         owner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
-        onOwnerGainedFocus = { contentFocus.requestContentFocus() }
+        onOwnerGainedFocus = { contentFocus.requestContentFocus() },
     ) {
         TopScreen(
             focused = hero.focusedTile,
             platformName = hero.platformName,
             heroContext = heroContext,
             contentFocusRequester = contentFocus,
-            modifier = Modifier
+            modifier = Modifier,
         )
     }
 }

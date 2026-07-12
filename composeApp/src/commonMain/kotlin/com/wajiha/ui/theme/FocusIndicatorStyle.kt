@@ -11,7 +11,7 @@ import com.wajiha.data.prefs.FocusIndicatorPreferenceValues
 /** Where the focus ring stroke sits relative to the focused item bounds. */
 enum class FocusPlacement {
     Inside,
-    Outside
+    Outside,
 }
 
 /** Visual style for Wajiha gamepad focus chrome. */
@@ -25,7 +25,7 @@ enum class FocusBorderStyle {
     Glow,
     CornerBrackets,
     GradientPulse,
-    Neon
+    Neon,
 }
 
 object FocusIndicatorDefaults {
@@ -44,7 +44,7 @@ data class FocusIndicatorStyle(
     val thickness: Dp = WajihaFocus.borderWidth,
     val borderStyle: FocusBorderStyle = FocusBorderStyle.Solid,
     val selectedThickness: Dp = WajihaFocus.selectedBorderWidth,
-    val placement: FocusPlacement = FocusPlacement.Inside
+    val placement: FocusPlacement = FocusPlacement.Inside,
 )
 
 val LocalFocusIndicatorStyle = compositionLocalOf { FocusIndicatorStyle() }
@@ -80,12 +80,10 @@ fun focusColorFromPreference(value: String): Color? {
 }
 
 @Composable
-fun focusColorPreview(value: String): Color =
-    focusColorFromPreference(value) ?: WajihaFocus.borderColor()
+fun focusColorPreview(value: String): Color = focusColorFromPreference(value) ?: WajihaFocus.borderColor()
 
 @Composable
-fun focusColorDisplayLabel(value: String): String =
-    FocusIndicatorPreferenceValues.displayColorLabel(value)
+fun focusColorDisplayLabel(value: String): String = FocusIndicatorPreferenceValues.displayColorLabel(value)
 
 @Composable
 fun AppSettings.toFocusIndicatorStyle(): FocusIndicatorStyle {
@@ -95,6 +93,6 @@ fun AppSettings.toFocusIndicatorStyle(): FocusIndicatorStyle {
         thickness = thicknessDp,
         borderStyle = focusBorderStyleFromPreference(focusBorderStyle),
         selectedThickness = (thicknessDp.value + 1f).dp,
-        placement = focusPlacementFromPreference(focusPlacement)
+        placement = focusPlacementFromPreference(focusPlacement),
     )
 }

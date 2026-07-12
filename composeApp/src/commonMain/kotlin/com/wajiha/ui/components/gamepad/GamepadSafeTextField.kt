@@ -1,9 +1,9 @@
 package com.wajiha.ui.components.gamepad
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,7 +50,7 @@ fun GamepadSafeTextField(
     singleLine: Boolean = true,
     navItemId: Any? = null,
     overridden: Boolean = false,
-    overrideHint: String = "Changed from global default"
+    overrideHint: String = "Changed from global default",
 ) {
     var editing by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -72,9 +72,10 @@ fun GamepadSafeTextField(
         }
     }
 
-    val dismissHandler = remember(controller, keyboard) {
-        { exitEditing() }
-    }
+    val dismissHandler =
+        remember(controller, keyboard) {
+            { exitEditing() }
+        }
 
     DisposableEffect(editing) {
         if (editing) {
@@ -98,19 +99,20 @@ fun GamepadSafeTextField(
         }
     }
 
-    val fieldModifier = modifier
-        .clip(WajihaShapes.focus)
-        .then(
-            if (highlighted && inputMode == InputMode.Gamepad) {
-                Modifier.border(
-                    width = WajihaFocus.borderWidth,
-                    color = WajihaFocus.borderColor(),
-                    shape = WajihaShapes.focus
-                )
-            } else {
-                Modifier
-            }
-        )
+    val fieldModifier =
+        modifier
+            .clip(WajihaShapes.focus)
+            .then(
+                if (highlighted && inputMode == InputMode.Gamepad) {
+                    Modifier.border(
+                        width = WajihaFocus.borderWidth,
+                        color = WajihaFocus.borderColor(),
+                        shape = WajihaShapes.focus,
+                    )
+                } else {
+                    Modifier
+                },
+            )
 
     if (useCustomNav) {
         com.wajiha.input.GamepadNavItem(
@@ -130,7 +132,7 @@ fun GamepadSafeTextField(
                 keyboard?.hide()
                 true
             },
-            modifier = fieldModifier
+            modifier = fieldModifier,
         ) { isHighlighted ->
             highlighted = isHighlighted
             TextFieldBody(
@@ -151,7 +153,7 @@ fun GamepadSafeTextField(
                         keyboard?.hide()
                     }
                 },
-                modifier = Modifier
+                modifier = Modifier,
             )
         }
     } else {
@@ -163,7 +165,7 @@ fun GamepadSafeTextField(
             singleLine = singleLine,
             overridden = overridden,
             overrideHint = overrideHint,
-            modifier = fieldModifier
+            modifier = fieldModifier,
         )
     }
 }
@@ -172,11 +174,11 @@ fun GamepadSafeTextField(
 private fun TextFieldLabel(
     label: String,
     overridden: Boolean,
-    overrideHint: String
+    overrideHint: String,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
     ) {
         Text(label)
         if (overridden) {
@@ -198,7 +200,7 @@ private fun TextFieldBody(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
     onTap: (() -> Unit)? = null,
-    onFocusChanged: ((Boolean) -> Unit)? = null
+    onFocusChanged: ((Boolean) -> Unit)? = null,
 ) {
     OutlinedTextField(
         value = value,
@@ -206,31 +208,32 @@ private fun TextFieldBody(
         label = { TextFieldLabel(label, overridden, overrideHint) },
         singleLine = singleLine,
         readOnly = !editing,
-        visualTransformation = if (secret) {
-            PasswordVisualTransformation()
-        } else {
-            VisualTransformation.None
-        },
-        modifier = modifier
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .then(
-                if (onFocusChanged != null) {
-                    Modifier.onFocusChanged { onFocusChanged(it.isFocused) }
-                } else {
-                    Modifier
-                }
-            )
-            .then(
-                if (onTap != null) {
-                    Modifier.pointerInput(onTap, editing) {
-                        detectTapGestures {
-                            onTap()
+        visualTransformation =
+            if (secret) {
+                PasswordVisualTransformation()
+            } else {
+                VisualTransformation.None
+            },
+        modifier =
+            modifier
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .then(
+                    if (onFocusChanged != null) {
+                        Modifier.onFocusChanged { onFocusChanged(it.isFocused) }
+                    } else {
+                        Modifier
+                    },
+                ).then(
+                    if (onTap != null) {
+                        Modifier.pointerInput(onTap, editing) {
+                            detectTapGestures {
+                                onTap()
+                            }
                         }
-                    }
-                } else {
-                    Modifier
-                }
-            )
+                    } else {
+                        Modifier
+                    },
+                ),
     )
 }
 
@@ -244,12 +247,16 @@ private fun LegacyGamepadSafeTextField(
     singleLine: Boolean,
     overridden: Boolean = false,
     overrideHint: String = "Changed from global default",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var editing by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val focusRequester =
+        remember {
+            androidx.compose.ui.focus
+                .FocusRequester()
+        }
 
     fun exitEditing(): Boolean {
         if (!editing) return false
@@ -276,69 +283,87 @@ private fun LegacyGamepadSafeTextField(
         label = { TextFieldLabel(label, overridden, overrideHint) },
         singleLine = singleLine,
         readOnly = !editing,
-        visualTransformation = if (secret) {
-            PasswordVisualTransformation()
-        } else {
-            VisualTransformation.None
-        },
-        modifier = modifier
-            .focusRequester(focusRequester)
-            .onPreviewKeyEvent { event ->
-                if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) {
-                    return@onPreviewKeyEvent false
-                }
-                when {
-                    editing && GamepadKeys.isBack(event.type, event.key) -> {
-                        exitEditing()
+        visualTransformation =
+            if (secret) {
+                PasswordVisualTransformation()
+            } else {
+                VisualTransformation.None
+            },
+        modifier =
+            modifier
+                .focusRequester(focusRequester)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) {
+                        return@onPreviewKeyEvent false
                     }
-                    editing && event.key == androidx.compose.ui.input.key.Key.DirectionUp -> {
-                        exitEditing()
-                    }
-                    !editing -> {
-                        val direction = when (event.key) {
-                            androidx.compose.ui.input.key.Key.DirectionDown ->
-                                androidx.compose.ui.focus.FocusDirection.Down
-                            androidx.compose.ui.input.key.Key.DirectionUp ->
-                                androidx.compose.ui.focus.FocusDirection.Up
-                            androidx.compose.ui.input.key.Key.DirectionLeft ->
-                                androidx.compose.ui.focus.FocusDirection.Left
-                            androidx.compose.ui.input.key.Key.DirectionRight ->
-                                androidx.compose.ui.focus.FocusDirection.Right
-                            else -> null
+                    when {
+                        editing && GamepadKeys.isBack(event.type, event.key) -> {
+                            exitEditing()
                         }
-                        if (direction != null) {
-                            focusManager.moveFocus(direction)
-                            true
-                        } else if (com.wajiha.input.GamepadKeys.isConfirm(event.type, event.key)) {
-                            editing = true
-                            keyboard?.show()
-                            true
-                        } else {
+
+                        editing && event.key == androidx.compose.ui.input.key.Key.DirectionUp -> {
+                            exitEditing()
+                        }
+
+                        !editing -> {
+                            val direction =
+                                when (event.key) {
+                                    androidx.compose.ui.input.key.Key.DirectionDown -> {
+                                        androidx.compose.ui.focus.FocusDirection.Down
+                                    }
+
+                                    androidx.compose.ui.input.key.Key.DirectionUp -> {
+                                        androidx.compose.ui.focus.FocusDirection.Up
+                                    }
+
+                                    androidx.compose.ui.input.key.Key.DirectionLeft -> {
+                                        androidx.compose.ui.focus.FocusDirection.Left
+                                    }
+
+                                    androidx.compose.ui.input.key.Key.DirectionRight -> {
+                                        androidx.compose.ui.focus.FocusDirection.Right
+                                    }
+
+                                    else -> {
+                                        null
+                                    }
+                                }
+                            if (direction != null) {
+                                focusManager.moveFocus(direction)
+                                true
+                            } else if (com.wajiha.input.GamepadKeys
+                                    .isConfirm(event.type, event.key)
+                            ) {
+                                editing = true
+                                keyboard?.show()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+
+                        else -> {
                             false
                         }
                     }
-                    else -> false
-                }
-            }
-            .onFocusChanged { state ->
-                if (state.isFocused && !editing) {
-                    keyboard?.hide()
-                }
-                if (!state.isFocused && editing) {
-                    editing = false
-                    keyboard?.hide()
-                }
-            }
-            .pointerInput(Unit) {
-                detectTapGestures {
-                    editing = true
-                    try {
-                        focusRequester.requestFocus()
-                    } catch (_: Exception) {
+                }.onFocusChanged { state ->
+                    if (state.isFocused && !editing) {
+                        keyboard?.hide()
                     }
-                    keyboard?.show()
-                }
-            }
+                    if (!state.isFocused && editing) {
+                        editing = false
+                        keyboard?.hide()
+                    }
+                }.pointerInput(Unit) {
+                    detectTapGestures {
+                        editing = true
+                        try {
+                            focusRequester.requestFocus()
+                        } catch (_: Exception) {
+                        }
+                        keyboard?.show()
+                    }
+                },
     )
 }
 
@@ -349,13 +374,13 @@ fun GamepadSearchField(
     onValueChange: (String) -> Unit,
     label: String = "Search",
     modifier: Modifier = Modifier,
-    navItemId: Any? = null
+    navItemId: Any? = null,
 ) {
     GamepadSafeTextField(
         value = value,
         onValueChange = onValueChange,
         label = label,
         modifier = modifier,
-        navItemId = navItemId
+        navItemId = navItemId,
     )
 }

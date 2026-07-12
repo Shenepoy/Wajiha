@@ -11,5 +11,5 @@ enum class GamepadOwner {
     Primary,
 
     /** [com.wajiha.android.SecondaryHomeActivity] — bottom / secondary display. */
-    Secondary
+    Secondary,
 }

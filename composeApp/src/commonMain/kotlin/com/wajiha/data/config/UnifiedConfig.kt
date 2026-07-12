@@ -19,7 +19,7 @@ data class PlatformConfig(
     val libretroName: String? = null,
     val boxartAspectRatio: String? = null,
     val sortIndex: Int = 0,
-    val emulators: List<EmulatorConfig> = emptyList()
+    val emulators: List<EmulatorConfig> = emptyList(),
 )
 
 @Serializable
@@ -39,7 +39,7 @@ data class EmulatorConfig(
     val keepSafUri: Boolean = false,
     val killBeforeLaunch: Boolean = false,
     val libretroCore: String? = null,
-    val isDefault: Boolean = false
+    val isDefault: Boolean = false,
 )
 
 @Serializable
@@ -47,5 +47,5 @@ data class IntentExtra(
     val key: String,
     val value: String,
     /** string | int | long | boolean | float */
-    val type: String = "string"
+    val type: String = "string",
 )

@@ -9,7 +9,7 @@ import kotlin.time.Clock
  */
 class GamepadInputProcessor(
     private val repeatIntervalMs: Long = 120L,
-    private val gracePeriodMs: Long = 250L
+    private val gracePeriodMs: Long = 250L,
 ) {
     private var lastKey: Key? = null
     private var lastEventTimeMs: Long = 0L
@@ -19,7 +19,10 @@ class GamepadInputProcessor(
         layerPushedAtMs = Clock.System.now().toEpochMilliseconds()
     }
 
-    fun shouldConsume(type: KeyEventType, key: Key): Boolean {
+    fun shouldConsume(
+        type: KeyEventType,
+        key: Key,
+    ): Boolean {
         if (key == Key.ButtonX || isShoulderTabKey(key)) return false
         val now = Clock.System.now().toEpochMilliseconds()
         if (now - layerPushedAtMs < gracePeriodMs) return true

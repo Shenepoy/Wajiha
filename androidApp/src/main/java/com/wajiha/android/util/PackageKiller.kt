@@ -10,14 +10,17 @@ import com.wajiha.log.WajihaTags
  * foreground emulators; reflection / `am force-stop` matches Y-close behavior.
  */
 object PackageKiller {
-
-    fun forceStopPackageBestEffort(context: Context, packageName: String): Boolean {
+    fun forceStopPackageBestEffort(
+        context: Context,
+        packageName: String,
+    ): Boolean {
         try {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            val method = ActivityManager::class.java.getMethod(
-                "forceStopPackage",
-                String::class.java
-            )
+            val method =
+                ActivityManager::class.java.getMethod(
+                    "forceStopPackage",
+                    String::class.java,
+                )
             method.invoke(am, packageName)
             WajihaLog.i(WajihaTags.NOW_PLAYING, "forceStopPackage: ok $packageName")
             return true
@@ -25,7 +28,7 @@ object PackageKiller {
             val cause = (e as? java.lang.reflect.InvocationTargetException)?.cause ?: e
             WajihaLog.w(
                 WajihaTags.NOW_PLAYING,
-                "forceStopPackage: reflect failed $packageName — ${cause.message}"
+                "forceStopPackage: reflect failed $packageName — ${cause.message}",
             )
         }
         return try {
@@ -35,20 +38,20 @@ object PackageKiller {
             if (ok) {
                 WajihaLog.i(
                     WajihaTags.NOW_PLAYING,
-                    "forceStopPackage: am force-stop $packageName exit=$exit"
+                    "forceStopPackage: am force-stop $packageName exit=$exit",
                 )
             } else {
                 WajihaLog.w(
                     WajihaTags.NOW_PLAYING,
                     "forceStopPackage: am force-stop $packageName exit=$exit " +
-                        "(needs FORCE_STOP_PACKAGES / priv-app on stock Android)"
+                        "(needs FORCE_STOP_PACKAGES / priv-app on stock Android)",
                 )
             }
             ok
         } catch (e: Exception) {
             WajihaLog.w(
                 WajihaTags.NOW_PLAYING,
-                "forceStopPackage: unavailable for $packageName — ${e.message}"
+                "forceStopPackage: unavailable for $packageName — ${e.message}",
             )
             false
         }

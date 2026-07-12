@@ -53,7 +53,7 @@ fun SessionGridTile(
     focusRequester: FocusRequester? = null,
     gamepadFocusable: Boolean = true,
     navHighlighted: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     val displayName = sessionDisplayLabel(session) ?: session.packageName
@@ -69,29 +69,33 @@ fun SessionGridTile(
         focusRequester = focusRequester,
         gamepadFocusable = gamepadFocusable,
         navHighlighted = navHighlighted || (isFeatured && selected),
-        modifier = modifier
-            .aspectRatio(3f / 4f)
-            .focusProperties {
-                left = FocusRequester.Cancel
-            }
-            .onPreviewKeyEvent { event ->
-                when {
-                    GamepadKeys.isY(event.type, event.key) -> {
-                        onClose()
-                        true
+        modifier =
+            modifier
+                .aspectRatio(3f / 4f)
+                .focusProperties {
+                    left = FocusRequester.Cancel
+                }.onPreviewKeyEvent { event ->
+                    when {
+                        GamepadKeys.isY(event.type, event.key) -> {
+                            onClose()
+                            true
+                        }
+
+                        GamepadKeys.isConfirm(event.type, event.key) -> {
+                            onOpen()
+                            true
+                        }
+
+                        else -> {
+                            false
+                        }
                     }
-                    GamepadKeys.isConfirm(event.type, event.key) -> {
-                        onOpen()
-                        true
-                    }
-                    else -> false
-                }
-            }
+                },
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = scheme.surfaceVariant,
-            shape = WajihaShapes.tile
+            shape = WajihaShapes.tile,
         ) {
             Box {
                 if (session.boxartPath != null) {
@@ -99,24 +103,26 @@ fun SessionGridTile(
                         model = session.boxartPath,
                         contentDescription = displayName,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     )
                     if (!isOnTop) {
                         Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(Color.Black.copy(alpha = 0.45f))
+                            modifier =
+                                Modifier
+                                    .matchParentSize()
+                                    .background(Color.Black.copy(alpha = 0.45f)),
                         )
                     }
                     Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(Color.Transparent, WajihaColors.TileScrim)
-                                )
-                            )
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(Color.Transparent, WajihaColors.TileScrim),
+                                    ),
+                                ),
                     ) {
                         Text(
                             text = statusLabel,
@@ -125,17 +131,18 @@ fun SessionGridTile(
                             color = WajihaColors.OnDark,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(
-                                horizontal = WajihaSpacing.sm,
-                                vertical = WajihaSpacing.sm
-                            )
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = WajihaSpacing.sm,
+                                    vertical = WajihaSpacing.sm,
+                                ),
                         )
                     }
                 } else {
                     Column(
                         modifier = Modifier.fillMaxSize().padding(WajihaSpacing.sm),
                         verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(
                             text = displayName,
@@ -143,7 +150,7 @@ fun SessionGridTile(
                             textAlign = TextAlign.Center,
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
-                            color = scheme.onSurfaceVariant
+                            color = scheme.onSurfaceVariant,
                         )
                         Text(
                             text = statusLabel,
@@ -151,18 +158,19 @@ fun SessionGridTile(
                             fontFamily = FontFamily.Monospace,
                             textAlign = TextAlign.Center,
                             color = scheme.onSurfaceVariant.copy(alpha = 0.85f),
-                            modifier = Modifier.padding(top = WajihaSpacing.xs)
+                            modifier = Modifier.padding(top = WajihaSpacing.xs),
                         )
                     }
                 }
                 if (isOnTop) {
                     Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(WajihaSpacing.sm)
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(SessionOnTopGreen)
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(WajihaSpacing.sm)
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(SessionOnTopGreen),
                     )
                 }
             }

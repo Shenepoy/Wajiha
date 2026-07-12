@@ -21,7 +21,7 @@ fun GamepadOverlayLayer(
     onConfirm: (() -> Boolean)? = null,
     onToggleKey: ((KeyEvent) -> Boolean)? = null,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -34,25 +34,33 @@ fun GamepadOverlayLayer(
     BackHandler(onBack = onDismiss)
 
     Box(
-        modifier = Modifier
-            .dismissKeyboardOnOutsideTap()
-            .onPreviewKeyEvent { event ->
-                when {
-                    onToggleKey?.invoke(event) == true -> true
-                    GamepadKeys.isBack(event.type, event.key) -> {
-                        if (dismissTextEdit(focusManager, keyboard)) {
-                            true
-                        } else {
-                            onDismiss()
+        modifier =
+            Modifier
+                .dismissKeyboardOnOutsideTap()
+                .onPreviewKeyEvent { event ->
+                    when {
+                        onToggleKey?.invoke(event) == true -> {
                             true
                         }
+
+                        GamepadKeys.isBack(event.type, event.key) -> {
+                            if (dismissTextEdit(focusManager, keyboard)) {
+                                true
+                            } else {
+                                onDismiss()
+                                true
+                            }
+                        }
+
+                        onConfirm != null && GamepadKeys.isConfirm(event.type, event.key) -> {
+                            onConfirm()
+                        }
+
+                        else -> {
+                            false
+                        }
                     }
-                    onConfirm != null && GamepadKeys.isConfirm(event.type, event.key) -> {
-                        onConfirm()
-                    }
-                    else -> false
-                }
-            }
+                },
     ) {
         content()
     }

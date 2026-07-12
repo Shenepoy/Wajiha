@@ -15,9 +15,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.backhandler.BackHandler
 import com.wajiha.input.requestContentFocus
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.AppActions
@@ -30,26 +30,26 @@ import com.wajiha.ui.apps.AppDrawerScreen
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaSnackbarHost
 import com.wajiha.ui.components.WajihaToolbar
+import com.wajiha.ui.components.gamepad.quickSettingsGamepadHints
 import com.wajiha.ui.components.rememberWajihaSnackbarHostState
 import com.wajiha.ui.gamedetail.GameDetailScreen
 import com.wajiha.ui.home.BottomScreen
 import com.wajiha.ui.home.HomeViewModel
 import com.wajiha.ui.home.TopScreen
-import com.wajiha.ui.onboarding.OnboardingScreen
-import com.wajiha.ui.scraper.ScraperScreen
-import com.wajiha.ui.scraper.ScraperViewModel
-import com.wajiha.ui.settings.PlatformPickerScreen
-import com.wajiha.ui.settings.PlatformSettingsScreen
-import com.wajiha.ui.settings.SettingsScreen
-import com.wajiha.ui.settings.SettingsViewModel
-import com.wajiha.ui.components.gamepad.quickSettingsGamepadHints
 import com.wajiha.ui.navigation.LauncherHeroPane
 import com.wajiha.ui.navigation.SyncSystemHeroSnapshot
 import com.wajiha.ui.navigation.heroOnPrimary
 import com.wajiha.ui.navigation.launcherHero
 import com.wajiha.ui.navigation.menuOnPrimary
+import com.wajiha.ui.onboarding.OnboardingScreen
+import com.wajiha.ui.scraper.ScraperScreen
+import com.wajiha.ui.scraper.ScraperViewModel
 import com.wajiha.ui.secondary.NowPlayingPanel
 import com.wajiha.ui.secondary.rememberOpenSession
+import com.wajiha.ui.settings.PlatformPickerScreen
+import com.wajiha.ui.settings.PlatformSettingsScreen
+import com.wajiha.ui.settings.SettingsScreen
+import com.wajiha.ui.settings.SettingsViewModel
 import com.wajiha.ui.system.QuickSettingsPanel
 import com.wajiha.ui.theme.WajihaTheme
 import com.wajiha.ui.theme.themeIsDark
@@ -67,7 +67,7 @@ private enum class Route {
     Scraper,
     System,
     GameDetail,
-    NowRunning
+    NowRunning,
 }
 
 /**
@@ -89,7 +89,7 @@ fun App() {
 
     WajihaTheme(
         darkTheme = themeIsDark(settings.theme),
-        focusIndicatorStyle = settings.toFocusIndicatorStyle()
+        focusIndicatorStyle = settings.toFocusIndicatorStyle(),
     ) {
         val state by viewModel.uiState.collectAsState()
         val screenState by viewModel.dualScreenStore.state.collectAsState()
@@ -137,7 +137,7 @@ fun App() {
                     route = Route.PlatformPicker
                 },
                 gamepadOwner = GamepadOwner.Primary,
-                onClaimGamepad = dualStore::claimGamepad
+                onClaimGamepad = dualStore::claimGamepad,
             )
             return@WajihaTheme
         }
@@ -155,15 +155,32 @@ fun App() {
 
         LaunchedEffect(route, primaryShowsMenu) {
             if (primaryShowsMenu) {
-                val panel = when (route) {
-                    Route.Settings, Route.PlatformPicker, Route.PlatformDetail, Route.Scraper ->
-                        LauncherPanel.Settings
-                    Route.GameDetail -> LauncherPanel.GameDetail
-                    Route.Apps -> LauncherPanel.Apps
-                    Route.System -> LauncherPanel.System
-                    Route.NowRunning -> LauncherPanel.GameLibrary
-                    Route.Home -> LauncherPanel.GameLibrary
-                }
+                val panel =
+                    when (route) {
+                        Route.Settings, Route.PlatformPicker, Route.PlatformDetail, Route.Scraper -> {
+                            LauncherPanel.Settings
+                        }
+
+                        Route.GameDetail -> {
+                            LauncherPanel.GameDetail
+                        }
+
+                        Route.Apps -> {
+                            LauncherPanel.Apps
+                        }
+
+                        Route.System -> {
+                            LauncherPanel.System
+                        }
+
+                        Route.NowRunning -> {
+                            LauncherPanel.GameLibrary
+                        }
+
+                        Route.Home -> {
+                            LauncherPanel.GameLibrary
+                        }
+                    }
                 dualStore.setPrimaryLauncherPanel(panel)
                 if (route != Route.GameDetail) {
                     dualStore.setGameDetailGameId(null)
@@ -223,7 +240,7 @@ fun App() {
                 onOpenSession = openSession,
                 onCloseSession = { appActions.killApp(it) },
                 showSessionGrid = dualStore.nowPlayingDisplay.showsGridTiles,
-                modifier = gridModifier
+                modifier = gridModifier,
             )
         }
 
@@ -260,15 +277,32 @@ fun App() {
             if (route == Route.GameDetail) {
                 dualStore.setGameDetailGameId(null)
             }
-            route = when (route) {
-                Route.GameDetail -> Route.Home
-                Route.NowRunning -> Route.Home
-                Route.Scraper ->
-                    if (platformDetailId != null) Route.PlatformDetail else Route.Settings
-                Route.PlatformDetail -> Route.Settings
-                Route.PlatformPicker -> Route.Settings
-                else -> Route.Home
-            }
+            route =
+                when (route) {
+                    Route.GameDetail -> {
+                        Route.Home
+                    }
+
+                    Route.NowRunning -> {
+                        Route.Home
+                    }
+
+                    Route.Scraper -> {
+                        if (platformDetailId != null) Route.PlatformDetail else Route.Settings
+                    }
+
+                    Route.PlatformDetail -> {
+                        Route.Settings
+                    }
+
+                    Route.PlatformPicker -> {
+                        Route.Settings
+                    }
+
+                    else -> {
+                        Route.Home
+                    }
+                }
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
@@ -278,194 +312,213 @@ fun App() {
                     focusedGameId = focusedGameId,
                     heroContext = heroContext,
                     gamepadOwner = GamepadOwner.Primary,
-                    onClaimGamepad = dualStore::claimGamepad
+                    onClaimGamepad = dualStore::claimGamepad,
                 )
-            } else when (route) {
-                Route.Apps -> AppDrawerScreen(
-                    apps = apps,
-                    onLoad = viewModel::loadApps,
-                    onLaunch = viewModel::launchApp,
-                    onLaunchOnDisplay = viewModel::launchAppOnDisplay,
-                    onOpenAppInfo = systemControls::openAppInfo,
-                    onBack = {
-                        viewModel.playBack()
-                        route = Route.Home
-                    },
-                    onFocusChange = { app ->
-                        dualStore.setAppsHeroDetail(apps.size, app?.label)
-                    },
-                    secondaryDisplayId = secondaryDisplayId,
-                    gamepadOwner = GamepadOwner.Primary,
-                    onClaimGamepad = dualStore::claimGamepad
-                )
-                Route.Settings -> SettingsScreen(
-                    settingsViewModel = settingsViewModel,
-                    onBack = {
-                        viewModel.playBack()
-                        route = Route.Home
-                    },
-                    onAddPlatform = {
-                        viewModel.playOpen()
-                        route = Route.PlatformPicker
-                    },
-                    onOpenPlatform = { id ->
-                        platformDetailId = id
-                        viewModel.playOpen()
-                        route = Route.PlatformDetail
-                    },
-                    onSectionChange = dualStore::setSettingsSectionLabel,
-                    gamepadOwner = GamepadOwner.Primary,
-                    onClaimGamepad = dualStore::claimGamepad
-                )
-                Route.PlatformPicker -> PlatformPickerScreen(
-                    settingsViewModel = settingsViewModel,
-                    onBack = {
-                        viewModel.playBack()
-                        route = Route.Settings
-                    },
-                    onPick = { id ->
-                        platformDetailId = id
-                        viewModel.playOpen()
-                        route = Route.PlatformDetail
-                    },
-                    gamepadOwner = GamepadOwner.Primary,
-                    onClaimGamepad = dualStore::claimGamepad
-                )
-                Route.PlatformDetail -> {
-                    val id = platformDetailId
-                    if (id == null) {
-                        route = Route.Settings
-                    } else {
-                        PlatformSettingsScreen(
-                            platformId = id,
+            } else {
+                when (route) {
+                    Route.Apps -> {
+                        AppDrawerScreen(
+                            apps = apps,
+                            onLoad = viewModel::loadApps,
+                            onLaunch = viewModel::launchApp,
+                            onLaunchOnDisplay = viewModel::launchAppOnDisplay,
+                            onOpenAppInfo = systemControls::openAppInfo,
+                            onBack = {
+                                viewModel.playBack()
+                                route = Route.Home
+                            },
+                            onFocusChange = { app ->
+                                dualStore.setAppsHeroDetail(apps.size, app?.label)
+                            },
+                            secondaryDisplayId = secondaryDisplayId,
+                            gamepadOwner = GamepadOwner.Primary,
+                            onClaimGamepad = dualStore::claimGamepad,
+                        )
+                    }
+
+                    Route.Settings -> {
+                        SettingsScreen(
+                            settingsViewModel = settingsViewModel,
+                            onBack = {
+                                viewModel.playBack()
+                                route = Route.Home
+                            },
+                            onAddPlatform = {
+                                viewModel.playOpen()
+                                route = Route.PlatformPicker
+                            },
+                            onOpenPlatform = { id ->
+                                platformDetailId = id
+                                viewModel.playOpen()
+                                route = Route.PlatformDetail
+                            },
+                            onSectionChange = dualStore::setSettingsSectionLabel,
+                            gamepadOwner = GamepadOwner.Primary,
+                            onClaimGamepad = dualStore::claimGamepad,
+                        )
+                    }
+
+                    Route.PlatformPicker -> {
+                        PlatformPickerScreen(
+                            settingsViewModel = settingsViewModel,
                             onBack = {
                                 viewModel.playBack()
                                 route = Route.Settings
                             },
-                            gamepadOwner = GamepadOwner.Primary,
-                            onClaimGamepad = dualStore::claimGamepad
-                        )
-                        LaunchedEffect(Unit) {
-                            dualStore.setSettingsSectionLabel("Library")
-                        }
-                    }
-                }
-                Route.Scraper -> {
-                    ScraperScreen(
-                        viewModel = koinInject<ScraperViewModel>(),
-                        onBack = {
-                            viewModel.playBack()
-                            route = if (platformDetailId != null) {
-                                Route.PlatformDetail
-                            } else {
-                                Route.Settings
-                            }
-                        },
-                        gamepadOwner = GamepadOwner.Primary,
-                        onClaimGamepad = dualStore::claimGamepad
-                    )
-                    LaunchedEffect(Unit) {
-                        dualStore.setSettingsSectionLabel("Scraper")
-                    }
-                }
-                Route.GameDetail -> {
-                    val id = gameDetailId
-                    if (id == null) {
-                        route = Route.Home
-                    } else {
-                        val secondaryId by dualStore.secondaryDisplayId.collectAsState()
-                        GameDetailScreen(
-                            gameId = id,
-                            secondaryDisplayId = secondaryId,
-                            dualDisplay = isDual,
+                            onPick = { id ->
+                                platformDetailId = id
+                                viewModel.playOpen()
+                                route = Route.PlatformDetail
+                            },
                             gamepadOwner = GamepadOwner.Primary,
                             onClaimGamepad = dualStore::claimGamepad,
+                        )
+                    }
+
+                    Route.PlatformDetail -> {
+                        val id = platformDetailId
+                        if (id == null) {
+                            route = Route.Settings
+                        } else {
+                            PlatformSettingsScreen(
+                                platformId = id,
+                                onBack = {
+                                    viewModel.playBack()
+                                    route = Route.Settings
+                                },
+                                gamepadOwner = GamepadOwner.Primary,
+                                onClaimGamepad = dualStore::claimGamepad,
+                            )
+                            LaunchedEffect(Unit) {
+                                dualStore.setSettingsSectionLabel("Library")
+                            }
+                        }
+                    }
+
+                    Route.Scraper -> {
+                        ScraperScreen(
+                            viewModel = koinInject<ScraperViewModel>(),
                             onBack = {
                                 viewModel.playBack()
-                                dualStore.setGameDetailGameId(null)
-                                route = Route.Home
-                            }
+                                route =
+                                    if (platformDetailId != null) {
+                                        Route.PlatformDetail
+                                    } else {
+                                        Route.Settings
+                                    }
+                            },
+                            gamepadOwner = GamepadOwner.Primary,
+                            onClaimGamepad = dualStore::claimGamepad,
                         )
-                        LaunchedEffect(id) {
-                            dualStore.setGameDetailGameId(id)
+                        LaunchedEffect(Unit) {
+                            dualStore.setSettingsSectionLabel("Scraper")
                         }
                     }
-                }
-                Route.System -> {
-                    SyncSystemHeroSnapshot(systemControls, dualStore)
-                    val systemFocus = remember { FocusRequester() }
-                    WajihaScreen(
-                        layerId = "system",
-                        onBack = {
-                            viewModel.playBack()
+
+                    Route.GameDetail -> {
+                        val id = gameDetailId
+                        if (id == null) {
                             route = Route.Home
-                        },
-                        showActionBar = true,
-                        gamepadHints = quickSettingsGamepadHints + ("L2" to "Focus screen"),
-                        gamepadOwner = GamepadOwner.Primary,
-                        onClaimGamepad = dualStore::claimGamepad,
-                        onOwnerGainedFocus = { systemFocus.requestContentFocus() }
-                    ) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            WajihaToolbar(
-                                title = "System",
+                        } else {
+                            val secondaryId by dualStore.secondaryDisplayId.collectAsState()
+                            GameDetailScreen(
+                                gameId = id,
+                                secondaryDisplayId = secondaryId,
+                                dualDisplay = isDual,
+                                gamepadOwner = GamepadOwner.Primary,
+                                onClaimGamepad = dualStore::claimGamepad,
                                 onBack = {
                                     viewModel.playBack()
+                                    dualStore.setGameDetailGameId(null)
                                     route = Route.Home
-                                }
+                                },
                             )
-                            QuickSettingsPanel(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f)
-                                    .focusRequester(systemFocus)
-                                    .wajihaGamepadFocus(),
-                                showGamepadHints = false
-                            )
+                            LaunchedEffect(id) {
+                                dualStore.setGameDetailGameId(id)
+                            }
                         }
                     }
-                }
-                Route.NowRunning -> {
-                    val nowRunningFocus = remember { FocusRequester() }
-                    WajihaScreen(
-                        layerId = "now_running",
-                        showActionBar = true,
-                        gamepadHints = listOf("B" to "Back", "L2" to "Focus screen"),
-                        gamepadOwner = GamepadOwner.Primary,
-                        onClaimGamepad = dualStore::claimGamepad,
-                        onOwnerGainedFocus = { nowRunningFocus.requestContentFocus() }
-                    ) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            WajihaToolbar(
-                                title = "Now Running",
-                                onBack = {
-                                    viewModel.playBack()
-                                    route = Route.Home
-                                }
-                            )
-                            NowPlayingPanel(
-                                state = nowPlaying,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f)
-                                    .focusRequester(nowRunningFocus)
-                                    .wajihaGamepadFocus()
-                            )
+
+                    Route.System -> {
+                        SyncSystemHeroSnapshot(systemControls, dualStore)
+                        val systemFocus = remember { FocusRequester() }
+                        WajihaScreen(
+                            layerId = "system",
+                            onBack = {
+                                viewModel.playBack()
+                                route = Route.Home
+                            },
+                            showActionBar = true,
+                            gamepadHints = quickSettingsGamepadHints + ("L2" to "Focus screen"),
+                            gamepadOwner = GamepadOwner.Primary,
+                            onClaimGamepad = dualStore::claimGamepad,
+                            onOwnerGainedFocus = { systemFocus.requestContentFocus() },
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                WajihaToolbar(
+                                    title = "System",
+                                    onBack = {
+                                        viewModel.playBack()
+                                        route = Route.Home
+                                    },
+                                )
+                                QuickSettingsPanel(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f)
+                                            .focusRequester(systemFocus)
+                                            .wajihaGamepadFocus(),
+                                    showGamepadHints = false,
+                                )
+                            }
                         }
                     }
-                }
-                Route.Home -> {
-                    if (isDual) {
-                        sessionGridParams(Modifier.fillMaxSize())
-                    } else {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            TopScreen(
-                                focused = focusedTile,
-                                platformName = platformName,
-                                heroContext = heroContext,
-                                modifier = Modifier.fillMaxWidth().weight(0.42f)
-                            )
-                            sessionGridParams(Modifier.fillMaxWidth().weight(0.58f))
+
+                    Route.NowRunning -> {
+                        val nowRunningFocus = remember { FocusRequester() }
+                        WajihaScreen(
+                            layerId = "now_running",
+                            showActionBar = true,
+                            gamepadHints = listOf("B" to "Back", "L2" to "Focus screen"),
+                            gamepadOwner = GamepadOwner.Primary,
+                            onClaimGamepad = dualStore::claimGamepad,
+                            onOwnerGainedFocus = { nowRunningFocus.requestContentFocus() },
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                WajihaToolbar(
+                                    title = "Now Running",
+                                    onBack = {
+                                        viewModel.playBack()
+                                        route = Route.Home
+                                    },
+                                )
+                                NowPlayingPanel(
+                                    state = nowPlaying,
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f)
+                                            .focusRequester(nowRunningFocus)
+                                            .wajihaGamepadFocus(),
+                                )
+                            }
+                        }
+                    }
+
+                    Route.Home -> {
+                        if (isDual) {
+                            sessionGridParams(Modifier.fillMaxSize())
+                        } else {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                TopScreen(
+                                    focused = focusedTile,
+                                    platformName = platformName,
+                                    heroContext = heroContext,
+                                    modifier = Modifier.fillMaxWidth().weight(0.42f),
+                                )
+                                sessionGridParams(Modifier.fillMaxWidth().weight(0.58f))
+                            }
                         }
                     }
                 }
@@ -482,7 +535,7 @@ fun App() {
             }
             WajihaSnackbarHost(
                 hostState = snackbarHostState,
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
     }

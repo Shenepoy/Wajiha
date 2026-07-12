@@ -25,8 +25,8 @@ package com.wajiha.android.monitor
  * UsageStats alone never ends a session.
  */
 internal class GameSessionController {
-
     private val deadStreaks = mutableMapOf<String, Int>()
+
     /** Brief grace when another session launches and background polls lie. */
     private val siblingLaunchGraceUntil = mutableMapOf<String, Long>()
 
@@ -41,7 +41,10 @@ internal class GameSessionController {
     }
 
     /** Existing sessions get extra grace when a sibling game takes the top display. */
-    fun markSiblingLaunchGrace(vararg packageNames: String, now: Long = System.currentTimeMillis()) {
+    fun markSiblingLaunchGrace(
+        vararg packageNames: String,
+        now: Long = System.currentTimeMillis(),
+    ) {
         val until = now + SIBLING_LAUNCH_GRACE_MS
         packageNames.forEach { siblingLaunchGraceUntil[it] = until }
     }
@@ -49,7 +52,7 @@ internal class GameSessionController {
     fun isWithinLaunchGrace(
         sessionStartedAt: Long,
         packageName: String? = null,
-        now: Long = System.currentTimeMillis()
+        now: Long = System.currentTimeMillis(),
     ): Boolean {
         if (packageName != null && (siblingLaunchGraceUntil[packageName] ?: 0L) > now) return true
         return sessionStartedAt > 0L && now - sessionStartedAt < LAUNCH_GRACE_MS
@@ -61,7 +64,7 @@ internal class GameSessionController {
     fun recordAliveCheck(
         packageName: String,
         processAlive: Boolean,
-        multiSession: Boolean = false
+        multiSession: Boolean = false,
     ): Boolean {
         if (processAlive) {
             deadStreaks.remove(packageName)
@@ -76,10 +79,13 @@ internal class GameSessionController {
     companion object {
         /** Emulator process may lag behind launch intent / usage events. */
         const val LAUNCH_GRACE_MS = 8_000L
+
         /** Resist one flaky process poll during alt-tab; ~1.5s at 750ms active poll. */
         const val END_CONFIRM_POLLS = 2
+
         /** Background session while another game is on top — process polls are noisier. */
         const val MULTI_SESSION_END_CONFIRM_POLLS = 4
+
         /** Grace for cached siblings when a new game launches on display 0. */
         const val SIBLING_LAUNCH_GRACE_MS = 12_000L
     }

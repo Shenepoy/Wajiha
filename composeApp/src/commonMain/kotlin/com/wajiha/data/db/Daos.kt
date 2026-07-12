@@ -32,10 +32,16 @@ interface PlatformDao {
     suspend fun update(platform: PlatformEntity)
 
     @Query("UPDATE platforms SET enabled = :enabled WHERE id = :id")
-    suspend fun setEnabled(id: String, enabled: Boolean)
+    suspend fun setEnabled(
+        id: String,
+        enabled: Boolean,
+    )
 
     @Query("UPDATE platforms SET defaultEmulatorId = :emulatorId WHERE id = :id")
-    suspend fun setDefaultEmulator(id: String, emulatorId: String?)
+    suspend fun setDefaultEmulator(
+        id: String,
+        emulatorId: String?,
+    )
 
     @Query("DELETE FROM platforms WHERE id = :id")
     suspend fun delete(id: String)
@@ -79,7 +85,9 @@ interface GameDao {
     @Query("SELECT * FROM games WHERE hidden = 0 AND lastPlayedAt IS NOT NULL ORDER BY lastPlayedAt DESC LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<GameEntity>>
 
-    @Query("SELECT * FROM games WHERE hidden = 0 AND (displayName LIKE '%' || :query || '%' OR fileName LIKE '%' || :query || '%') ORDER BY sortName LIMIT 200")
+    @Query(
+        "SELECT * FROM games WHERE hidden = 0 AND (displayName LIKE '%' || :query || '%' OR fileName LIKE '%' || :query || '%') ORDER BY sortName LIMIT 200",
+    )
     fun search(query: String): Flow<List<GameEntity>>
 
     @Query("SELECT * FROM games WHERE id = :id")
@@ -101,19 +109,35 @@ interface GameDao {
     suspend fun update(game: GameEntity)
 
     @Query("UPDATE games SET favorite = :favorite WHERE id = :id")
-    suspend fun setFavorite(id: Long, favorite: Boolean)
+    suspend fun setFavorite(
+        id: Long,
+        favorite: Boolean,
+    )
 
     @Query("UPDATE games SET hidden = :hidden WHERE id = :id")
-    suspend fun setHidden(id: Long, hidden: Boolean)
+    suspend fun setHidden(
+        id: Long,
+        hidden: Boolean,
+    )
 
     @Query("UPDATE games SET emulatorOverrideId = :emulatorId WHERE id = :id")
-    suspend fun setEmulatorOverride(id: Long, emulatorId: String?)
+    suspend fun setEmulatorOverride(
+        id: Long,
+        emulatorId: String?,
+    )
 
     @Query("UPDATE games SET crc32 = :crc32, md5 = :md5 WHERE id = :id")
-    suspend fun setHashes(id: Long, crc32: String?, md5: String?)
+    suspend fun setHashes(
+        id: Long,
+        crc32: String?,
+        md5: String?,
+    )
 
     @Query("UPDATE games SET playCount = playCount + 1, lastPlayedAt = :playedAt WHERE id = :id")
-    suspend fun recordPlay(id: Long, playedAt: Long)
+    suspend fun recordPlay(
+        id: Long,
+        playedAt: Long,
+    )
 
     @Query("DELETE FROM games WHERE uri IN (:uris)")
     suspend fun deleteByUris(uris: List<String>)
@@ -122,7 +146,10 @@ interface GameDao {
     suspend fun deleteById(id: Long)
 
     @Query("UPDATE games SET launchOnDisplay = :displayId WHERE id = :id")
-    suspend fun setLaunchOnDisplay(id: Long, displayId: Int?)
+    suspend fun setLaunchOnDisplay(
+        id: Long,
+        displayId: Int?,
+    )
 
     @Query("SELECT COUNT(*) FROM games WHERE platformId = :platformId AND hidden = 0")
     fun observeCountForPlatform(platformId: String): Flow<Int>
@@ -131,23 +158,32 @@ interface GameDao {
     suspend fun byCrc32(crc32: String): GameEntity?
 
     @Query("SELECT * FROM games WHERE crc32 IS NULL AND fileSize <= :maxBytes LIMIT :limit")
-    suspend fun missingHashes(maxBytes: Long, limit: Int): List<GameEntity>
+    suspend fun missingHashes(
+        maxBytes: Long,
+        limit: Int,
+    ): List<GameEntity>
 
     @Query("SELECT * FROM games WHERE fileName = :fileName AND platformId = :platformId AND hidden = 0 LIMIT 2")
-    suspend fun byFileNameAndPlatform(fileName: String, platformId: String): List<GameEntity>
+    suspend fun byFileNameAndPlatform(
+        fileName: String,
+        platformId: String,
+    ): List<GameEntity>
 
     @Query("SELECT * FROM games WHERE fileName = :fileName AND hidden = 0")
     suspend fun byFileName(fileName: String): List<GameEntity>
 
     @Query(
         "SELECT * FROM games WHERE platformId = :platformId AND hidden = 0 AND " +
-            "(fileName LIKE '%' || :serial || '%' OR displayName LIKE '%' || :serial || '%') LIMIT 2"
+            "(fileName LIKE '%' || :serial || '%' OR displayName LIKE '%' || :serial || '%') LIMIT 2",
     )
-    suspend fun bySerialHint(serial: String, platformId: String): List<GameEntity>
+    suspend fun bySerialHint(
+        serial: String,
+        platformId: String,
+    ): List<GameEntity>
 
     @Query(
         "SELECT * FROM games WHERE hidden = 0 AND " +
-            "(fileName LIKE '%' || :serial || '%' OR displayName LIKE '%' || :serial || '%') LIMIT 2"
+            "(fileName LIKE '%' || :serial || '%' OR displayName LIKE '%' || :serial || '%') LIMIT 2",
     )
     suspend fun bySerialHintAnyPlatform(serial: String): List<GameEntity>
 }
@@ -170,7 +206,10 @@ interface RomFolderDao {
     suspend fun insert(folder: RomFolderEntity): Long
 
     @Query("UPDATE rom_folders SET lastScanAt = :at WHERE id = :id")
-    suspend fun markScanned(id: Long, at: Long)
+    suspend fun markScanned(
+        id: Long,
+        at: Long,
+    )
 
     @Query("DELETE FROM rom_folders WHERE id = :id")
     suspend fun delete(id: Long)
@@ -188,7 +227,10 @@ interface GameMediaDao {
     suspend fun forGames(gameIds: List<Long>): List<GameMediaEntity>
 
     @Query("SELECT * FROM game_media WHERE gameId = :gameId AND type = :type LIMIT 1")
-    suspend fun forGameAndType(gameId: Long, type: String): GameMediaEntity?
+    suspend fun forGameAndType(
+        gameId: Long,
+        type: String,
+    ): GameMediaEntity?
 
     @Query("SELECT * FROM game_media WHERE type = :type")
     fun observeAllOfType(type: String): Flow<List<GameMediaEntity>>
@@ -197,7 +239,10 @@ interface GameMediaDao {
     suspend fun insert(media: GameMediaEntity): Long
 
     @Query("DELETE FROM game_media WHERE gameId = :gameId AND type = :type")
-    suspend fun deleteForGameAndType(gameId: Long, type: String)
+    suspend fun deleteForGameAndType(
+        gameId: Long,
+        type: String,
+    )
 
     @Query("DELETE FROM game_media WHERE gameId = :gameId")
     suspend fun deleteForGame(gameId: Long)
@@ -212,7 +257,11 @@ interface PlaySessionDao {
     suspend fun insert(session: PlaySessionEntity): Long
 
     @Query("UPDATE play_sessions SET endedAt = :endedAt, durationSec = :durationSec WHERE id = :id")
-    suspend fun close(id: Long, endedAt: Long, durationSec: Long)
+    suspend fun close(
+        id: Long,
+        endedAt: Long,
+        durationSec: Long,
+    )
 
     @Query("SELECT * FROM play_sessions WHERE gameId = :gameId ORDER BY startedAt DESC")
     fun observeForGame(gameId: Long): Flow<List<PlaySessionEntity>>
@@ -228,7 +277,7 @@ interface PlaySessionDao {
 
     @Query(
         "SELECT * FROM play_sessions WHERE endedAt IS NULL AND packageName = :packageName " +
-            "ORDER BY startedAt DESC LIMIT 1"
+            "ORDER BY startedAt DESC LIMIT 1",
     )
     suspend fun latestOpenForPackage(packageName: String): PlaySessionEntity?
 
@@ -236,7 +285,10 @@ interface PlaySessionDao {
     suspend fun allOpen(): List<PlaySessionEntity>
 
     @Query("UPDATE play_sessions SET gameId = :gameId WHERE id = :id")
-    suspend fun updateGameId(id: Long, gameId: Long?)
+    suspend fun updateGameId(
+        id: Long,
+        gameId: Long?,
+    )
 }
 
 @Dao
@@ -252,7 +304,7 @@ interface CollectionDao {
 
     @Query(
         "SELECT games.* FROM games INNER JOIN collection_games ON games.id = collection_games.gameId " +
-            "WHERE collection_games.collectionId = :collectionId AND games.hidden = 0 ORDER BY collection_games.position"
+            "WHERE collection_games.collectionId = :collectionId AND games.hidden = 0 ORDER BY collection_games.position",
     )
     fun observeGames(collectionId: Long): Flow<List<GameEntity>>
 
@@ -260,5 +312,8 @@ interface CollectionDao {
     suspend fun addGame(ref: CollectionGameCrossRef)
 
     @Query("DELETE FROM collection_games WHERE collectionId = :collectionId AND gameId = :gameId")
-    suspend fun removeGame(collectionId: Long, gameId: Long)
+    suspend fun removeGame(
+        collectionId: Long,
+        gameId: Long,
+    )
 }

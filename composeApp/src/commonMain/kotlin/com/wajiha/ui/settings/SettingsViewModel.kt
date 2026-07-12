@@ -25,32 +25,38 @@ class SettingsViewModel(
     private val gameRepository: GameRepository,
     platformRepository: PlatformRepository,
     private val libraryActions: LibraryActions,
-    private val dualScreenStore: DualScreenStore
+    private val dualScreenStore: DualScreenStore,
 ) : ViewModel() {
-
-    val settings: StateFlow<AppSettings> = settingsRepository.settings
-        .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
+    val settings: StateFlow<AppSettings> =
+        settingsRepository.settings
+            .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
     /** False until DataStore has emitted; avoids flashing onboarding at start. */
-    val settingsLoaded: StateFlow<Boolean> = settingsRepository.settings
-        .map { true }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val settingsLoaded: StateFlow<Boolean> =
+        settingsRepository.settings
+            .map { true }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    val allPlatforms: StateFlow<List<PlatformEntity>> = platformRepository.observeAll()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allPlatforms: StateFlow<List<PlatformEntity>> =
+        platformRepository
+            .observeAll()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val folders: StateFlow<List<RomFolderEntity>> = gameRepository.observeRomFolders()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val folders: StateFlow<List<RomFolderEntity>> =
+        gameRepository
+            .observeRomFolders()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /**
      * Platforms already in the library UI — those with at least one ROM folder.
      * Bundled packs leave most systems enabled; folders are the real "in use" signal.
      */
     val inUsePlatforms: StateFlow<List<PlatformEntity>> =
-        kotlinx.coroutines.flow.combine(allPlatforms, folders) { platforms, folderList ->
-            val folderPlatformIds = folderList.map { it.platformId }.toSet()
-            platforms.filter { it.id in folderPlatformIds }.sortedBy { it.name }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        kotlinx.coroutines.flow
+            .combine(allPlatforms, folders) { platforms, folderList ->
+                val folderPlatformIds = folderList.map { it.platformId }.toSet()
+                platforms.filter { it.id in folderPlatformIds }.sortedBy { it.name }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         // Mirror persisted options into the dual-screen store
@@ -65,8 +71,7 @@ class SettingsViewModel(
                 dualScreenStore.gameDimOnlyOnNowPlaying = s.gameDimOnlyOnNowPlaying
                 dualScreenStore.gameDimPercent = s.gameDimPercent
                 dualScreenStore.gameplayDimTimeoutSeconds = s.gameplayDimTimeoutSeconds
-            }
-            .launchIn(viewModelScope)
+            }.launchIn(viewModelScope)
     }
 
     fun setBlackoutOnLaunch(value: Boolean) {
@@ -226,6 +231,6 @@ class SettingsViewModel(
     /** Platforms that belong on the Settings Library list. */
     fun inUsePlatformIds(
         platforms: List<PlatformEntity>,
-        folderList: List<RomFolderEntity>
+        folderList: List<RomFolderEntity>,
     ): Set<String> = folderList.map { it.platformId }.toSet()
 }

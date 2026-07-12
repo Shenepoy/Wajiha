@@ -15,15 +15,18 @@ import java.io.File
  * per-serial timestamps and [sstates] filenames embed the active serial.
  */
 class AetherSx2RomPathProbe(
-    private val reader: EmulatorDataReader
+    private val reader: EmulatorDataReader,
 ) : RomPathProbe {
-
     override val probeId = "aethersx2"
-    override val supportedPackages = setOf("xyz.aethersx2.android")
-        .intersect(EmulatorPackages.standalone)
+    override val supportedPackages =
+        setOf("xyz.aethersx2.android")
+            .intersect(EmulatorPackages.standalone)
     override val priority = 10
 
-    override suspend fun probe(packageName: String, sessionStartedAt: Long): RomPathCandidate? =
+    override suspend fun probe(
+        packageName: String,
+        sessionStartedAt: Long,
+    ): RomPathCandidate? =
         withContext(Dispatchers.IO) {
             val root = reader.dataRootForPackage(packageName)
             probeSettingsIni(root)
@@ -32,33 +35,39 @@ class AetherSx2RomPathProbe(
         }
 
     internal fun probeSettingsIni(root: String): RomPathCandidate? {
-        val candidates = listOf(
-            "$root/settings.ini",
-            "$root/../settings.ini"
-        )
+        val candidates =
+            listOf(
+                "$root/settings.ini",
+                "$root/../settings.ini",
+            )
         for (path in candidates) {
-            val text = runCatching { File(path).takeIf { it.isFile }?.readText() }.getOrNull()
-                ?: continue
+            val text =
+                runCatching { File(path).takeIf { it.isFile }?.readText() }.getOrNull()
+                    ?: continue
             extractPathFromIni(text)?.let { romPath ->
                 return RomPathCandidate(
                     rawPath = romPath,
                     probeId = probeId,
-                    platformHint = PLATFORM_HINT
+                    platformHint = PLATFORM_HINT,
                 )
             }
         }
         return null
     }
 
-    internal fun probePlaytime(path: String, sessionStartedAt: Long): RomPathCandidate? {
-        val text = runCatching { File(path).takeIf { it.isFile }?.readText() }.getOrNull()
-            ?: return null
+    internal fun probePlaytime(
+        path: String,
+        sessionStartedAt: Long,
+    ): RomPathCandidate? {
+        val text =
+            runCatching { File(path).takeIf { it.isFile }?.readText() }.getOrNull()
+                ?: return null
         val (serial, timestamp) = parsePlaytimeDat(text) ?: return null
         return RomPathCandidate(
             fileNameHint = serial,
             probeId = probeId,
             platformHint = PLATFORM_HINT,
-            timestamp = timestamp
+            timestamp = timestamp,
         )
     }
 
@@ -69,7 +78,7 @@ class AetherSx2RomPathProbe(
             fileNameHint = serial,
             probeId = probeId,
             platformHint = PLATFORM_HINT,
-            timestamp = newest.lastModified()
+            timestamp = newest.lastModified(),
         )
     }
 
@@ -77,15 +86,15 @@ class AetherSx2RomPathProbe(
 
     internal fun extractPathFromIni(ini: String): String? = Companion.extractPathFromIni(ini)
 
-    internal fun serialFromSaveStateName(fileName: String): String? =
-        Companion.serialFromSaveStateName(fileName)
+    internal fun serialFromSaveStateName(fileName: String): String? = Companion.serialFromSaveStateName(fileName)
 
     companion object {
         const val PLATFORM_HINT = "ps2"
         val SERIAL_REGEX = Regex("""[A-Z]{4}-\d{5}""")
 
         fun parsePlaytimeDat(content: String): Pair<String, Long>? =
-            content.lineSequence()
+            content
+                .lineSequence()
                 .mapNotNull { line ->
                     val trimmed = line.trim()
                     if (trimmed.isEmpty()) return@mapNotNull null
@@ -95,19 +104,19 @@ class AetherSx2RomPathProbe(
                     if (!SERIAL_REGEX.matches(serial)) return@mapNotNull null
                     val timestamp = parts.last().toLongOrNull() ?: return@mapNotNull null
                     serial to timestamp
-                }
-                .maxByOrNull { it.second }
+                }.maxByOrNull { it.second }
 
-        fun extractPathFromIni(ini: String): String? = IniKeyParser.extractValue(
-            ini,
-            listOf(
-                "Filename",
-                "DiscPath",
-                "RecentISOFileName",
-                "LastBootedFilename",
-                "LastPlayedPath"
+        fun extractPathFromIni(ini: String): String? =
+            IniKeyParser.extractValue(
+                ini,
+                listOf(
+                    "Filename",
+                    "DiscPath",
+                    "RecentISOFileName",
+                    "LastBootedFilename",
+                    "LastPlayedPath",
+                ),
             )
-        )
 
         fun serialFromSaveStateName(fileName: String): String? {
             val base = fileName.substringBeforeLast('.')

@@ -12,7 +12,7 @@ data class SystemStatus(
     val screenTimeoutSec: Int = 0,
     val wifiEnabled: Boolean = false,
     val bluetoothEnabled: Boolean = false,
-    val torchOn: Boolean = false
+    val torchOn: Boolean = false,
 )
 
 /** Which permissions/roles the onboarding wizard walks through. */
@@ -21,7 +21,7 @@ data class PermissionStates(
     val writeSettings: Boolean = false,
     val notifications: Boolean = false,
     val allFilesAccess: Boolean = false,
-    val isDefaultLauncher: Boolean = false
+    val isDefaultLauncher: Boolean = false,
 )
 
 /** Host-side system control surface (quick settings, launcher helpers). */
@@ -32,20 +32,30 @@ interface SystemControls {
 
     /** Needs WRITE_SETTINGS; returns false when not granted. */
     fun setBrightness(fraction: Float): Boolean
+
     fun setVolume(fraction: Float)
+
     fun setScreenTimeout(seconds: Int): Boolean
+
     fun toggleTorch()
 
     fun openWifiSettings()
+
     fun openBluetoothSettings()
 
     // Permissions / roles
     fun permissionStates(): PermissionStates
+
     fun requestUsageAccess()
+
     fun requestWriteSettings()
+
     fun requestNotifications()
+
     fun requestAllFilesAccess()
+
     fun openHomeSettings()
+
     fun openAppInfo(packageName: String)
 
     /** Whether [packageName] is installed on this device. */

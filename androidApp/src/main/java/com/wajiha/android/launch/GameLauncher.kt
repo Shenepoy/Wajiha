@@ -5,18 +5,18 @@ import android.view.Display
 import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.monitor.ForegroundAppMonitor
 import com.wajiha.android.service.KeepAliveService
-import com.wajiha.log.WajihaLog
-import com.wajiha.log.WajihaTags
+import com.wajiha.data.WajihaJson
 import com.wajiha.data.config.AmStartArgumentsParser
 import com.wajiha.data.config.IntentExtra
 import com.wajiha.data.db.EmulatorEntity
 import com.wajiha.data.db.GameEntity
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.PlatformRepository
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaTags
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingState
-import com.wajiha.data.WajihaJson
 
 /**
  * Resolves a game to a [LaunchSpec] (per-game emulator override → platform
@@ -33,60 +33,68 @@ class GameLauncher(
     private val sessionTracker: PlaySessionTracker,
     private val dualScreenStore: DualScreenStore,
     private val foregroundAppMonitor: ForegroundAppMonitor,
-    private val displayCoordinator: DisplayCoordinator
+    private val displayCoordinator: DisplayCoordinator,
 ) {
     private val json = WajihaJson.Default
 
     suspend fun launchGame(gameId: Long): LaunchResult {
-        val game = gameRepository.byId(gameId)
-            ?: return LaunchResult.Failed("Game $gameId not found")
-        val emulator = platformRepository.resolveEmulator(game.platformId, game.emulatorOverrideId)
-            ?: return LaunchResult.Failed("No emulator configured for ${game.platformId}")
+        val game =
+            gameRepository.byId(gameId)
+                ?: return LaunchResult.Failed("Game $gameId not found")
+        val emulator =
+            platformRepository.resolveEmulator(game.platformId, game.emulatorOverrideId)
+                ?: return LaunchResult.Failed("No emulator configured for ${game.platformId}")
         return launchGame(game, emulator, game.launchOnDisplay)
     }
 
     suspend fun launchGame(
         gameId: Long,
-        displayId: Int
+        displayId: Int,
     ): LaunchResult {
-        val game = gameRepository.byId(gameId)
-            ?: return LaunchResult.Failed("Game $gameId not found")
-        val emulator = platformRepository.resolveEmulator(game.platformId, game.emulatorOverrideId)
-            ?: return LaunchResult.Failed("No emulator configured for ${game.platformId}")
+        val game =
+            gameRepository.byId(gameId)
+                ?: return LaunchResult.Failed("Game $gameId not found")
+        val emulator =
+            platformRepository.resolveEmulator(game.platformId, game.emulatorOverrideId)
+                ?: return LaunchResult.Failed("No emulator configured for ${game.platformId}")
         return launchGame(game, emulator, displayId)
     }
-
-    suspend fun launchGame(game: GameEntity, emulator: EmulatorEntity): LaunchResult =
-        launchGame(game, emulator, game.launchOnDisplay)
 
     suspend fun launchGame(
         game: GameEntity,
         emulator: EmulatorEntity,
-        displayId: Int?
+    ): LaunchResult = launchGame(game, emulator, game.launchOnDisplay)
+
+    suspend fun launchGame(
+        game: GameEntity,
+        emulator: EmulatorEntity,
+        displayId: Int?,
     ): LaunchResult {
-        val packageName = pickInstalledPackage(emulator)
-            ?: return LaunchResult.EmulatorNotInstalled(
-                emulator.packageNames.substringBefore(',')
-            )
+        val packageName =
+            pickInstalledPackage(emulator)
+                ?: return LaunchResult.EmulatorNotInstalled(
+                    emulator.packageNames.substringBefore(','),
+                )
         val resolvedDisplay = resolveLaunchDisplay(displayId)
         val spec = buildSpec(game, emulator, packageName, resolvedDisplay)
         // Session must exist before startActivity — SecondaryHomeActivity's
         // onUserLeaveHint/onPause fire synchronously and used to reclaim the
         // bottom task before hasActiveSessions(), starving the top-display launch.
         val now = System.currentTimeMillis()
-        val session = NowPlayingState(
-            packageName = packageName,
-            gameId = game.id,
-            gameName = game.displayName,
-            platformId = game.platformId,
-            sessionStartedAt = now,
-            sessionResumedAt = now,
-            launchedByWajiha = true
-        )
+        val session =
+            NowPlayingState(
+                packageName = packageName,
+                gameId = game.id,
+                gameName = game.displayName,
+                platformId = game.platformId,
+                sessionStartedAt = now,
+                sessionResumedAt = now,
+                launchedByWajiha = true,
+            )
         dualScreenStore.beginGameSession(session)
         WajihaLog.i(
             WajihaTags.LAUNCH,
-            "launchGame: pkg=$packageName displayId=$resolvedDisplay gameId=${game.id}"
+            "launchGame: pkg=$packageName displayId=$resolvedDisplay gameId=${game.id}",
         )
         val result = EmulatorLauncher.launch(context, spec)
         if (result is LaunchResult.Success) {
@@ -112,7 +120,8 @@ class GameLauncher(
         }
 
     private fun pickInstalledPackage(emulator: EmulatorEntity): String? =
-        emulator.packageNames.split(',')
+        emulator.packageNames
+            .split(',')
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .firstOrNull { EmulatorLauncher.isPackageInstalled(context, it) }
@@ -121,24 +130,28 @@ class GameLauncher(
         game: GameEntity,
         emulator: EmulatorEntity,
         packageName: String,
-        launchDisplayId: Int? = null
+        launchDisplayId: Int? = null,
     ): LaunchSpec {
         // Prefer raw am-start arguments when present (Daijishō/iiSU imports);
         // fall back to structured fields.
-        val parsed = emulator.amStartArguments
-            ?.let { AmStartArgumentsParser.parse(it.replace("%PACKAGE%", packageName)) }
+        val parsed =
+            emulator.amStartArguments
+                ?.let { AmStartArgumentsParser.parse(it.replace("%PACKAGE%", packageName)) }
 
         val activity = parsed?.activityName ?: emulator.activityName
         val action = parsed?.action ?: emulator.action
-        val extras: List<IntentExtra> = parsed?.extras
-            ?: emulator.extrasJson?.let { json.decodeFromString<List<IntentExtra>>(it) }
-            ?: emptyList()
-        val flags: List<String> = parsed?.activityFlags
-            ?: emulator.activityFlagsJson?.let { json.decodeFromString<List<String>>(it) }
-            ?: emptyList()
-        val rawData = parsed?.dataUri
-            // Structured configs with routeType uri and no explicit data get the ROM as data
-            ?: if (parsed == null && emulator.routeType == "uri") "{file.uri}" else null
+        val extras: List<IntentExtra> =
+            parsed?.extras
+                ?: emulator.extrasJson?.let { json.decodeFromString<List<IntentExtra>>(it) }
+                ?: emptyList()
+        val flags: List<String> =
+            parsed?.activityFlags
+                ?: emulator.activityFlagsJson?.let { json.decodeFromString<List<String>>(it) }
+                ?: emptyList()
+        val rawData =
+            parsed?.dataUri
+                // Structured configs with routeType uri and no explicit data get the ROM as data
+                ?: if (parsed == null && emulator.routeType == "uri") "{file.uri}" else null
 
         return LaunchSpec(
             packageName = packageName,
@@ -150,11 +163,14 @@ class GameLauncher(
             activityFlags = flags,
             keepSafUri = emulator.keepSafUri,
             killBeforeLaunch = emulator.killBeforeLaunch,
-            launchDisplayId = launchDisplayId
+            launchDisplayId = launchDisplayId,
         )
     }
 
-    private fun substitute(value: String, game: GameEntity): String {
+    private fun substitute(
+        value: String,
+        game: GameEntity,
+    ): String {
         var result = value
         for (token in pathTokens) {
             result = result.replace(token, "wajiha-realpath:${game.uri}")

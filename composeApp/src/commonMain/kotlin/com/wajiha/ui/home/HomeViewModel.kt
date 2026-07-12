@@ -26,7 +26,7 @@ data class GameTile(
     val videoPath: String? = null,
     val heroPath: String? = null,
     val logoPath: String? = null,
-    val iconPath: String? = null
+    val iconPath: String? = null,
 )
 
 data class HomeUiState(
@@ -35,7 +35,7 @@ data class HomeUiState(
     val tiles: List<GameTile> = emptyList(),
     val recent: List<GameTile> = emptyList(),
     val favorites: List<GameTile> = emptyList(),
-    val launchError: String? = null
+    val launchError: String? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -43,61 +43,68 @@ class HomeViewModel(
     private val gameRepository: GameRepository,
     private val platformRepository: PlatformRepository,
     private val appActions: AppActions,
-    val dualScreenStore: DualScreenStore
+    val dualScreenStore: DualScreenStore,
 ) : ViewModel() {
-
     private val selectedPlatformId = MutableStateFlow<String?>(null)
     private val launchError = MutableStateFlow<String?>(null)
 
     /** Platforms that actually have games, in configured order. */
-    private val platformsWithGames = combine(
-        platformRepository.observeEnabled(),
-        gameRepository.observeAll()
-    ) { platforms, games ->
-        val counts = games.groupingBy { it.platformId }.eachCount()
-        platforms.filter { (counts[it.id] ?: 0) > 0 }
-    }
+    private val platformsWithGames =
+        combine(
+            platformRepository.observeEnabled(),
+            gameRepository.observeAll(),
+        ) { platforms, games ->
+            val counts = games.groupingBy { it.platformId }.eachCount()
+            platforms.filter { (counts[it.id] ?: 0) > 0 }
+        }
 
     /** Art maps so scraped media refreshes the grid / hero live. */
-    private val mediaByGame = combine(
-        gameRepository.observeAllBoxart(),
-        gameRepository.observeAllVideos(),
-        gameRepository.observeAllHeroes(),
-        gameRepository.observeAllLogos(),
-        gameRepository.observeAllIcons()
-    ) { boxart, videos, heroes, logos, icons ->
-        GameMediaMaps(
-            boxart = boxart.pathMap(),
-            videos = videos.pathMap(),
-            heroes = heroes.pathMap(),
-            logos = logos.pathMap(),
-            icons = icons.pathMap()
-        )
-    }
+    private val mediaByGame =
+        combine(
+            gameRepository.observeAllBoxart(),
+            gameRepository.observeAllVideos(),
+            gameRepository.observeAllHeroes(),
+            gameRepository.observeAllLogos(),
+            gameRepository.observeAllIcons(),
+        ) { boxart, videos, heroes, logos, icons ->
+            GameMediaMaps(
+                boxart = boxart.pathMap(),
+                videos = videos.pathMap(),
+                heroes = heroes.pathMap(),
+                logos = logos.pathMap(),
+                icons = icons.pathMap(),
+            )
+        }
 
-    private val gamesForSelected = selectedPlatformId.flatMapLatest { platformId ->
-        if (platformId == null) gameRepository.observeAll()
-        else gameRepository.observeForPlatform(platformId)
-    }
+    private val gamesForSelected =
+        selectedPlatformId.flatMapLatest { platformId ->
+            if (platformId == null) {
+                gameRepository.observeAll()
+            } else {
+                gameRepository.observeForPlatform(platformId)
+            }
+        }
 
-    private val libraryState = combine(
-        platformsWithGames,
-        selectedPlatformId,
-        gamesForSelected,
-        gameRepository.observeRecent(12),
-        mediaByGame
-    ) { platforms, selected, games, recent, media ->
-        HomeUiState(
-            platforms = platforms,
-            selectedPlatformId = selected,
-            tiles = games.map { it.toTile(media) },
-            recent = recent.map { it.toTile(media) }
-        )
-    }
+    private val libraryState =
+        combine(
+            platformsWithGames,
+            selectedPlatformId,
+            gamesForSelected,
+            gameRepository.observeRecent(12),
+            mediaByGame,
+        ) { platforms, selected, games, recent, media ->
+            HomeUiState(
+                platforms = platforms,
+                selectedPlatformId = selected,
+                tiles = games.map { it.toTile(media) },
+                recent = recent.map { it.toTile(media) },
+            )
+        }
 
-    val uiState: StateFlow<HomeUiState> = combine(libraryState, launchError) { state, error ->
-        state.copy(launchError = error)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
+    val uiState: StateFlow<HomeUiState> =
+        combine(libraryState, launchError) { state, error ->
+            state.copy(launchError = error)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
 
     private val _apps = MutableStateFlow<List<LaunchableApp>>(emptyList())
     val apps: StateFlow<List<LaunchableApp>> = _apps
@@ -118,7 +125,10 @@ class HomeViewModel(
         }
     }
 
-    fun launchGameOnDisplay(gameId: Long, displayId: Int) {
+    fun launchGameOnDisplay(
+        gameId: Long,
+        displayId: Int,
+    ) {
         appActions.playSound(UiSound.Launch)
         viewModelScope.launch {
             launchError.value = appActions.launchGameOnDisplay(gameId, displayId)
@@ -150,17 +160,25 @@ class HomeViewModel(
         appActions.launchApp(packageName)
     }
 
-    fun launchAppOnDisplay(packageName: String, displayId: Int) {
+    fun launchAppOnDisplay(
+        packageName: String,
+        displayId: Int,
+    ) {
         appActions.playSound(UiSound.Launch)
         appActions.launchAppOnDisplay(packageName, displayId)
     }
 
-    fun toggleFavorite(gameId: Long, favorite: Boolean) {
+    fun toggleFavorite(
+        gameId: Long,
+        favorite: Boolean,
+    ) {
         viewModelScope.launch { gameRepository.setFavorite(gameId, favorite) }
     }
 
     fun playNavigate() = appActions.playSound(UiSound.Navigate)
+
     fun playOpen() = appActions.playSound(UiSound.Open)
+
     fun playBack() = appActions.playSound(UiSound.Back)
 }
 
@@ -169,17 +187,17 @@ private data class GameMediaMaps(
     val videos: Map<Long, String>,
     val heroes: Map<Long, String>,
     val logos: Map<Long, String>,
-    val icons: Map<Long, String>
+    val icons: Map<Long, String>,
 )
 
-private fun List<GameMediaEntity>.pathMap(): Map<Long, String> =
-    filter { it.localPath != null }.associate { it.gameId to it.localPath!! }
+private fun List<GameMediaEntity>.pathMap(): Map<Long, String> = filter { it.localPath != null }.associate { it.gameId to it.localPath!! }
 
-private fun GameEntity.toTile(media: GameMediaMaps): GameTile = GameTile(
-    game = this,
-    boxartPath = media.boxart[id],
-    videoPath = media.videos[id],
-    heroPath = media.heroes[id],
-    logoPath = media.logos[id],
-    iconPath = media.icons[id]
-)
+private fun GameEntity.toTile(media: GameMediaMaps): GameTile =
+    GameTile(
+        game = this,
+        boxartPath = media.boxart[id],
+        videoPath = media.videos[id],
+        heroPath = media.heroes[id],
+        logoPath = media.logos[id],
+        iconPath = media.icons[id],
+    )

@@ -38,9 +38,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,18 +58,16 @@ import com.wajiha.ui.theme.WajihaMotion
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.delay
+import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 import kotlin.time.ExperimentalTime
-import kotlinx.datetime.toLocalDateTime
 
 /**
  * Top-right status chrome on the hero screen: clock, connection, battery,
  * and notification indicator. R2 opens the in-app notification panel.
  */
 @Composable
-fun BoxScope.TopStatusBar(
-    modifier: Modifier = Modifier
-) {
+fun BoxScope.TopStatusBar(modifier: Modifier = Modifier) {
     val controls = koinInject<SystemControls>()
     val notifications = koinInject<SystemNotificationStore>()
     val dualStore = koinInject<DualScreenStore>()
@@ -98,12 +96,13 @@ fun BoxScope.TopStatusBar(
     val batteryLabel = buildBatteryLabel(status.batteryPercent, status.charging)
 
     Column(
-        modifier = modifier
-            .align(Alignment.TopEnd)
-            .zIndex(8f)
-            .padding(top = WajihaSpacing.sm, end = WajihaSpacing.md)
-            .widthIn(max = 320.dp),
-        horizontalAlignment = Alignment.End
+        modifier =
+            modifier
+                .align(Alignment.TopEnd)
+                .zIndex(8f)
+                .padding(top = WajihaSpacing.sm, end = WajihaSpacing.md)
+                .widthIn(max = 320.dp),
+        horizontalAlignment = Alignment.End,
     ) {
         StatusBarChip(
             clock = clock,
@@ -111,21 +110,23 @@ fun BoxScope.TopStatusBar(
             battery = batteryLabel,
             unread = unread,
             hasNotifications = items.isNotEmpty(),
-            onNotificationsClick = { notifications.togglePanel() }
+            onNotificationsClick = { notifications.togglePanel() },
         )
 
         AnimatedVisibility(
             visible = panelOpen,
-            enter = fadeIn(WajihaMotion.fadeInSpec()) +
-                slideInVertically(animationSpec = WajihaMotion.fadeInSpec()) { -12 },
-            exit = fadeOut(WajihaMotion.fadeOutSpec()) +
-                slideOutVertically(animationSpec = WajihaMotion.fadeOutSpec()) { -12 }
+            enter =
+                fadeIn(WajihaMotion.fadeInSpec()) +
+                    slideInVertically(animationSpec = WajihaMotion.fadeInSpec()) { -12 },
+            exit =
+                fadeOut(WajihaMotion.fadeOutSpec()) +
+                    slideOutVertically(animationSpec = WajihaMotion.fadeOutSpec()) { -12 },
         ) {
             NotificationPanel(
                 items = items,
                 onDismiss = notifications::closePanel,
                 onClearAll = notifications::clearAll,
-                onRemove = notifications::dismiss
+                onRemove = notifications::dismiss,
             )
         }
     }
@@ -138,17 +139,18 @@ private fun StatusBarChip(
     battery: String,
     unread: Int,
     hasNotifications: Boolean,
-    onNotificationsClick: () -> Unit
+    onNotificationsClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     Row(
-        modifier = Modifier
-            .clip(WajihaShapes.chip)
-            .background(WajihaColors.HeroScrim)
-            .border(1.dp, scheme.outline.copy(alpha = 0.35f), WajihaShapes.chip)
-            .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+        modifier =
+            Modifier
+                .clip(WajihaShapes.chip)
+                .background(WajihaColors.HeroScrim)
+                .border(1.dp, scheme.outline.copy(alpha = 0.35f), WajihaShapes.chip)
+                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
         StatusSegment(clock)
         StatusDivider()
@@ -157,28 +159,30 @@ private fun StatusBarChip(
         StatusSegment(battery)
         StatusDivider()
         Row(
-            modifier = Modifier
-                .clip(WajihaShapes.chip)
-                .clickable(onClick = onNotificationsClick)
-                .padding(horizontal = 2.dp, vertical = 1.dp),
+            modifier =
+                Modifier
+                    .clip(WajihaShapes.chip)
+                    .clickable(onClick = onNotificationsClick)
+                    .padding(horizontal = 2.dp, vertical = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Icon(
-                imageVector = if (hasNotifications) {
-                    Icons.Filled.Notifications
-                } else {
-                    Icons.Outlined.Notifications
-                },
+                imageVector =
+                    if (hasNotifications) {
+                        Icons.Filled.Notifications
+                    } else {
+                        Icons.Outlined.Notifications
+                    },
                 contentDescription = "Notifications",
                 tint = if (unread > 0) scheme.tertiary else scheme.onSurface,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(14.dp),
             )
             Text(
                 text = if (unread > 0) unread.toString() else "0",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (unread > 0) scheme.tertiary else scheme.onSurfaceVariant,
-                fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal
+                fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal,
             )
         }
     }
@@ -191,16 +195,17 @@ private fun StatusSegment(text: String) {
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurface,
         maxLines = 1,
-        overflow = TextOverflow.Clip
+        overflow = TextOverflow.Clip,
     )
 }
 
 @Composable
 private fun StatusDivider() {
     Box(
-        modifier = Modifier
-            .size(width = 1.dp, height = 10.dp)
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+        modifier =
+            Modifier
+                .size(width = 1.dp, height = 10.dp)
+                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
     )
 }
 
@@ -209,7 +214,7 @@ private fun NotificationPanel(
     items: List<SystemNotification>,
     onDismiss: () -> Unit,
     onClearAll: () -> Unit,
-    onRemove: (Long) -> Unit
+    onRemove: (Long) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     GamepadOverlayLayer(
@@ -223,27 +228,29 @@ private fun NotificationPanel(
                 false
             }
         },
-        modifier = Modifier
-            .padding(top = WajihaSpacing.sm)
-            .fillMaxWidth()
+        modifier =
+            Modifier
+                .padding(top = WajihaSpacing.sm)
+                .fillMaxWidth(),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(WajihaShapes.card)
-                .background(scheme.surface.copy(alpha = 0.96f))
-                .border(1.dp, scheme.outline.copy(alpha = 0.4f), WajihaShapes.card)
-                .padding(WajihaSpacing.sm)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(WajihaShapes.card)
+                    .background(scheme.surface.copy(alpha = 0.96f))
+                    .border(1.dp, scheme.outline.copy(alpha = 0.4f), WajihaShapes.card)
+                    .padding(WajihaSpacing.sm),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = "Notifications",
                     style = MaterialTheme.typography.titleSmall,
-                    color = scheme.onSurface
+                    color = scheme.onSurface,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (items.isNotEmpty()) {
@@ -254,7 +261,7 @@ private fun NotificationPanel(
                     Text(
                         text = "R2 toggle",
                         style = MaterialTheme.typography.labelSmall,
-                        color = scheme.onSurfaceVariant
+                        color = scheme.onSurfaceVariant,
                     )
                 }
             }
@@ -264,14 +271,15 @@ private fun NotificationPanel(
                     text = "No system notifications",
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = WajihaSpacing.sm)
+                    modifier = Modifier.padding(vertical = WajihaSpacing.sm),
                 )
             } else {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 220.dp),
-                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp),
+                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
                 ) {
                     items(items, key = { it.id }) { item ->
                         NotificationRow(item = item, onRemove = { onRemove(item.id) })
@@ -285,30 +293,33 @@ private fun NotificationPanel(
 @Composable
 private fun NotificationRow(
     item: SystemNotification,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val accent = when (item.kind) {
-        SystemNotificationKind.Success -> scheme.primary
-        SystemNotificationKind.Warning -> scheme.tertiary
-        SystemNotificationKind.Error -> scheme.error
-        SystemNotificationKind.Info -> scheme.onSurfaceVariant
-    }
+    val accent =
+        when (item.kind) {
+            SystemNotificationKind.Success -> scheme.primary
+            SystemNotificationKind.Warning -> scheme.tertiary
+            SystemNotificationKind.Error -> scheme.error
+            SystemNotificationKind.Info -> scheme.onSurfaceVariant
+        }
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(WajihaShapes.chip)
-            .background(scheme.surfaceVariant.copy(alpha = 0.55f))
-            .clickable(onClick = onRemove)
-            .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
-        verticalAlignment = Alignment.Top
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(WajihaShapes.chip)
+                .background(scheme.surfaceVariant.copy(alpha = 0.55f))
+                .clickable(onClick = onRemove)
+                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+        verticalAlignment = Alignment.Top,
     ) {
         Box(
-            modifier = Modifier
-                .padding(top = 5.dp)
-                .size(6.dp)
-                .clip(WajihaShapes.pill)
-                .background(accent)
+            modifier =
+                Modifier
+                    .padding(top = 5.dp)
+                    .size(6.dp)
+                    .clip(WajihaShapes.pill)
+                    .background(accent),
         )
         Spacer(modifier = Modifier.width(WajihaSpacing.sm))
         Column(modifier = Modifier.weight(1f)) {
@@ -317,27 +328,34 @@ private fun NotificationRow(
                 style = MaterialTheme.typography.labelMedium,
                 color = scheme.onSurface,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = item.body,
                 style = MaterialTheme.typography.bodySmall,
                 color = scheme.onSurfaceVariant,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
 }
 
-private fun buildConnectionLabel(wifi: Boolean, bluetooth: Boolean): String = when {
-    wifi && bluetooth -> "Wi‑Fi · BT"
-    wifi -> "Wi‑Fi"
-    bluetooth -> "BT"
-    else -> "Offline"
-}
+private fun buildConnectionLabel(
+    wifi: Boolean,
+    bluetooth: Boolean,
+): String =
+    when {
+        wifi && bluetooth -> "Wi‑Fi · BT"
+        wifi -> "Wi‑Fi"
+        bluetooth -> "BT"
+        else -> "Offline"
+    }
 
-private fun buildBatteryLabel(percent: Int, charging: Boolean): String {
+private fun buildBatteryLabel(
+    percent: Int,
+    charging: Boolean,
+): String {
     if (percent < 0) return "—%"
     return buildString {
         append(percent)
@@ -348,8 +366,10 @@ private fun buildBatteryLabel(percent: Int, charging: Boolean): String {
 
 @OptIn(ExperimentalTime::class)
 private fun currentStatusTimeText(): String {
-    val dateTime = kotlin.time.Clock.System.now()
-        .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+    val dateTime =
+        kotlin.time.Clock.System
+            .now()
+            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
     val h = dateTime.hour.toString().padStart(2, '0')
     val m = dateTime.minute.toString().padStart(2, '0')
     return "$h:$m"

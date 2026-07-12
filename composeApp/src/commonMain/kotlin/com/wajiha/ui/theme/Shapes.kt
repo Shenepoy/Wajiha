@@ -26,18 +26,20 @@ object WajihaShapes {
     val focus = RoundedCornerShape(focusCornerRadius)
 
     /** Folder tab — rounded top, flat bottom to meet content panel. */
-    val folderTab = RoundedCornerShape(
-        topStart = 4.dp,
-        topEnd = 4.dp,
-        bottomStart = 0.dp,
-        bottomEnd = 0.dp
-    )
+    val folderTab =
+        RoundedCornerShape(
+            topStart = 4.dp,
+            topEnd = 4.dp,
+            bottomStart = 0.dp,
+            bottomEnd = 0.dp,
+        )
 
     /** Folder content panel — flat top, rounded bottom and sides. */
-    val folderPanel = RoundedCornerShape(
-        topStart = 0.dp,
-        topEnd = 0.dp,
-        bottomStart = 4.dp,
-        bottomEnd = 4.dp
-    )
+    val folderPanel =
+        RoundedCornerShape(
+            topStart = 0.dp,
+            topEnd = 0.dp,
+            bottomStart = 4.dp,
+            bottomEnd = 4.dp,
+        )
 }

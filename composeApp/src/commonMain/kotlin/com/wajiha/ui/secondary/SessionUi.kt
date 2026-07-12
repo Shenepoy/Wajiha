@@ -14,14 +14,15 @@ fun sessionDisplayLabel(state: NowPlayingState?): String? = stateSessionDisplayL
 fun rememberOpenSession(
     store: DualScreenStore,
     appActions: AppActions,
-    topDisplayPackage: String?
-): (String) -> Unit = remember(store, appActions, topDisplayPackage) {
-    { pkg ->
-        if (topDisplayPackage != pkg) {
-            appActions.focusApp(pkg)
-        } else {
-            store.switchToSession(pkg)
+    topDisplayPackage: String?,
+): (String) -> Unit =
+    remember(store, appActions, topDisplayPackage) {
+        { pkg ->
+            if (topDisplayPackage != pkg) {
+                appActions.focusApp(pkg)
+            } else {
+                store.switchToSession(pkg)
+            }
+            store.requestNavigateToNowPlaying()
         }
-        store.requestNavigateToNowPlaying()
     }
-}

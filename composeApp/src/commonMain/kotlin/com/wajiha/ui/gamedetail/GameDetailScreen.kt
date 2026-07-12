@@ -52,37 +52,39 @@ import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeRunPolicy
 import com.wajiha.data.scraper.missingGapTypes
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.GamepadLayers
 import com.wajiha.input.requestContentFocus
+import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
-import com.wajiha.input.GamepadLayers
 import com.wajiha.ui.components.FolderTabRow
+import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
-import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
 import com.wajiha.ui.components.gamepad.MultiChoiceOption
-import com.wajiha.ui.components.gamepad.SettingType
 import com.wajiha.ui.components.gamepad.SettingSectionScrollColumn
+import com.wajiha.ui.components.gamepad.SettingType
 import com.wajiha.ui.components.gamepad.gameDetailGamepadHints
 import com.wajiha.ui.scraper.ScrapeModeSelector
 import com.wajiha.ui.scraper.ScrapeUiMode
-import com.wajiha.ui.scraper.singleGameHelperText
-import com.wajiha.ui.scraper.toPolicy
 import com.wajiha.ui.scraper.review.ScrapeReviewPicker
 import com.wajiha.ui.scraper.review.ScrapeReviewViewModel
+import com.wajiha.ui.scraper.singleGameHelperText
+import com.wajiha.ui.scraper.toPolicy
+import com.wajiha.ui.settings.toEmulatorChoiceOptions
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.datetime.toLocalDateTime
-import com.wajiha.platform.SystemControls
-import com.wajiha.ui.settings.toEmulatorChoiceOptions
 import org.koin.compose.koinInject
 
-private enum class ActionPaneSection(val label: String) {
+private enum class ActionPaneSection(
+    val label: String,
+) {
     Launch("Launch"),
     Emulator("Emulator"),
-    Scraper("Scraper")
+    Scraper("Scraper"),
 }
 
 @Composable
@@ -94,7 +96,7 @@ fun GameDetailScreen(
     dualDisplay: Boolean = false,
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
-    viewModel: GameDetailViewModel = koinInject()
+    viewModel: GameDetailViewModel = koinInject(),
 ) {
     LaunchedEffect(gameId) { viewModel.open(gameId) }
     val state by viewModel.uiState.collectAsState()
@@ -135,30 +137,38 @@ fun GameDetailScreen(
                     if (selectedSectionIndex > 0) {
                         selectSection(selectedSectionIndex - 1)
                         true
-                    } else false
+                    } else {
+                        false
+                    }
                 }
+
                 GamepadKeys.isR1(event.type, event.key) -> {
                     if (selectedSectionIndex < sections.lastIndex) {
                         selectSection(selectedSectionIndex + 1)
                         true
-                    } else false
+                    } else {
+                        false
+                    }
                 }
-                else -> false
+
+                else -> {
+                    false
+                }
             }
-        }
+        },
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             WajihaToolbar(
                 title = game?.displayName ?: "Game",
                 onBack = onBack,
-                backFocusable = false
+                backFocusable = false,
             )
 
             if (game == null) {
                 Text(
                     text = "Game not found",
                     modifier = Modifier.padding(WajihaSpacing.md),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else if (dualDisplay) {
                 GameDetailTabsPane(
@@ -173,37 +183,41 @@ fun GameDetailScreen(
                     showFavoriteRow = true,
                     dualDisplay = true,
                     gamepadOwner = gamepadOwner,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = WajihaSpacing.md)
-                        .padding(bottom = WajihaSpacing.md)
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = WajihaSpacing.md)
+                            .padding(bottom = WajihaSpacing.md),
                 )
             } else {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = WajihaSpacing.md)
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = WajihaSpacing.md),
                 ) {
                     GameDetailCompactHero(
                         game = game,
                         platformName = state.platform?.name,
                         boxartPath = state.media.firstOrNull { it.type == "boxart" }?.localPath,
                         onSetFavorite = viewModel::setFavorite,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = WajihaSpacing.xs)
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = WajihaSpacing.xs),
                     )
                     GameDetailSectionCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = WajihaSpacing.sm)
-                            .weight(0.28f)
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = WajihaSpacing.sm)
+                                .weight(0.28f),
                     ) {
                         GameDetailMetadataPanel(
                             game = game,
                             platformName = state.platform?.name,
                             totalPlaytimeSec = state.totalPlaytimeSec,
-                            style = MetadataPanelStyle.Compact
+                            style = MetadataPanelStyle.Compact,
                         )
                     }
                     GameDetailTabsPane(
@@ -218,10 +232,11 @@ fun GameDetailScreen(
                         showFavoriteRow = false,
                         dualDisplay = false,
                         gamepadOwner = gamepadOwner,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .padding(top = WajihaSpacing.sm, bottom = WajihaSpacing.md)
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(top = WajihaSpacing.sm, bottom = WajihaSpacing.md),
                     )
                 }
             }
@@ -242,64 +257,75 @@ private fun GameDetailTabsPane(
     showFavoriteRow: Boolean,
     dualDisplay: Boolean = false,
     gamepadOwner: GamepadOwner? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         FolderTabRow(
             tabs = sections.map { it.label },
             selectedIndex = selectedSectionIndex,
             onSelect = onSelectSection,
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusProperties { canFocus = false }
-                .padding(top = WajihaSpacing.sm)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .focusProperties { canFocus = false }
+                    .padding(top = WajihaSpacing.sm),
         )
 
         GameDetailSectionCard(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .offset(y = (-1).dp)
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .offset(y = (-1).dp),
         ) {
             when (sections[selectedSectionIndex]) {
-                ActionPaneSection.Launch -> LaunchSectionContent(
-                    game = game,
-                    secondaryDisplayId = secondaryDisplayId,
-                    onSetLaunchDisplay = viewModel::setLaunchOnDisplay,
-                    onSetFavorite = viewModel::setFavorite,
-                    onLaunchTop = { viewModel.launchOnDisplay(0) },
-                    onLaunchBottom = {
-                        viewModel.launchOnDisplay(secondaryDisplayId ?: 4)
-                    },
-                    showFavoriteRow = showFavoriteRow,
-                    firstFocusRequester = sectionFocus
-                )
-                ActionPaneSection.Emulator -> EmulatorSectionContent(
-                    emulators = state.emulators,
-                    selectedId = game.emulatorOverrideId,
-                    onSelect = viewModel::setEmulatorOverride,
-                    firstFocusRequester = sectionFocus
-                )
-                ActionPaneSection.Scraper -> ScraperSectionContent(
-                    state = state,
-                    onScrape = { policy -> viewModel.rescrape(policy = policy) },
-                    onDeleteMedia = viewModel::deleteMedia,
-                    dualDisplay = dualDisplay,
-                    gamepadOwner = gamepadOwner,
-                    firstFocusRequester = sectionFocus
-                )
+                ActionPaneSection.Launch -> {
+                    LaunchSectionContent(
+                        game = game,
+                        secondaryDisplayId = secondaryDisplayId,
+                        onSetLaunchDisplay = viewModel::setLaunchOnDisplay,
+                        onSetFavorite = viewModel::setFavorite,
+                        onLaunchTop = { viewModel.launchOnDisplay(0) },
+                        onLaunchBottom = {
+                            viewModel.launchOnDisplay(secondaryDisplayId ?: 4)
+                        },
+                        showFavoriteRow = showFavoriteRow,
+                        firstFocusRequester = sectionFocus,
+                    )
+                }
+
+                ActionPaneSection.Emulator -> {
+                    EmulatorSectionContent(
+                        emulators = state.emulators,
+                        selectedId = game.emulatorOverrideId,
+                        onSelect = viewModel::setEmulatorOverride,
+                        firstFocusRequester = sectionFocus,
+                    )
+                }
+
+                ActionPaneSection.Scraper -> {
+                    ScraperSectionContent(
+                        state = state,
+                        onScrape = { policy -> viewModel.rescrape(policy = policy) },
+                        onDeleteMedia = viewModel::deleteMedia,
+                        dualDisplay = dualDisplay,
+                        gamepadOwner = gamepadOwner,
+                        firstFocusRequester = sectionFocus,
+                    )
+                }
             }
 
             state.scrapeMessage?.let { msg ->
                 Text(
                     text = msg,
                     style = MaterialTheme.typography.bodySmall,
-                    color = when (state.scrapeMessageSuccess) {
-                        true -> MaterialTheme.colorScheme.primary
-                        false -> MaterialTheme.colorScheme.error
-                        null -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    modifier = Modifier.padding(top = WajihaSpacing.sm)
+                    color =
+                        when (state.scrapeMessageSuccess) {
+                            true -> MaterialTheme.colorScheme.primary
+                            false -> MaterialTheme.colorScheme.error
+                            null -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    modifier = Modifier.padding(top = WajihaSpacing.sm),
                 )
             }
             state.actionError?.let { err ->
@@ -307,7 +333,7 @@ private fun GameDetailTabsPane(
                     text = err,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = WajihaSpacing.xs)
+                    modifier = Modifier.padding(top = WajihaSpacing.xs),
                 )
             }
         }
@@ -320,46 +346,48 @@ private fun GameDetailCompactHero(
     platformName: String?,
     boxartPath: String?,
     onSetFavorite: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         modifier = Modifier,
         shape = WajihaShapes.card,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(WajihaSpacing.sm),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(WajihaSpacing.sm),
             horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .height(88.dp)
-                    .aspectRatio(3f / 4f)
-                    .clip(WajihaShapes.tile)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .height(88.dp)
+                        .aspectRatio(3f / 4f)
+                        .clip(WajihaShapes.tile)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
             ) {
                 if (boxartPath != null) {
                     AsyncImage(
                         model = boxartPath,
                         contentDescription = game.displayName,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     )
                 } else {
                     Text(
                         text = game.displayName.take(2).uppercase(),
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)
+                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
             ) {
                 Text(
                     text = game.displayName,
@@ -367,7 +395,7 @@ private fun GameDetailCompactHero(
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 PlatformBadge(label = platformName ?: game.platformId)
                 DetailToggleRow(
@@ -375,7 +403,7 @@ private fun GameDetailCompactHero(
                     checked = game.favorite,
                     onCheckedChange = onSetFavorite,
                     defaultChecked = false,
-                    onReset = { onSetFavorite(false) }
+                    onReset = { onSetFavorite(false) },
                 )
             }
         }
@@ -386,16 +414,17 @@ private fun GameDetailCompactHero(
 private fun PlatformBadge(label: String) {
     Surface(
         shape = WajihaShapes.chip,
-        color = MaterialTheme.colorScheme.secondaryContainer
+        color = MaterialTheme.colorScheme.secondaryContainer,
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(
-                horizontal = WajihaSpacing.sm,
-                vertical = WajihaSpacing.xs / 2
-            )
+            modifier =
+                Modifier.padding(
+                    horizontal = WajihaSpacing.sm,
+                    vertical = WajihaSpacing.xs / 2,
+                ),
         )
     }
 }
@@ -403,26 +432,28 @@ private fun PlatformBadge(label: String) {
 @Composable
 private fun GameDetailSectionCard(
     modifier: Modifier = Modifier,
-    sectionContent: @Composable () -> Unit
+    sectionContent: @Composable () -> Unit,
 ) {
     val shape = WajihaShapes.folderPanel
     val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(width = 1.dp, color = outlineColor, shape = shape),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .border(width = 1.dp, color = outlineColor, shape = shape),
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(WajihaSpacing.md)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(WajihaSpacing.md),
         ) {
             SettingSectionScrollColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
             ) {
                 sectionContent()
             }
@@ -436,7 +467,7 @@ private fun SectionBlurb(text: String) {
         text = text,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(bottom = WajihaSpacing.xs)
+        modifier = Modifier.padding(bottom = WajihaSpacing.xs),
     )
 }
 
@@ -444,7 +475,7 @@ private fun SectionBlurb(text: String) {
 private fun GroupDivider() {
     HorizontalDivider(
         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-        modifier = Modifier.padding(vertical = WajihaSpacing.xs)
+        modifier = Modifier.padding(vertical = WajihaSpacing.xs),
     )
 }
 
@@ -456,7 +487,7 @@ private fun DetailToggleRow(
     defaultChecked: Boolean,
     onReset: () -> Unit,
     description: String? = null,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
     GamepadSettingRow(
         label = label,
@@ -466,7 +497,7 @@ private fun DetailToggleRow(
         onCheckedChange = onCheckedChange,
         focusRequester = focusRequester,
         onReset = onReset,
-        isAtDefault = checked == defaultChecked
+        isAtDefault = checked == defaultChecked,
     )
 }
 
@@ -479,7 +510,7 @@ private fun DetailChoiceRow(
     onSelect: (String) -> Unit,
     defaultValue: String,
     onReset: () -> Unit,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
     GamepadSettingRow(
         label = label,
@@ -490,7 +521,7 @@ private fun DetailChoiceRow(
         onSelect = onSelect,
         focusRequester = focusRequester,
         onReset = onReset,
-        isAtDefault = selected == defaultValue
+        isAtDefault = selected == defaultValue,
     )
 }
 
@@ -503,7 +534,7 @@ private fun DetailMultiChoiceRow(
     onSelect: (String) -> Unit,
     defaultValue: String,
     onReset: () -> Unit,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
 ) {
     GamepadSettingRow(
         label = label,
@@ -514,22 +545,23 @@ private fun DetailMultiChoiceRow(
         onSelect = onSelect,
         focusRequester = focusRequester,
         onReset = onReset,
-        isAtDefault = selected == defaultValue
+        isAtDefault = selected == defaultValue,
     )
 }
 
 enum class MetadataPanelStyle {
     /** Top screen: full description, standard typography. */
     Full,
+
     /** Single-display card below hero. */
-    Compact
+    Compact,
 }
 
 /** Per-section visibility for [GameDetailMetadataPanel] on the top-screen Info hero. */
 data class MetadataPanelVisibility(
     val metadata: Boolean = true,
     val description: Boolean = true,
-    val playStats: Boolean = true
+    val playStats: Boolean = true,
 )
 
 @Composable
@@ -539,16 +571,18 @@ fun GameDetailMetadataPanel(
     totalPlaytimeSec: Long,
     modifier: Modifier = Modifier,
     style: MetadataPanelStyle = MetadataPanelStyle.Full,
-    visibility: MetadataPanelVisibility = MetadataPanelVisibility()
+    visibility: MetadataPanelVisibility = MetadataPanelVisibility(),
 ) {
-    val bodyStyle = when (style) {
-        MetadataPanelStyle.Full -> MaterialTheme.typography.bodyMedium
-        MetadataPanelStyle.Compact -> MaterialTheme.typography.bodySmall
-    }
-    val labelStyle = when (style) {
-        MetadataPanelStyle.Full -> MaterialTheme.typography.labelMedium
-        MetadataPanelStyle.Compact -> MaterialTheme.typography.labelSmall
-    }
+    val bodyStyle =
+        when (style) {
+            MetadataPanelStyle.Full -> MaterialTheme.typography.bodyMedium
+            MetadataPanelStyle.Compact -> MaterialTheme.typography.bodySmall
+        }
+    val labelStyle =
+        when (style) {
+            MetadataPanelStyle.Full -> MaterialTheme.typography.labelMedium
+            MetadataPanelStyle.Compact -> MaterialTheme.typography.labelSmall
+        }
 
     val showMetadata = visibility.metadata
     val showPlayStats = visibility.playStats
@@ -557,9 +591,10 @@ fun GameDetailMetadataPanel(
 
     Column(
         modifier = Modifier,
-        verticalArrangement = Arrangement.spacedBy(
-            if (style == MetadataPanelStyle.Full) WajihaSpacing.xs else WajihaSpacing.xs / 2
-        )
+        verticalArrangement =
+            Arrangement.spacedBy(
+                if (style == MetadataPanelStyle.Full) WajihaSpacing.xs else WajihaSpacing.xs / 2,
+            ),
     ) {
         if (showMetadata) {
             MetaInfoRow("Platform", platformName ?: game.platformId, labelStyle, bodyStyle)
@@ -580,13 +615,13 @@ fun GameDetailMetadataPanel(
                 value = game.uri,
                 labelStyle = labelStyle,
                 bodyStyle = bodyStyle,
-                maxValueLines = if (style == MetadataPanelStyle.Full) Int.MAX_VALUE else 2
+                maxValueLines = if (style == MetadataPanelStyle.Full) Int.MAX_VALUE else 2,
             )
             MetaInfoRow(
                 label = "Scrape status",
                 value = formatScrapeStatus(game.scrapedAt),
                 labelStyle = labelStyle,
-                bodyStyle = bodyStyle
+                bodyStyle = bodyStyle,
             )
         }
 
@@ -604,13 +639,13 @@ fun GameDetailMetadataPanel(
             Text(
                 text = "Description",
                 style = labelStyle,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
                 text = game.description.orEmpty(),
                 style = bodyStyle,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = WajihaSpacing.xs / 2)
+                modifier = Modifier.padding(top = WajihaSpacing.xs / 2),
             )
         }
     }
@@ -622,29 +657,31 @@ private fun MetaInfoRow(
     value: String,
     labelStyle: TextStyle,
     bodyStyle: TextStyle,
-    maxValueLines: Int = 3
+    maxValueLines: Int = 3,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = WajihaSpacing.touchMin / 2),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = WajihaSpacing.touchMin / 2),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.Top,
     ) {
         Text(
             text = label,
             style = labelStyle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.widthIn(max = 108.dp)
+            modifier = Modifier.widthIn(max = 108.dp),
         )
         Text(
             text = value,
             style = bodyStyle,
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = WajihaSpacing.sm),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .padding(start = WajihaSpacing.sm),
             maxLines = maxValueLines,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -664,8 +701,10 @@ private fun formatFileSize(bytes: Long): String {
 @OptIn(kotlin.time.ExperimentalTime::class)
 private fun formatScrapeStatus(scrapedAt: Long?): String {
     if (scrapedAt == null) return "Never scraped"
-    val dateTime = kotlin.time.Instant.fromEpochMilliseconds(scrapedAt)
-        .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+    val dateTime =
+        kotlin.time.Instant
+            .fromEpochMilliseconds(scrapedAt)
+            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
     val y = dateTime.year
     val m = dateTime.monthNumber.toString().padStart(2, '0')
     val d = dateTime.dayOfMonth.toString().padStart(2, '0')
@@ -681,7 +720,7 @@ private fun LaunchSectionContent(
     onLaunchTop: () -> Unit,
     onLaunchBottom: () -> Unit,
     showFavoriteRow: Boolean,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     SectionBlurb("Default display and quick launch options.")
 
@@ -693,32 +732,34 @@ private fun LaunchSectionContent(
             onCheckedChange = onSetFavorite,
             defaultChecked = false,
             onReset = { onSetFavorite(false) },
-            focusRequester = firstFocusRequester
+            focusRequester = firstFocusRequester,
         )
         GroupDivider()
     }
 
     val topId = "0"
     val bottomId = (secondaryDisplayId ?: 4).toString()
-    val selectedDisplay = when (game.launchOnDisplay) {
-        0, null -> topId
-        else -> bottomId
-    }
+    val selectedDisplay =
+        when (game.launchOnDisplay) {
+            0, null -> topId
+            else -> bottomId
+        }
     GamepadSettingRow(
         label = "Default display",
         description = "Which screen to use when launching from the grid.",
         type = SettingType.BinaryChoice,
-        options = listOf(
-            topId to "Top ($topId)",
-            bottomId to "Bottom ($bottomId)"
-        ),
+        options =
+            listOf(
+                topId to "Top ($topId)",
+                bottomId to "Bottom ($bottomId)",
+            ),
         selected = selectedDisplay,
         onSelect = { value ->
             onSetLaunchDisplay(if (value == topId) 0 else (secondaryDisplayId ?: 4))
         },
         focusRequester = if (showFavoriteRow) null else firstFocusRequester,
         onReset = { onSetLaunchDisplay(null) },
-        isAtDefault = game.launchOnDisplay == null
+        isAtDefault = game.launchOnDisplay == null,
     )
 
     GroupDivider()
@@ -726,19 +767,19 @@ private fun LaunchSectionContent(
     Text(
         text = "Launch now",
         style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurface
+        color = MaterialTheme.colorScheme.onSurface,
     )
     Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)) {
         GamepadButton(
             text = "Launch top",
             onClick = onLaunchTop,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
         GamepadButton(
             text = "Launch bottom",
             onClick = onLaunchBottom,
             outlined = true,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -748,7 +789,7 @@ private fun EmulatorSectionContent(
     emulators: List<EmulatorEntity>,
     selectedId: String?,
     onSelect: (String?) -> Unit,
-    firstFocusRequester: FocusRequester? = null
+    firstFocusRequester: FocusRequester? = null,
 ) {
     val systemControls = koinInject<SystemControls>()
     SectionBlurb("Override which emulator launches this game. Platform default is used when none is selected.")
@@ -757,13 +798,14 @@ private fun EmulatorSectionContent(
         Text(
             text = "No emulators configured for this platform.",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     } else {
-        val options = emulators.toEmulatorChoiceOptions(
-            isPackageInstalled = systemControls::isPackageInstalled,
-            includePlatformDefault = true
-        )
+        val options =
+            emulators.toEmulatorChoiceOptions(
+                isPackageInstalled = systemControls::isPackageInstalled,
+                includePlatformDefault = true,
+            )
         DetailMultiChoiceRow(
             label = "Emulator",
             description = "A opens the list. Installed emulators are selectable; missing apps stay visible but greyed out.",
@@ -772,7 +814,7 @@ private fun EmulatorSectionContent(
             onSelect = { value -> onSelect(value.ifEmpty { null }) },
             defaultValue = "",
             onReset = { onSelect(null) },
-            focusRequester = firstFocusRequester
+            focusRequester = firstFocusRequester,
         )
     }
 }
@@ -787,27 +829,29 @@ private fun ScraperSectionContent(
     gamepadOwner: GamepadOwner? = null,
     firstFocusRequester: FocusRequester? = null,
     reviewViewModel: ScrapeReviewViewModel = koinInject(),
-    dualStore: DualScreenStore = koinInject()
+    dualStore: DualScreenStore = koinInject(),
 ) {
     var mode by remember { mutableStateOf(ScrapeUiMode.FillGaps) }
     var reviewing by remember { mutableStateOf(false) }
     var focusedPreview by remember { mutableStateOf(MediaType.Boxart) }
     val game = state.game
-    val gapTypes = remember(state.media, game?.scrapedAt) {
-        state.media.missingGapTypes()
-    }
+    val gapTypes =
+        remember(state.media, game?.scrapedAt) {
+            state.media.missingGapTypes()
+        }
     val sourcesReady = state.scraperSources.isNotEmpty()
-    val previewTypes = remember {
-        listOf(
-            MediaType.Boxart,
-            MediaType.Logo,
-            MediaType.Hero,
-            MediaType.Screenshot,
-            MediaType.Fanart,
-            MediaType.Banner,
-            MediaType.Icon
-        )
-    }
+    val previewTypes =
+        remember {
+            listOf(
+                MediaType.Boxart,
+                MediaType.Logo,
+                MediaType.Hero,
+                MediaType.Screenshot,
+                MediaType.Fanart,
+                MediaType.Banner,
+                MediaType.Icon,
+            )
+        }
 
     if (reviewing && game != null) {
         ScrapeReviewPicker(
@@ -815,8 +859,9 @@ private fun ScraperSectionContent(
             onCancel = { reviewing = false },
             showSkip = false,
             dualDisplay = dualDisplay,
-            hostGamepadOwner = gamepadOwner
-                ?: if (dualDisplay) dualStore.menuGamepadOwner() else null
+            hostGamepadOwner =
+                gamepadOwner
+                    ?: if (dualDisplay) dualStore.menuGamepadOwner() else null,
         )
     }
 
@@ -825,7 +870,7 @@ private fun ScraperSectionContent(
     if (state.scraping) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             CircularProgressIndicator(modifier = Modifier.height(20.dp))
             Text("Scraping…", style = MaterialTheme.typography.bodyMedium)
@@ -838,7 +883,7 @@ private fun ScraperSectionContent(
         firstFocusRequester = firstFocusRequester,
         enabled = !state.scraping,
         helperText = mode.singleGameHelperText(),
-        singleGameLabels = true
+        singleGameLabels = true,
     )
 
     when (mode) {
@@ -851,110 +896,124 @@ private fun ScraperSectionContent(
                     reviewViewModel.openGame(game)
                 },
                 enabled = !state.scraping && sourcesReady,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             )
         }
+
         else -> {
             GamepadButton(
-                text = when (mode) {
-                    ScrapeUiMode.Force -> "Force scrape"
-                    else -> "Scrape"
-                },
+                text =
+                    when (mode) {
+                        ScrapeUiMode.Force -> "Force scrape"
+                        else -> "Scrape"
+                    },
                 onClick = { onScrape(mode.toPolicy()) },
                 enabled = !state.scraping && sourcesReady,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }
 
     Text(
-        text = when {
-            !sourcesReady -> "No scraper sources configured — enable sources in Settings → Scraper."
-            mode == ScrapeUiMode.FillGaps && gapTypes.isNotEmpty() ->
-                "Missing: ${gapTypes.joinToString { it.dbName }}"
-            mode == ScrapeUiMode.FillGaps -> "Preferred artwork present."
-            else -> "${state.scraperSources.size} source(s) configured"
-        },
+        text =
+            when {
+                !sourcesReady -> {
+                    "No scraper sources configured — enable sources in Settings → Scraper."
+                }
+
+                mode == ScrapeUiMode.FillGaps && gapTypes.isNotEmpty() -> {
+                    "Missing: ${gapTypes.joinToString { it.dbName }}"
+                }
+
+                mode == ScrapeUiMode.FillGaps -> {
+                    "Preferred artwork present."
+                }
+
+                else -> {
+                    "${state.scraperSources.size} source(s) configured"
+                }
+            },
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = WajihaSpacing.xs)
+        modifier = Modifier.padding(top = WajihaSpacing.xs),
     )
 
     GroupDivider()
     Text(
         text = "Artwork",
         style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurface
+        color = MaterialTheme.colorScheme.onSurface,
     )
     Text(
         text = "A/tap Manual · X/long-press remove",
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-        modifier = Modifier.padding(top = WajihaSpacing.xs)
+        modifier = Modifier.padding(top = WajihaSpacing.xs),
     ) {
         items(previewTypes, key = { it.dbName }) { type ->
             val path = state.media.firstOrNull { it.type == type.dbName }?.localPath
             val focused = focusedPreview == type
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(
-                        width = if (focused) 2.dp else 1.dp,
-                        color = if (focused) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.outlineVariant
-                        },
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .combinedClickable(
-                        onClick = {
-                            focusedPreview = type
-                            if (game == null || !sourcesReady) return@combinedClickable
-                            reviewing = true
-                            reviewViewModel.openGame(
-                                game = game,
-                                focusMediaType = type,
-                                openPickerImmediately = true
-                            )
-                        },
-                        onLongClick = {
-                            focusedPreview = type
-                            if (!path.isNullOrBlank()) onDeleteMedia(type)
-                        }
-                    )
-                    .padding(WajihaSpacing.xs)
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(
+                            width = if (focused) 2.dp else 1.dp,
+                            color =
+                                if (focused) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.outlineVariant
+                                },
+                            shape = RoundedCornerShape(8.dp),
+                        ).background(MaterialTheme.colorScheme.surfaceVariant)
+                        .combinedClickable(
+                            onClick = {
+                                focusedPreview = type
+                                if (game == null || !sourcesReady) return@combinedClickable
+                                reviewing = true
+                                reviewViewModel.openGame(
+                                    game = game,
+                                    focusMediaType = type,
+                                    openPickerImmediately = true,
+                                )
+                            },
+                            onLongClick = {
+                                focusedPreview = type
+                                if (!path.isNullOrBlank()) onDeleteMedia(type)
+                            },
+                        ).padding(WajihaSpacing.xs),
             ) {
                 Box(
-                    modifier = Modifier
-                        .height(80.dp)
-                        .widthIn(min = 60.dp, max = 120.dp),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .height(80.dp)
+                            .widthIn(min = 60.dp, max = 120.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     if (!path.isNullOrBlank()) {
                         AsyncImage(
                             model = path,
                             contentDescription = type.dbName,
                             contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
                         )
                     } else {
                         Text(
                             "—",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
                 Text(
                     text = type.dbName,
                     style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = WajihaSpacing.xs / 2)
+                    modifier = Modifier.padding(top = WajihaSpacing.xs / 2),
                 )
             }
         }
@@ -962,12 +1021,13 @@ private fun ScraperSectionContent(
 
     GroupDivider()
     Text(
-        text = if (sourcesReady) {
-            "Providers: ${state.scraperSources.joinToString(" · ")}"
-        } else {
-            "No providers — Settings → Scraper"
-        },
+        text =
+            if (sourcesReady) {
+                "Providers: ${state.scraperSources.joinToString(" · ")}"
+            } else {
+                "No providers — Settings → Scraper"
+            },
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }

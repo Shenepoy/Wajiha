@@ -9,14 +9,14 @@ sealed class HeroContext {
     }
 
     data class Settings(
-        val sectionLabel: String? = null
+        val sectionLabel: String? = null,
     ) : HeroContext() {
         override val transitionKey: String = "settings"
     }
 
     data class Apps(
         val appCount: Int = 0,
-        val focusedLabel: String? = null
+        val focusedLabel: String? = null,
     ) : HeroContext() {
         override val transitionKey: String = "apps"
     }
@@ -24,13 +24,13 @@ sealed class HeroContext {
     data class System(
         val batteryPercent: Int = -1,
         val charging: Boolean = false,
-        val wifiEnabled: Boolean = false
+        val wifiEnabled: Boolean = false,
     ) : HeroContext() {
         override val transitionKey: String = "system"
     }
 
     data class GameDetail(
-        val gameId: Long
+        val gameId: Long,
     ) : HeroContext() {
         override val transitionKey: String = "game_detail_$gameId"
     }
@@ -50,5 +50,5 @@ enum class LauncherPanel {
     Settings,
     Apps,
     System,
-    GameDetail
+    GameDetail,
 }

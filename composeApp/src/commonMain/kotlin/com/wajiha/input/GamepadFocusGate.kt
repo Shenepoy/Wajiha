@@ -13,11 +13,10 @@ import androidx.compose.ui.focus.focusProperties
  * Set [enabled] to false for touch-only controls (e.g. header chips).
  */
 @Composable
-fun Modifier.wajihaGamepadFocus(enabled: Boolean = true): Modifier {
-    return if (enabled) {
+fun Modifier.wajihaGamepadFocus(enabled: Boolean = true): Modifier =
+    if (enabled) {
         val interactionSource = remember { MutableInteractionSource() }
         focusable(interactionSource = interactionSource)
     } else {
         focusProperties { canFocus = false }
     }
-}

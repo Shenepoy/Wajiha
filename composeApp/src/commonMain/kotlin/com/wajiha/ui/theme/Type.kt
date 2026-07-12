@@ -11,6 +11,6 @@ fun wajihaTypography(): Typography {
     return base.copy(
         titleLarge = base.titleLarge.copy(fontWeight = FontWeight.SemiBold),
         titleMedium = base.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-        labelSmall = base.labelSmall.copy(letterSpacing = 0.4.sp)
+        labelSmall = base.labelSmall.copy(letterSpacing = 0.4.sp),
     )
 }

@@ -25,82 +25,89 @@ import kotlinx.serialization.Serializable
  * Achievements themselves are handled by the RA feature module; this source
  * only contributes the game link (raGameId) and basic metadata.
  */
-class RetroAchievementsSource(private val http: HttpClient) : ScraperSource {
-
+class RetroAchievementsSource(
+    private val http: HttpClient,
+) : ScraperSource {
     override val id = "ra"
     override val displayName = "RetroAchievements"
 
-    override fun isConfigured(settings: ScraperSettings): Boolean =
-        settings.raUsername.isNotBlank() && settings.raApiKey.isNotBlank()
+    override fun isConfigured(settings: ScraperSettings): Boolean = settings.raUsername.isNotBlank() && settings.raApiKey.isNotBlank()
 
     override suspend fun lookupResult(
         query: ScrapeQuery,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ): SourceLookupOutcome {
-        val md5 = query.md5
-            ?: return SourceLookupOutcome.Miss
-        val result = http.getStringResult(
-            "https://retroachievements.org/API/API_GetGameInfoByHash.php"
-        ) {
-            parameter("z", settings.raUsername)
-            parameter("y", settings.raApiKey)
-            parameter("h", md5)
-        }
-        val body = when (result) {
-            is HttpJsonResult.Failed -> return SourceLookupOutcome.Failed(result.failure)
-            is HttpJsonResult.Ok -> result.value
-        }
-        val gameId = parseRaGameIdFromHashResponse(body)
-            ?: return SourceLookupOutcome.Miss
-        val game = runCatching {
-            WajihaJson.Default.decodeFromString<RaGame>(body)
-        }.getOrNull()
-            ?: return SourceLookupOutcome.Failed(
-                ScrapeFailure(ScrapeFailureKind.Parse, "Could not parse RA game")
-            )
+        val md5 =
+            query.md5
+                ?: return SourceLookupOutcome.Miss
+        val result =
+            http.getStringResult(
+                "https://retroachievements.org/API/API_GetGameInfoByHash.php",
+            ) {
+                parameter("z", settings.raUsername)
+                parameter("y", settings.raApiKey)
+                parameter("h", md5)
+            }
+        val body =
+            when (result) {
+                is HttpJsonResult.Failed -> return SourceLookupOutcome.Failed(result.failure)
+                is HttpJsonResult.Ok -> result.value
+            }
+        val gameId =
+            parseRaGameIdFromHashResponse(body)
+                ?: return SourceLookupOutcome.Miss
+        val game =
+            runCatching {
+                WajihaJson.Default.decodeFromString<RaGame>(body)
+            }.getOrNull()
+                ?: return SourceLookupOutcome.Failed(
+                    ScrapeFailure(ScrapeFailureKind.Parse, "Could not parse RA game"),
+                )
         return SourceLookupOutcome.Hit(
             ScrapeCandidate(
                 sourceId = id,
                 sourceGameId = gameId.toString(),
                 name = game.title ?: query.displayName,
-                metadata = ScrapedMetadata(
-                    name = game.title,
-                    developer = game.developer,
-                    publisher = game.publisher,
-                    genre = game.genre,
-                    releaseDate = game.released,
-                    raGameId = gameId
-                ),
-                media = buildList {
-                    if (settings.raFetchIcon) {
-                        game.imageIcon?.let {
-                            add(MediaCandidate(type = MediaType.Icon, url = RaMediaUrls.media(it)))
+                metadata =
+                    ScrapedMetadata(
+                        name = game.title,
+                        developer = game.developer,
+                        publisher = game.publisher,
+                        genre = game.genre,
+                        releaseDate = game.released,
+                        raGameId = gameId,
+                    ),
+                media =
+                    buildList {
+                        if (settings.raFetchIcon) {
+                            game.imageIcon?.let {
+                                add(MediaCandidate(type = MediaType.Icon, url = RaMediaUrls.media(it)))
+                            }
                         }
-                    }
-                    if (settings.raFetchBoxArt) {
-                        game.imageBoxArt?.let {
-                            add(MediaCandidate(type = MediaType.Boxart, url = RaMediaUrls.media(it)))
+                        if (settings.raFetchBoxArt) {
+                            game.imageBoxArt?.let {
+                                add(MediaCandidate(type = MediaType.Boxart, url = RaMediaUrls.media(it)))
+                            }
                         }
-                    }
-                    if (settings.raFetchTitle) {
-                        game.imageTitle?.let {
-                            add(
-                                MediaCandidate(
-                                    type = MediaType.Screenshot,
-                                    url = RaMediaUrls.media(it)
+                        if (settings.raFetchTitle) {
+                            game.imageTitle?.let {
+                                add(
+                                    MediaCandidate(
+                                        type = MediaType.Screenshot,
+                                        url = RaMediaUrls.media(it),
+                                    ),
                                 )
-                            )
+                            }
                         }
-                    }
-                }
-            )
+                    },
+            ),
         )
     }
 
     override suspend fun search(
         name: String,
         query: ScrapeQuery,
-        settings: ScraperSettings
+        settings: ScraperSettings,
     ): List<ScrapeCandidate> = emptyList() // RA has no public name-search API
 
     @Serializable
@@ -113,6 +120,6 @@ class RetroAchievementsSource(private val http: HttpClient) : ScraperSource {
         @SerialName("Released") val released: String? = null,
         @SerialName("ImageIcon") val imageIcon: String? = null,
         @SerialName("ImageTitle") val imageTitle: String? = null,
-        @SerialName("ImageBoxArt") val imageBoxArt: String? = null
+        @SerialName("ImageBoxArt") val imageBoxArt: String? = null,
     )
 }

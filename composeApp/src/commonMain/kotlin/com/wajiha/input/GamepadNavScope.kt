@@ -19,7 +19,10 @@ class GamepadNavCoordinator {
 
     val maxZoneIndex: Int get() = zones.keys.maxOrNull() ?: 0
 
-    fun registerZone(zoneIndex: Int, controller: GamepadNavController) {
+    fun registerZone(
+        zoneIndex: Int,
+        controller: GamepadNavController,
+    ) {
         zones[zoneIndex] = controller
         updateActive()
     }

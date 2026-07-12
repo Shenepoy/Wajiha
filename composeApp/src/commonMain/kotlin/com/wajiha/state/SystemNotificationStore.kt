@@ -1,17 +1,17 @@
 package com.wajiha.state
 
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 enum class SystemNotificationKind {
     Info,
     Success,
     Warning,
-    Error
+    Error,
 }
 
 data class SystemNotification(
@@ -20,7 +20,7 @@ data class SystemNotification(
     val body: String,
     val kind: SystemNotificationKind = SystemNotificationKind.Info,
     val createdAtMs: Long = 0L,
-    val read: Boolean = false
+    val read: Boolean = false,
 )
 
 /**
@@ -28,7 +28,6 @@ data class SystemNotification(
  * Workers and UI post here; R2 toggles the panel.
  */
 class SystemNotificationStore {
-
     private val _notifications = MutableStateFlow<List<SystemNotification>>(emptyList())
     val notifications: StateFlow<List<SystemNotification>> = _notifications.asStateFlow()
 
@@ -41,15 +40,16 @@ class SystemNotificationStore {
     fun post(
         title: String,
         body: String,
-        kind: SystemNotificationKind = SystemNotificationKind.Info
+        kind: SystemNotificationKind = SystemNotificationKind.Info,
     ) {
-        val item = SystemNotification(
-            id = nextId++,
-            title = title,
-            body = body,
-            kind = kind,
-            createdAtMs = Clock.System.now().toEpochMilliseconds()
-        )
+        val item =
+            SystemNotification(
+                id = nextId++,
+                title = title,
+                body = body,
+                kind = kind,
+                createdAtMs = Clock.System.now().toEpochMilliseconds(),
+            )
         _notifications.update { listOf(item) + it.take(MAX_ITEMS - 1) }
     }
 

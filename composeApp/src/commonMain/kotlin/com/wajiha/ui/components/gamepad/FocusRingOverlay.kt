@@ -55,7 +55,7 @@ data class FocusRingOverlayEntry(
     val color: Color,
     val thickness: Dp,
     val borderStyle: FocusBorderStyle,
-    val shape: Shape
+    val shape: Shape,
 )
 
 val LocalFocusRingOverlay = compositionLocalOf<FocusRingOverlayState?> { null }
@@ -71,46 +71,50 @@ fun rememberFocusRingOverlayState(): FocusRingOverlayState = remember { FocusRin
 fun FocusRingOverlayHost(
     state: FocusRingOverlayState,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     var hostCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val entry = state.entry
     val borderStyle = entry?.borderStyle
 
     val pulseAlpha = animatedPulseAlpha(enabled = borderStyle == FocusBorderStyle.Pulsing)
-    val marchPhase = animatedMarchPhase(
-        enabled = borderStyle == FocusBorderStyle.MarchingAnts
-    )
-    val gradientPhase = animatedGradientPhase(
-        enabled = borderStyle == FocusBorderStyle.GradientPulse
-    )
+    val marchPhase =
+        animatedMarchPhase(
+            enabled = borderStyle == FocusBorderStyle.MarchingAnts,
+        )
+    val gradientPhase =
+        animatedGradientPhase(
+            enabled = borderStyle == FocusBorderStyle.GradientPulse,
+        )
 
     Box(
-        modifier = modifier
-            .onGloballyPositioned { hostCoordinates = it }
-            .drawWithContent {
-                drawContent()
-                val current = state.entry ?: return@drawWithContent
-                val host = hostCoordinates?.takeIf { it.isAttached } ?: return@drawWithContent
-                val hostBounds = host.boundsInRoot()
-                val item = current.boundsInRoot
-                if (item.width <= 0f || item.height <= 0f) return@drawWithContent
-                drawFocusChrome(
-                    itemTopLeft = Offset(
-                        item.left - hostBounds.left,
-                        item.top - hostBounds.top
-                    ),
-                    itemSize = Size(item.width, item.height),
-                    color = current.color,
-                    thickness = current.thickness,
-                    borderStyle = current.borderStyle,
-                    shape = current.shape,
-                    placementOutside = true,
-                    pulseAlpha = pulseAlpha,
-                    marchPhase = marchPhase,
-                    gradientPhase = gradientPhase
-                )
-            }
+        modifier =
+            modifier
+                .onGloballyPositioned { hostCoordinates = it }
+                .drawWithContent {
+                    drawContent()
+                    val current = state.entry ?: return@drawWithContent
+                    val host = hostCoordinates?.takeIf { it.isAttached } ?: return@drawWithContent
+                    val hostBounds = host.boundsInRoot()
+                    val item = current.boundsInRoot
+                    if (item.width <= 0f || item.height <= 0f) return@drawWithContent
+                    drawFocusChrome(
+                        itemTopLeft =
+                            Offset(
+                                item.left - hostBounds.left,
+                                item.top - hostBounds.top,
+                            ),
+                        itemSize = Size(item.width, item.height),
+                        color = current.color,
+                        thickness = current.thickness,
+                        borderStyle = current.borderStyle,
+                        shape = current.shape,
+                        placementOutside = true,
+                        pulseAlpha = pulseAlpha,
+                        marchPhase = marchPhase,
+                        gradientPhase = gradientPhase,
+                    )
+                },
     ) {
         content()
     }
@@ -125,7 +129,7 @@ fun FocusRingOverlayRegistrationEffect(
     color: Color,
     thickness: Dp,
     borderStyle: FocusBorderStyle,
-    shape: Shape
+    shape: Shape,
 ) {
     DisposableEffect(token) {
         onDispose { state.clear(token) }
@@ -139,8 +143,8 @@ fun FocusRingOverlayRegistrationEffect(
                     color = color,
                     thickness = thickness,
                     borderStyle = borderStyle,
-                    shape = shape
-                )
+                    shape = shape,
+                ),
             )
         } else {
             state.clear(token)
@@ -155,11 +159,12 @@ private fun animatedPulseAlpha(enabled: Boolean): Float {
     val alpha by transition.animateFloat(
         initialValue = 0.45f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "focus_overlay_pulse_alpha"
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(900, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+        label = "focus_overlay_pulse_alpha",
     )
     return alpha
 }
@@ -171,11 +176,12 @@ private fun animatedMarchPhase(enabled: Boolean): Float {
     val phase by transition.animateFloat(
         initialValue = 0f,
         targetValue = 24f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "focus_overlay_march_phase"
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(600, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+        label = "focus_overlay_march_phase",
     )
     return phase
 }
@@ -187,11 +193,12 @@ private fun animatedGradientPhase(enabled: Boolean): Float {
     val phase by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "focus_overlay_gradient_phase"
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(1400, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+        label = "focus_overlay_gradient_phase",
     )
     return phase
 }

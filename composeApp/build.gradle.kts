@@ -10,16 +10,22 @@ plugins {
 
 kotlin {
     androidLibrary {
-        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        compileSdk =
+            libs.versions.android.compileSdk
+                .get()
+                .toInt()
         namespace = "com.wajiha"
-        minSdk = libs.versions.android.minSdk.get().toInt()
+        minSdk =
+            libs.versions.android.minSdk
+                .get()
+                .toInt()
         androidResources.enable = true
         withHostTestBuilder {}
     }
 
     listOf(
         iosArm64(),
-        iosSimulatorArm64()
+        iosSimulatorArm64(),
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "ComposeApp"

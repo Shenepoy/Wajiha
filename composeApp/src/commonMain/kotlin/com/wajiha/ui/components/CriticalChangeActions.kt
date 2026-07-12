@@ -29,30 +29,32 @@ fun CriticalChangeActions(
     confirmEnabled: Boolean = true,
     confirmText: String = "Confirm",
     revertFocusRequester: FocusRequester? = null,
-    confirmFocusRequester: FocusRequester? = null
+    confirmFocusRequester: FocusRequester? = null,
 ) {
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.md),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         OutlinedButton(
             onClick = onRevert,
             enabled = hasChanges,
             shape = WajihaShapes.button,
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = WajihaColors.Tertiary,
-                disabledContentColor = WajihaColors.Tertiary.copy(alpha = 0.4f)
-            ),
-            modifier = Modifier
-                .defaultMinSize(minHeight = WajihaSpacing.touchMin)
-                .then(
-                    if (revertFocusRequester != null) {
-                        Modifier.focusRequester(revertFocusRequester)
-                    } else {
-                        Modifier
-                    }
-                )
+            colors =
+                ButtonDefaults.outlinedButtonColors(
+                    contentColor = WajihaColors.Tertiary,
+                    disabledContentColor = WajihaColors.Tertiary.copy(alpha = 0.4f),
+                ),
+            modifier =
+                Modifier
+                    .defaultMinSize(minHeight = WajihaSpacing.touchMin)
+                    .then(
+                        if (revertFocusRequester != null) {
+                            Modifier.focusRequester(revertFocusRequester)
+                        } else {
+                            Modifier
+                        },
+                    ),
         ) {
             Text("↩")
         }
@@ -60,7 +62,7 @@ fun CriticalChangeActions(
             text = confirmText,
             onClick = onConfirm,
             enabled = hasChanges && confirmEnabled,
-            focusRequester = confirmFocusRequester
+            focusRequester = confirmFocusRequester,
         )
     }
 }
