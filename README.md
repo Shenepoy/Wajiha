@@ -56,7 +56,9 @@ Then:
 
 ## Gamepad navigation
 
-Full controller support for handhelds: D-pad focus, A confirm, B back, layered modals, and per-screen hint bars. See [docs/gamepad.md](docs/gamepad.md).
+Full controller support for handhelds: D-pad focus, A confirm, B back, layered modals, and per-screen hint bars with scheme-aware glyphs (Auto / Xbox / PlayStation / Switch). See [docs/gamepad.md](docs/gamepad.md).
+
+Button icons use **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** (CC0) by [Kenney](https://kenney.nl).
 
 ## Game detail & platform settings
 
@@ -73,8 +75,9 @@ Concurrent emulator sessions appear as grid tiles in the game library; tap to sw
 
 ## Scraper details
 
-- **Metadata** comes from the first source in the priority chain that matches (default: ScreenScraper → RomM → RA). Hash lookups (CRC32/MD5) are tried before name search.
-- **Media** is resolved per type: each of boxart / logo / hero / screenshot / fanart / video / icon / banner has its own source priority chain (editable in the Sources tab — tap a source chip to promote it).
+- **Match tool** — Fill gaps / Force / Review all go through `ScrapeMatchTool`: search sources, rank by confidence + score + author prefer/blacklist, then auto-pick or hand the list to Review.
+- **Metadata** comes from the first source in the priority chain that matched (default: ScreenScraper → RomM → RA). Hash lookups (CRC32/MD5) are tried before name search.
+- **Media** is resolved per type with ranking (confidence / score / author prefs can override the default source priority chips).
 - **Region & language** preference chains apply to names, synopses, and per-region media variants.
 - **Image size cap** — images larger than the configured max resolution (Sources tab, default 1024 px longest edge, 0 = keep originals) are downscaled and recompressed (PNG for logos/icons, JPEG otherwise) before being stored.
 - **Per-platform overrides** (Sources tab, bottom) — pick a platform to override which sources it uses and its region priority; unset fields inherit the global options. Overridden platforms are marked with `*`.

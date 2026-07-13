@@ -7,6 +7,7 @@ import com.wajiha.data.scraper.BatchScraper
 import com.wajiha.data.scraper.ImageProcessor
 import com.wajiha.data.scraper.NoopImageProcessor
 import com.wajiha.data.scraper.ScrapeEngine
+import com.wajiha.data.scraper.ScrapeMatchTool
 import com.wajiha.data.scraper.ScraperCredentialValidator
 import com.wajiha.data.scraper.ScraperSettingsRepository
 import com.wajiha.data.scraper.ScraperSource
@@ -38,8 +39,11 @@ val scraperModule: Module =
             HttpClient {
                 expectSuccess = false
                 install(HttpTimeout) {
-                    requestTimeoutMillis = 60_000
-                    connectTimeoutMillis = 15_000
+                    // ScreenScraper jeuInfos can stall >10s on name lookups without CRC;
+                    // Ktor's default socket idle timeout is often 10s and aborts early.
+                    requestTimeoutMillis = 90_000
+                    connectTimeoutMillis = 20_000
+                    socketTimeoutMillis = 90_000
                 }
             }
         }
@@ -63,6 +67,8 @@ val scraperModule: Module =
             )
         }
 
+        single { ScrapeMatchTool(get()) }
+
         single {
             ScrapeEngine(
                 sources = get(),
@@ -71,6 +77,7 @@ val scraperModule: Module =
                 mediaStorage = get(),
                 http = get(),
                 imageProcessor = getOrNull<ImageProcessor>() ?: NoopImageProcessor,
+                matchTool = get(),
             )
         }
 

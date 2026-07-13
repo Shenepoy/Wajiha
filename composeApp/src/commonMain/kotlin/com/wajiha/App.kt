@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import com.wajiha.input.GamepadHint
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.requestContentFocus
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.AppActions
@@ -25,6 +27,8 @@ import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.LauncherPanel
+import com.wajiha.state.MenuDestination
+import com.wajiha.state.MenuRouteSnapshot
 import com.wajiha.state.SecondaryMode
 import com.wajiha.ui.apps.AppDrawerScreen
 import com.wajiha.ui.components.WajihaScreen
@@ -142,10 +146,51 @@ fun App() {
             return@WajihaTheme
         }
 
-        LaunchedEffect(primaryShowsHero) {
-            if (primaryShowsHero && route != Route.Home) {
+        // SELECT swap: adopt the shared menu snapshot when this display gains
+        // the menu; only clear local route when becoming hero (leave snapshot).
+        LaunchedEffect(primaryShowsMenu) {
+            if (primaryShowsMenu) {
+                val snap = dualStore.menuRoute.value
+                platformDetailId = snap.platformDetailId
+                gameDetailId = snap.gameDetailId
+                route =
+                    when (snap.destination) {
+                        MenuDestination.Home -> Route.Home
+                        MenuDestination.Settings -> Route.Settings
+                        MenuDestination.PlatformPicker -> Route.PlatformPicker
+                        MenuDestination.PlatformDetail -> Route.PlatformDetail
+                        MenuDestination.Scraper -> Route.Scraper
+                        MenuDestination.Apps -> Route.Apps
+                        MenuDestination.System -> Route.System
+                        MenuDestination.GameDetail -> Route.GameDetail
+                        MenuDestination.NowRunning -> Route.NowRunning
+                    }
+            } else if (route != Route.Home) {
                 route = Route.Home
             }
+        }
+
+        // Publish while owning the menu (key on route only so swap adopt wins).
+        LaunchedEffect(route, platformDetailId, gameDetailId) {
+            if (!primaryShowsMenu) return@LaunchedEffect
+            dualStore.publishMenuRoute(
+                MenuRouteSnapshot(
+                    destination =
+                        when (route) {
+                            Route.Home -> MenuDestination.Home
+                            Route.Settings -> MenuDestination.Settings
+                            Route.PlatformPicker -> MenuDestination.PlatformPicker
+                            Route.PlatformDetail -> MenuDestination.PlatformDetail
+                            Route.Scraper -> MenuDestination.Scraper
+                            Route.Apps -> MenuDestination.Apps
+                            Route.System -> MenuDestination.System
+                            Route.GameDetail -> MenuDestination.GameDetail
+                            Route.NowRunning -> MenuDestination.NowRunning
+                        },
+                    platformDetailId = platformDetailId,
+                    gameDetailId = gameDetailId,
+                ),
+            )
         }
 
         LaunchedEffect(route, primaryShowsMenu) {
@@ -449,7 +494,9 @@ fun App() {
                                 route = Route.Home
                             },
                             showActionBar = true,
-                            gamepadHints = quickSettingsGamepadHints + ("L2" to "Focus screen"),
+                            gamepadHints =
+                                quickSettingsGamepadHints +
+                                    GamepadHint(GamepadHintButton.L2, "Focus screen"),
                             gamepadOwner = GamepadOwner.Primary,
                             onClaimGamepad = dualStore::claimGamepad,
                             onOwnerGainedFocus = { systemFocus.requestContentFocus() },
@@ -480,7 +527,11 @@ fun App() {
                         WajihaScreen(
                             layerId = "now_running",
                             showActionBar = true,
-                            gamepadHints = listOf("B" to "Back", "L2" to "Focus screen"),
+                            gamepadHints =
+                                listOf(
+                                    GamepadHint(GamepadHintButton.B, "Back"),
+                                    GamepadHint(GamepadHintButton.L2, "Focus screen"),
+                                ),
                             gamepadOwner = GamepadOwner.Primary,
                             onClaimGamepad = dualStore::claimGamepad,
                             onOwnerGainedFocus = { nowRunningFocus.requestContentFocus() },

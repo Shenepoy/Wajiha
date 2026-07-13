@@ -1,26 +1,18 @@
 package com.wajiha.log
 
+import android.os.SystemClock
 import android.util.Log
 
-actual object WajihaLog {
-    actual fun d(
-        tag: String,
-        message: String,
-    ) {
-        Log.d(tag, message)
-    }
+internal actual fun currentTimeMs(): Long = SystemClock.elapsedRealtime()
 
-    actual fun i(
-        tag: String,
-        message: String,
-    ) {
-        Log.i(tag, message)
-    }
-
-    actual fun w(
-        tag: String,
-        message: String,
-    ) {
-        Log.w(tag, message)
+internal actual fun platformLog(
+    level: WajihaLogLevel,
+    tag: String,
+    message: String,
+) {
+    when (level) {
+        WajihaLogLevel.DEBUG -> Log.d(tag, message)
+        WajihaLogLevel.INFO -> Log.i(tag, message)
+        WajihaLogLevel.WARN -> Log.w(tag, message)
     }
 }

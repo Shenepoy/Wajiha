@@ -3,16 +3,21 @@ package com.wajiha.ui.scraper.review
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wajiha.data.db.GameEntity
+import com.wajiha.data.scraper.MatchConfidence
+import com.wajiha.data.scraper.MatchRankPolicy
 import com.wajiha.data.scraper.MediaCandidate
+import com.wajiha.data.scraper.MediaRanker
 import com.wajiha.data.scraper.MediaType
+import com.wajiha.data.scraper.RankedMediaOption
 import com.wajiha.data.scraper.ScrapeCandidate
 import com.wajiha.data.scraper.ScrapeEngine
 import com.wajiha.data.scraper.ScrapeRunPolicy
 import com.wajiha.data.scraper.ScraperSettings
 import com.wajiha.data.scraper.ScraperSettingsRepository
 import com.wajiha.data.scraper.StagedMediaPick
-import com.wajiha.data.scraper.pickMedia
 import com.wajiha.domain.repository.GameRepository
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaTags
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -109,6 +114,7 @@ class ScrapeReviewViewModel(
                 slotCache = emptyMap(),
                 candidates = emptyList(),
                 extraMedia = emptyMap(),
+                steamGridDbCandidate = null,
                 mediaNextPage = emptyMap(),
                 mediaHasMore = emptyMap(),
                 error = null,
@@ -191,10 +197,8 @@ class ScrapeReviewViewModel(
 
                 else -> {
                     val type = slot.requireMediaType()
-                    val options = engine.gatherReviewMedia(game, type, settings, query)
-                    val sgdbCount = options.count { it.first == "steamgriddb" }
-                    val pageSize =
-                        com.wajiha.data.scraper.sources.SteamGridDbSource.PageSize
+                    val gathered = engine.gatherReviewMedia(game, type, settings, query)
+                    val options = gathered.options
                     _state.update { cur ->
                         cur.copy(
                             slotLoading = false,
@@ -206,11 +210,11 @@ class ScrapeReviewViewModel(
                                             mediaOptions = options,
                                         )
                                 ),
+                            steamGridDbCandidate =
+                                gathered.steamGridDbCandidate ?: cur.steamGridDbCandidate,
                             mediaNextPage = cur.mediaNextPage + (type to 1),
                             mediaHasMore =
-                                cur.mediaHasMore + (
-                                    type to (sgdbCount >= pageSize)
-                                ),
+                                cur.mediaHasMore + (type to gathered.steamGridDbHasMore),
                             slotError =
                                 if (options.isEmpty()) {
                                     "No ${type.dbName} found"
@@ -237,8 +241,13 @@ class ScrapeReviewViewModel(
     ) {
         viewModelScope.launch {
             val settings = settingsRepository.current()
-            val region = settings.regionPriority
-            val variant = settings.mediaVariantIndex
+            val game = _state.value.game
+            val effective =
+                if (game != null) {
+                    settings.forPlatform(game.platformId)
+                } else {
+                    settings
+                }
             val locked = _state.value.lockedSlots
             val allowMetadata = locked == null || ReviewSlot.Metadata in locked
             val typesToFill =
@@ -251,8 +260,25 @@ class ScrapeReviewViewModel(
                     .mapNotNull { type ->
                         val list = candidate.media.filter { it.type == type }
                         if (list.isEmpty()) return@mapNotNull null
-                        val pick = list.pickMedia(region, variant) ?: list.first()
-                        type to StagedMediaPick(candidate.sourceId, pick)
+                        val options =
+                            list.map { media ->
+                                RankedMediaOption(
+                                    sourceId = candidate.sourceId,
+                                    candidate = media,
+                                    score = media.score ?: 0,
+                                    authorKey = media.authorKey,
+                                    authorDisplay = media.authorName,
+                                    rankReason = "",
+                                    confidence = candidate.matchConfidence,
+                                )
+                            }
+                        val policy = MatchRankPolicy.fromSettings(effective, type)
+                        val best =
+                            MediaRanker.pickBestOption(
+                                MediaRanker.rankMediaOptions(options, policy),
+                                policy,
+                            ) ?: return@mapNotNull null
+                        type to StagedMediaPick(best.sourceId, best.candidate)
                     }.toMap()
             _state.update { cur ->
                 val mergedMedia =
@@ -281,14 +307,33 @@ class ScrapeReviewViewModel(
             viewModelScope.launch {
                 loadSlotIfNeeded(slot)
                 val settings = settingsRepository.current()
+                val game = _state.value.game
+                val effective =
+                    if (game != null) {
+                        settings.forPlatform(game.platformId)
+                    } else {
+                        settings
+                    }
                 val options = _state.value.mediaOptions(type)
                 if (options.isEmpty()) return@launch
-                val priority = settings.mediaPriority[type.dbName].orEmpty()
-                val pick =
-                    priority.firstNotNullOfOrNull { sourceId ->
-                        options.firstOrNull { it.first == sourceId }
-                    } ?: options.first()
-                selectMedia(type, pick.first, pick.second)
+                val policy = MatchRankPolicy.fromSettings(effective, type)
+                val ranked =
+                    MediaRanker.rankMediaOptions(
+                        options.map { (sourceId, media) ->
+                            RankedMediaOption(
+                                sourceId = sourceId,
+                                candidate = media,
+                                score = media.score ?: 0,
+                                authorKey = media.authorKey,
+                                authorDisplay = media.authorName,
+                                rankReason = "",
+                                confidence = MatchConfidence.Unknown,
+                            )
+                        },
+                        policy,
+                    )
+                val best = MediaRanker.pickBestOption(ranked, policy) ?: return@launch
+                selectMedia(type, best.sourceId, best.candidate)
             }
             return
         }
@@ -347,11 +392,24 @@ class ScrapeReviewViewModel(
         if (state.mediaHasMore[type] != true) return
         val game = state.game ?: return
         val sgdbCandidate =
-            state.metadataOptions().firstOrNull { it.sourceId == "steamgriddb" }
+            state.steamGridDbCandidate?.takeIf { it.sourceId == "steamgriddb" }
+                ?: state.metadataFrom?.takeIf { it.sourceId == "steamgriddb" }
+                ?: state.metadataOptions().firstOrNull { it.sourceId == "steamgriddb" }
                 ?: state.candidates.firstOrNull { it.sourceId == "steamgriddb" }
-                ?: return
+        if (sgdbCandidate == null) {
+            WajihaLog.w(
+                WajihaTags.SCRAPE,
+                "loadMoreMedia type=${type.dbName}: no SGDB game id — stopping paging",
+            )
+            _state.update { it.copy(mediaHasMore = it.mediaHasMore + (type to false)) }
+            return
+        }
         val page = state.mediaNextPage[type] ?: 1
-        _state.update { it.copy(mediaLoadingMore = true) }
+        WajihaLog.i(
+            WajihaTags.SCRAPE,
+            "loadMoreMedia type=${type.dbName} page=$page gameId=${sgdbCandidate.sourceGameId}",
+        )
+        _state.update { it.copy(mediaLoadingMore = true, steamGridDbCandidate = sgdbCandidate) }
         viewModelScope.launch {
             try {
                 val result =
@@ -362,15 +420,29 @@ class ScrapeReviewViewModel(
                         platformId = game.platformId,
                         page = page,
                     )
+                val settings = settingsRepository.current().forPlatform(game.platformId)
+                val filtered =
+                    result.media.filterNot { media ->
+                        MediaRanker.authorMatches(
+                            media.authorKey,
+                            media.authorName,
+                            settings.blacklistedMediaAuthors,
+                        )
+                    }
+                WajihaLog.i(
+                    WajihaTags.SCRAPE,
+                    "loadMoreMedia type=${type.dbName} page=$page " +
+                        "got=${filtered.size} hasMore=${result.hasMore}",
+                )
                 _state.update { cur ->
                     val merged =
-                        (cur.extraMedia[type].orEmpty() + result.media)
+                        (cur.extraMedia[type].orEmpty() + filtered)
                             .distinctBy { it.url }
                     val slot = ReviewSlot.forMediaType(type)
                     val updatedCache =
                         if (slot != null) {
                             val prev = cur.slotCache[slot]
-                            val morePairs = result.media.map { "steamgriddb" to it }
+                            val morePairs = filtered.map { "steamgriddb" to it }
                             cur.slotCache + (
                                 slot to
                                     SlotOptionsCache(
@@ -393,6 +465,10 @@ class ScrapeReviewViewModel(
                     )
                 }
             } catch (e: Exception) {
+                WajihaLog.w(
+                    WajihaTags.SCRAPE,
+                    "loadMoreMedia type=${type.dbName} page=$page: ${e.message}",
+                )
                 _state.update {
                     it.copy(
                         mediaLoadingMore = false,
@@ -583,17 +659,25 @@ class ScrapeReviewViewModel(
     ): Map<MediaType, StagedMediaPick?> {
         val picks = mutableMapOf<MediaType, StagedMediaPick?>()
         for (type in ReviewMediaSlots) {
-            val priority = settings.mediaPriority[type.dbName] ?: continue
-            val pick =
-                priority.firstNotNullOfOrNull { sourceId ->
-                    val list = bySource[sourceId]?.media?.filter { it.type == type }.orEmpty()
-                    if (list.isEmpty()) return@firstNotNullOfOrNull null
-                    val media =
-                        list.pickMedia(settings.regionPriority, settings.mediaVariantIndex)
-                            ?: list.first()
-                    StagedMediaPick(sourceId, media)
+            val options =
+                bySource.values.flatMap { c ->
+                    c.media.filter { it.type == type }.map { media ->
+                        RankedMediaOption(
+                            sourceId = c.sourceId,
+                            candidate = media,
+                            score = media.score ?: 0,
+                            authorKey = media.authorKey,
+                            authorDisplay = media.authorName,
+                            rankReason = "",
+                            confidence = c.matchConfidence,
+                        )
+                    }
                 }
-            if (pick != null) picks[type] = pick
+            if (options.isEmpty()) continue
+            val policy = MatchRankPolicy.fromSettings(settings, type)
+            val ranked = MediaRanker.rankMediaOptions(options, policy)
+            val best = MediaRanker.pickBestOption(ranked, policy) ?: continue
+            picks[type] = StagedMediaPick(best.sourceId, best.candidate)
         }
         return picks
     }

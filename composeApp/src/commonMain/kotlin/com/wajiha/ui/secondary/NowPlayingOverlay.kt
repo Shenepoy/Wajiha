@@ -26,12 +26,13 @@ import coil3.compose.AsyncImage
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingState
 import com.wajiha.state.SecondaryMode
+import com.wajiha.ui.components.gamepad.GamepadActionBarHeight
 import com.wajiha.ui.components.gamepad.GamepadFocusable
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 
-/** Sits just above the gamepad action bar (~36dp) with a tight gap. */
-internal val NowPlayingOverlayBottomPadding = 36.dp
+/** Sits just above the gamepad action bar with a tight gap. */
+internal val NowPlayingOverlayBottomPadding = GamepadActionBarHeight
 
 /** Bottom-right anchor above gamepad action bar hints. */
 fun BoxScope.nowPlayingOverlayPlacement(modifier: Modifier = Modifier): Modifier =

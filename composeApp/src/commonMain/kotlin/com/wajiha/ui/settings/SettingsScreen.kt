@@ -91,6 +91,14 @@ import com.wajiha.ui.theme.focusColorPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import org.koin.compose.koinInject
+import wajiha.composeapp.generated.resources.Res
+import wajiha.composeapp.generated.resources.kenney_controller_auto
+import wajiha.composeapp.generated.resources.kenney_controller_ps
+import wajiha.composeapp.generated.resources.kenney_controller_steam
+import wajiha.composeapp.generated.resources.kenney_controller_steamdeck
+import wajiha.composeapp.generated.resources.kenney_controller_switch
+import wajiha.composeapp.generated.resources.kenney_controller_text
+import wajiha.composeapp.generated.resources.kenney_controller_xbox
 
 private enum class SettingsSection(
     val label: String,
@@ -634,7 +642,7 @@ private fun AppearanceSectionContent(
     settingsViewModel: SettingsViewModel,
     firstFocusRequester: FocusRequester? = null,
 ) {
-    SettingsSectionBlurb("Tune the home grid look, color theme, and gamepad focus ring.")
+    SettingsSectionBlurb("Tune the home grid look, color theme, gamepad focus ring, and controller glyphs.")
     SettingsChoiceRow(
         label = "Theme",
         description = "Follow the system setting or lock dark or light mode.",
@@ -712,6 +720,110 @@ private fun AppearanceSectionContent(
         onSelect = settingsViewModel::setFocusPlacement,
         defaultValue = FocusIndicatorDefaults.PLACEMENT,
         onReset = { settingsViewModel.setFocusPlacement(FocusIndicatorDefaults.PLACEMENT) },
+    )
+    SettingsGroupDivider()
+    ControllerGlyphSettings(
+        settings = settings,
+        settingsViewModel = settingsViewModel,
+    )
+}
+
+@Composable
+private fun ControllerGlyphSettings(
+    settings: AppSettings,
+    settingsViewModel: SettingsViewModel,
+) {
+    SettingsToggleRow(
+        label = "Controller glyphs",
+        description =
+            "Show Kenney Input Prompts icons in the bottom hint bar " +
+                "(Xbox, PlayStation, Switch, Steam Deck, Steam Controller).",
+        checked = settings.controllerGlyphsEnabled,
+        onCheckedChange = settingsViewModel::setControllerGlyphsEnabled,
+        defaultChecked = true,
+        onReset = { settingsViewModel.setControllerGlyphsEnabled(true) },
+    )
+    SettingsGroupDivider()
+    SettingsMultiChoiceRow(
+        label = "Glyph style",
+        description =
+            "Auto uses the last controller that pressed a button " +
+                "(hides hints when none are connected). " +
+                "Any other choice always shows that scheme.",
+        choiceOptions =
+            listOf(
+                MultiChoiceOption(
+                    "Auto",
+                    "Auto",
+                    iconRes = Res.drawable.kenney_controller_auto,
+                ),
+                MultiChoiceOption(
+                    "Xbox",
+                    "Xbox",
+                    iconRes = Res.drawable.kenney_controller_xbox,
+                ),
+                MultiChoiceOption(
+                    "PlayStation",
+                    "PlayStation",
+                    iconRes = Res.drawable.kenney_controller_ps,
+                ),
+                MultiChoiceOption(
+                    "Switch",
+                    "Switch",
+                    iconRes = Res.drawable.kenney_controller_switch,
+                ),
+                MultiChoiceOption(
+                    "SteamDeck",
+                    "Steam Deck",
+                    iconRes = Res.drawable.kenney_controller_steamdeck,
+                ),
+                MultiChoiceOption(
+                    "SteamController",
+                    "Steam Controller",
+                    iconRes = Res.drawable.kenney_controller_steam,
+                ),
+                MultiChoiceOption(
+                    "Text",
+                    "Text",
+                    iconRes = Res.drawable.kenney_controller_text,
+                ),
+            ),
+        selected = settings.controllerGlyphScheme,
+        onSelect = settingsViewModel::setControllerGlyphScheme,
+        defaultValue = "Auto",
+        onReset = { settingsViewModel.setControllerGlyphScheme("Auto") },
+    )
+    SettingsGroupDivider()
+    SettingsMultiChoiceRow(
+        label = "Face button glyphs",
+        description =
+            "Kenney look for A/B/X/Y (and PlayStation shapes). " +
+                "Switch / Steam Deck Color reuses Xbox lettered color faces.",
+        choiceOptions =
+            listOf(
+                MultiChoiceOption("Color", "Color", icon = "●"),
+                MultiChoiceOption("ColorOutline", "Color outline", icon = "○"),
+                MultiChoiceOption("White", "White", icon = "◻"),
+                MultiChoiceOption("Dark", "Dark", icon = "◼"),
+            ),
+        selected = settings.controllerGlyphFaceStyle,
+        onSelect = settingsViewModel::setControllerGlyphFaceStyle,
+        defaultValue = "Color",
+        onReset = { settingsViewModel.setControllerGlyphFaceStyle("Color") },
+    )
+    SettingsGroupDivider()
+    SettingsMultiChoiceRow(
+        label = "Other button glyphs",
+        description = "Kenney look for shoulders, triggers, d-pad, and system buttons.",
+        choiceOptions =
+            listOf(
+                MultiChoiceOption("Filled", "Filled", icon = "◼"),
+                MultiChoiceOption("Outline", "Outline", icon = "◻"),
+            ),
+        selected = settings.controllerGlyphOtherStyle,
+        onSelect = settingsViewModel::setControllerGlyphOtherStyle,
+        defaultValue = "Filled",
+        onReset = { settingsViewModel.setControllerGlyphOtherStyle("Filled") },
     )
 }
 

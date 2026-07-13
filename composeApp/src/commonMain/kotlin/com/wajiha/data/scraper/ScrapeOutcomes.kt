@@ -180,7 +180,9 @@ data class GameScrapeResult(
         val sourceLine = sourceSummaryLine()
         return when (outcome) {
             GameScrapeOutcome.Matched -> {
-                val base = "$verb: $mediaSaved media from ${metadataSource ?: sourceId ?: "sources"}"
+                val base =
+                    message
+                        ?: "$verb: $mediaSaved media from ${metadataSource ?: sourceId ?: "sources"}"
                 base to true
             }
 
@@ -208,6 +210,14 @@ data class GameScrapeResult(
                 outcome = GameScrapeOutcome.Error,
                 failureKind = ScrapeFailureKind.NotConfigured,
                 message = "No sources configured",
+            )
+
+        /** FillGaps when preferred slots are already filled — nothing to fetch. */
+        fun alreadyComplete(gameId: Long) =
+            GameScrapeResult(
+                gameId = gameId,
+                outcome = GameScrapeOutcome.Matched,
+                message = "Artwork already present — use Force or Manual to replace",
             )
 
         fun noMatch(

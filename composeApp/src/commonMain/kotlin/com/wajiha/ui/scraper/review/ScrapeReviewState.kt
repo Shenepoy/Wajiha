@@ -84,7 +84,12 @@ data class ScrapeReviewState(
      * Keyed by media type.
      */
     val extraMedia: Map<MediaType, List<MediaCandidate>> = emptyMap(),
-    /** Next SGDB page index to request per type (0 already in candidate.media). */
+    /**
+     * Primary SteamGridDB game match used for media infinite scroll.
+     * Set when a media slot is loaded even if Metadata was never opened.
+     */
+    val steamGridDbCandidate: ScrapeCandidate? = null,
+    /** Next SGDB page index to request per type (0 already loaded). */
     val mediaNextPage: Map<MediaType, Int> = emptyMap(),
     val mediaHasMore: Map<MediaType, Boolean> = emptyMap(),
     val mediaLoadingMore: Boolean = false,

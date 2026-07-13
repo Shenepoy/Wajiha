@@ -1,16 +1,20 @@
 package com.wajiha.data.scraper.sources
 
 import com.wajiha.data.scraper.HttpJsonResult
+import com.wajiha.data.scraper.MatchConfidence
 import com.wajiha.data.scraper.MediaCandidate
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeCandidate
+import com.wajiha.data.scraper.ScrapeFailureKind
 import com.wajiha.data.scraper.ScrapeQuery
 import com.wajiha.data.scraper.ScraperSettings
 import com.wajiha.data.scraper.ScraperSource
+import com.wajiha.data.scraper.SourceHealthBudget
 import com.wajiha.data.scraper.SourceLookupOutcome
 import com.wajiha.data.scraper.SourceSearchBundle
 import com.wajiha.data.scraper.getJsonResult
 import com.wajiha.data.scraper.steamGridDbAuth
+import com.wajiha.log.logClockMs
 import io.ktor.client.HttpClient
 import io.ktor.client.request.parameter
 import io.ktor.http.encodeURLPathPart
@@ -23,12 +27,19 @@ data class SteamGridDbMediaPage(
     val hasMore: Boolean,
 )
 
-/** SteamGridDB — grids (boxart), heroes, logos, icons. Needs a user API key. */
+/**
+ * SteamGridDB — grids (boxart), heroes, logos, icons.
+ *
+ * Auto path: cheap autocomplete only; art is fetched lazily by [ScrapeMatchTool]
+ * for the chosen game id / needed types. Parses `score` + `author` for ranking.
+ */
 class SteamGridDbSource(
     private val http: HttpClient,
 ) : ScraperSource {
     override val id = "steamgriddb"
     override val displayName = "SteamGridDB"
+
+    private val health = SourceHealthBudget(id, maxCallsPerWindow = 60)
 
     private var cachedSearchKey: String? = null
     private var cachedSearchAt = 0L
@@ -39,26 +50,52 @@ class SteamGridDbSource(
     override suspend fun lookupResult(
         query: ScrapeQuery,
         settings: ScraperSettings,
-    ): SourceLookupOutcome = searchWithOutcome(query.displayName, query, settings).toLookupOutcome()
+    ): SourceLookupOutcome = searchGamesOnly(query.displayName, query, settings)
 
     override suspend fun search(
         name: String,
         query: ScrapeQuery,
         settings: ScraperSettings,
-    ): List<ScrapeCandidate> = searchWithOutcome(name, query, settings).candidates
+    ): List<ScrapeCandidate> =
+        when (val outcome = searchGamesOnly(name, query, settings)) {
+            is SourceLookupOutcome.Hit -> {
+                // Expand cache to full candidate list if available
+                cachedSearchBundle
+                    ?.takeIf { cachedSearchKey == "${settings.steamGridDbApiKey}|$name" }
+                    ?.candidates
+                    ?: listOf(outcome.candidate)
+            }
 
-    private suspend fun searchWithOutcome(
+            else -> {
+                emptyList()
+            }
+        }
+
+    /**
+     * Autocomplete only — no media fetches. Used by [com.wajiha.data.scraper.ScrapeMatchTool].
+     */
+    suspend fun searchGamesOnly(
         name: String,
         query: ScrapeQuery,
         settings: ScraperSettings,
-    ): SourceSearchBundle {
+    ): SourceLookupOutcome {
+        if (!health.isAvailable()) {
+            return SourceLookupOutcome.Failed(
+                com.wajiha.data.scraper.ScrapeFailure(
+                    ScrapeFailureKind.RateLimited,
+                    "SteamGridDB temporarily unavailable (budget/circuit)",
+                ),
+            )
+        }
         val cacheKey = "${settings.steamGridDbApiKey}|$name"
-        val now = System.currentTimeMillis()
+        val now = logClockMs()
         cachedSearchBundle?.let { bundle ->
             if (cachedSearchKey == cacheKey && now - cachedSearchAt < SEARCH_CACHE_MS) {
-                return bundle
+                return bundle.toLookupOutcome()
             }
         }
+
+        health.recordCall()
         val result =
             http.getJsonResult<SgdbEnvelope<SgdbGame>>(
                 "https://www.steamgriddb.com/api/v2/search/autocomplete/${name.encodeURLPathPart()}",
@@ -68,9 +105,16 @@ class SteamGridDbSource(
         val games =
             when (result) {
                 is HttpJsonResult.Failed -> {
+                    if (result.failure.kind == ScrapeFailureKind.Auth ||
+                        result.failure.kind == ScrapeFailureKind.RateLimited ||
+                        result.failure.kind == ScrapeFailureKind.Http ||
+                        result.failure.kind == ScrapeFailureKind.Network
+                    ) {
+                        health.trip(result.failure.message)
+                    }
                     val bundle = SourceSearchBundle(emptyList(), result.failure)
                     cacheSearch(cacheKey, bundle)
-                    return bundle
+                    return bundle.toLookupOutcome()
                 }
 
                 is HttpJsonResult.Ok -> {
@@ -80,21 +124,23 @@ class SteamGridDbSource(
         if (games.isEmpty()) {
             val bundle = SourceSearchBundle(emptyList())
             cacheSearch(cacheKey, bundle)
-            return bundle
+            return SourceLookupOutcome.Miss
         }
-        // First page only during search/lookup — review loads more on demand.
+        // Candidates without media — tool fetches art for the winner only.
         val candidates =
             games.take(5).map { game ->
                 ScrapeCandidate(
                     sourceId = id,
                     sourceGameId = game.id.toString(),
                     name = game.name,
-                    media = fetchMediaPreview(game.id, settings),
+                    media = emptyList(),
+                    thumbnailUrl = null,
+                    matchConfidence = MatchConfidence.Autocomplete,
                 )
             }
         val bundle = SourceSearchBundle(candidates)
         cacheSearch(cacheKey, bundle)
-        return bundle
+        return SourceLookupOutcome.Hit(candidates.first())
     }
 
     private fun cacheSearch(
@@ -102,28 +148,12 @@ class SteamGridDbSource(
         bundle: SourceSearchBundle,
     ) {
         cachedSearchKey = key
-        cachedSearchAt = System.currentTimeMillis()
+        cachedSearchAt = logClockMs()
         cachedSearchBundle = bundle
     }
 
     /**
-     * Preview media for match lists / auto-scrape: one page per type (limit [PageSize]).
-     * Review UI calls [fetchMediaTypePage] to page through the rest.
-     */
-    private suspend fun fetchMediaPreview(
-        gameId: Int,
-        settings: ScraperSettings,
-    ): List<MediaCandidate> {
-        val result = mutableListOf<MediaCandidate>()
-        for ((_, type) in Endpoints) {
-            val page = fetchMediaTypePage(gameId, type, settings, page = 0)
-            result += page.media
-        }
-        return result
-    }
-
-    /**
-     * Loads one page of assets for [type]. Used by the review picker for lazy loading.
+     * Loads one page of assets for [type]. Used by Review paging and [ScrapeMatchTool] lazy art.
      */
     suspend fun fetchMediaTypePage(
         gameId: Int,
@@ -132,22 +162,37 @@ class SteamGridDbSource(
         page: Int,
         limit: Int = PageSize,
     ): SteamGridDbMediaPage {
+        if (!health.isAvailable()) {
+            return SteamGridDbMediaPage(emptyList(), page, hasMore = false)
+        }
         val endpoint =
             Endpoints.entries.firstOrNull { it.value == type }?.key
                 ?: return SteamGridDbMediaPage(emptyList(), page, hasMore = false)
+        health.recordCall()
         val fetch =
             http.getJsonResult<SgdbEnvelope<SgdbAsset>>(
                 "https://www.steamgriddb.com/api/v2/$endpoint/game/$gameId",
             ) {
                 steamGridDbAuth(settings)
                 applyGridFilters(endpoint, settings)
-                parameter("limit", limit)
+                parameter("limit", limit.coerceAtMost(50))
                 parameter("page", page)
             }
         val envelope =
             when (fetch) {
-                is HttpJsonResult.Failed -> return SteamGridDbMediaPage(emptyList(), page, false)
-                is HttpJsonResult.Ok -> fetch.value
+                is HttpJsonResult.Failed -> {
+                    if (fetch.failure.kind == ScrapeFailureKind.Auth ||
+                        fetch.failure.kind == ScrapeFailureKind.RateLimited ||
+                        fetch.failure.kind == ScrapeFailureKind.Network
+                    ) {
+                        health.trip(fetch.failure.message)
+                    }
+                    return SteamGridDbMediaPage(emptyList(), page, false)
+                }
+
+                is HttpJsonResult.Ok -> {
+                    fetch.value
+                }
             }
         val assets = envelope.data.orEmpty()
         val styles = stylesForEndpoint(endpoint, settings)
@@ -155,7 +200,7 @@ class SteamGridDbSource(
             if (styles.isNotEmpty()) {
                 assets.sortedByStylePreference(styles)
             } else {
-                assets
+                assets.sortedByDescending { it.score ?: 0 }
             }
         val media =
             sorted.map { asset ->
@@ -165,6 +210,9 @@ class SteamGridDbSource(
                     width = asset.width,
                     height = asset.height,
                     sourceVariant = asset.style,
+                    score = asset.score,
+                    authorKey = asset.author?.steam64?.takeIf { it.isNotBlank() },
+                    authorName = asset.author?.name?.takeIf { it.isNotBlank() },
                 )
             }
         val total = envelope.total
@@ -201,15 +249,19 @@ class SteamGridDbSource(
             "animated" -> parameter("types", "animated")
             "both" -> parameter("types", "static,animated")
         }
-        parameter("nsfw", settings.steamGridDbIncludeNsfw)
-        parameter("humor", settings.steamGridDbIncludeHumor)
+        // SGDB: false = exclude tag, true = ONLY that tag, any = both.
+        // UI "Include X" must map to any, not true.
+        parameter("nsfw", if (settings.steamGridDbIncludeNsfw) "any" else "false")
+        parameter("humor", if (settings.steamGridDbIncludeHumor) "any" else "false")
     }
 
     private fun List<SgdbAsset>.sortedByStylePreference(styles: List<String>): List<SgdbAsset> =
-        sortedBy { asset ->
-            val idx = styles.indexOf(asset.style?.lowercase())
-            if (idx == -1) styles.size else idx
-        }
+        sortedWith(
+            compareBy<SgdbAsset> { asset ->
+                val idx = styles.indexOf(asset.style?.lowercase())
+                if (idx == -1) styles.size else idx
+            }.thenByDescending { it.score ?: 0 },
+        )
 
     @Serializable
     private data class SgdbEnvelope<T>(
@@ -232,6 +284,15 @@ class SteamGridDbSource(
         val width: Int? = null,
         val height: Int? = null,
         val style: String? = null,
+        val score: Int? = null,
+        val author: SgdbAuthor? = null,
+    )
+
+    @Serializable
+    private data class SgdbAuthor(
+        val name: String? = null,
+        val steam64: String? = null,
+        val avatar: String? = null,
     )
 
     companion object {

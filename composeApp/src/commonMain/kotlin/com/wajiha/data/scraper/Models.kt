@@ -56,6 +56,11 @@ data class MediaCandidate(
     val format: String? = null,
     /** Raw variant tag from the source API (e.g. ScreenScraper "box-2D", SGDB "alternate"). */
     val sourceVariant: String? = null,
+    /** Community score / likes when the source provides one (e.g. SteamGridDB). */
+    val score: Int? = null,
+    /** Stable author id (SGDB steam64, etc.) for prefer/blacklist. */
+    val authorKey: String? = null,
+    val authorName: String? = null,
 )
 
 /** A possible match returned by a source (auto or manual search). */
@@ -66,6 +71,8 @@ data class ScrapeCandidate(
     val metadata: ScrapedMetadata? = null,
     val media: List<MediaCandidate> = emptyList(),
     val thumbnailUrl: String? = null,
+    /** How the source matched this game (hash / name / autocomplete). */
+    val matchConfidence: MatchConfidence = MatchConfidence.Unknown,
 )
 
 /**
@@ -158,7 +165,7 @@ data class ScraperSettings(
             "romm",
             "local",
         ),
-    /** Per-media-type source priority; first hit wins. */
+    /** Per-media-type source priority (used by MediaRanker after confidence / score / author prefs). */
     val mediaPriority: Map<String, List<String>> = defaultMediaPriority,
     /** Metadata source priority. */
     val metadataPriority: List<String> = listOf("screenscraper", "romm", "ra"),
@@ -212,6 +219,14 @@ data class ScraperSettings(
     val raFetchTitle: Boolean = true,
     /** 0-based pick when multiple regional/alternate assets exist for one media type. */
     val mediaVariantIndex: Int = 0,
+    /**
+     * Media authors to prefer (SGDB steam64 or display name). Floated above others in ranking.
+     */
+    val preferredMediaAuthors: List<String> = emptyList(),
+    /**
+     * Media authors to skip even if they have the highest score — ranker moves to 2nd/3rd/….
+     */
+    val blacklistedMediaAuthors: List<String> = emptyList(),
     /** platformId → overrides; unset fields inherit the global values. */
     val platformOverrides: Map<String, PlatformScraperOverride> = emptyMap(),
 ) {

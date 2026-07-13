@@ -176,7 +176,8 @@ class AndroidAppActions(
 
     override fun focusApp(packageName: String) {
         monitor.switchToSession(packageName)
-        SessionTaskRegistry.moveToFront(context, packageName)
+        // Explicit user action — cold-start allowed if the task was lost.
+        SessionTaskRegistry.moveToFront(context, packageName, allowColdStart = true)
         displayCoordinator.focusGameOnPrimary(packageName)
         monitor.scheduleTopDisplayRefresh()
     }

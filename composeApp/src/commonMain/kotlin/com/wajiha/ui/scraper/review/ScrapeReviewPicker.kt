@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -37,6 +37,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -56,16 +57,24 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import com.wajiha.data.scraper.MediaCandidate
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeCandidate
+import com.wajiha.input.GamepadHint
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadOverlayLayer
 import com.wajiha.input.RememberGamepadOwnerFocus
@@ -86,15 +95,7 @@ import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.koin.compose.koinInject
-
-val scrapeReviewGamepadHints: List<Pair<String, String>> =
-    listOf(
-        "A" to "Select",
-        "B" to "Back",
-        "X" to "Clear",
-        "Y" to "Confirm",
-        "SELECT" to "Search",
-    )
+import kotlin.math.roundToInt
 
 /**
  * Dual-display Manual review:
@@ -162,18 +163,22 @@ fun ScrapeReviewPicker(
         if (state.applying || game == null || !state.hasChanges) return
         releaseSearchFocus()
         val single = state.queueTotal <= 1
-        viewModel.apply {
-            if (single) dismiss()
-        }
+        viewModel.apply(
+            onDone = {
+                if (single) dismiss()
+            },
+        )
     }
 
     fun skipGame() {
         if (!showSkip || state.applying) return
         releaseSearchFocus()
         val single = state.queueTotal <= 1
-        viewModel.skip {
-            if (single) dismiss()
-        }
+        viewModel.skip(
+            onDone = {
+                if (single) dismiss()
+            },
+        )
     }
 
     fun runSearch() {
@@ -447,7 +452,8 @@ fun ScrapeReviewPicker(
                                 hasChanges = state.hasChanges,
                                 onRevert = viewModel::revertStaged,
                                 onConfirm = ::confirm,
-                                confirmEnabled = !state.applying && game != null,
+                                confirmEnabled =
+                                    !state.applying && game != null && state.hasChanges,
                             )
                         }
                     }
@@ -468,31 +474,40 @@ fun ScrapeReviewPicker(
                             when {
                                 showPickerHere -> {
                                     listOf(
-                                        "A" to "Select",
-                                        "B" to "Back",
-                                        "L2" to "Focus screen",
-                                        "SELECT" to if (searchOpen) "Go" else "Search",
+                                        GamepadHint(GamepadHintButton.A, "Select"),
+                                        GamepadHint(GamepadHintButton.B, "Back"),
+                                        GamepadHint(GamepadHintButton.L2, "Focus screen"),
+                                        GamepadHint(
+                                            GamepadHintButton.Select,
+                                            if (searchOpen) "Go" else "Search",
+                                        ),
                                     )
                                 }
 
                                 dualDisplay && inPicker -> {
                                     listOf(
-                                        "A" to "Pick (top)",
-                                        "B" to "Close slot",
-                                        "Y" to "Confirm",
-                                        "L2" to "Focus screen",
-                                        "SELECT" to if (searchOpen) "Go" else "Search",
+                                        GamepadHint(GamepadHintButton.A, "Pick (top)"),
+                                        GamepadHint(GamepadHintButton.B, "Close slot"),
+                                        GamepadHint(GamepadHintButton.Y, "Confirm"),
+                                        GamepadHint(GamepadHintButton.L2, "Focus screen"),
+                                        GamepadHint(
+                                            GamepadHintButton.Select,
+                                            if (searchOpen) "Go" else "Search",
+                                        ),
                                     )
                                 }
 
                                 else -> {
                                     listOf(
-                                        "A" to "Open",
-                                        "B" to "Back",
-                                        "X" to "Clear",
-                                        "Y" to "Confirm",
-                                        "L2" to "Focus screen",
-                                        "SELECT" to if (searchOpen) "Go" else "Search",
+                                        GamepadHint(GamepadHintButton.A, "Open"),
+                                        GamepadHint(GamepadHintButton.B, "Back"),
+                                        GamepadHint(GamepadHintButton.X, "Clear"),
+                                        GamepadHint(GamepadHintButton.Y, "Confirm"),
+                                        GamepadHint(GamepadHintButton.L2, "Focus screen"),
+                                        GamepadHint(
+                                            GamepadHintButton.Select,
+                                            if (searchOpen) "Go" else "Search",
+                                        ),
                                     )
                                 }
                             },
@@ -617,10 +632,25 @@ fun ScrapeReviewSlotHero(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Keep [contentFocusRequester] attached to exactly one focusable so L2
+        // from LauncherHeroPane never hits an uninitialized FocusRequester.
+        val focusFallback: Modifier =
+            if (contentFocusRequester != null) {
+                Modifier
+                    .focusRequester(contentFocusRequester)
+                    .wajihaGamepadFocus()
+            } else {
+                Modifier
+            }
+
         when {
             slot == null -> {
                 Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .then(focusFallback),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -633,7 +663,11 @@ fun ScrapeReviewSlotHero(
 
             state.slotLoading -> {
                 Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .then(focusFallback),
                     contentAlignment = Alignment.Center,
                 ) {
                     WajihaLoadingState(message = "Loading…")
@@ -1197,11 +1231,16 @@ private fun MediaPickerGrid(
         }
     val staged = type in state.mediaPicks
     val selected = state.mediaPicks[type]
+    val existingRemote =
+        state.existingMedia
+            .firstOrNull { it.type == type.dbName }
+            ?.remoteUrl
+            ?.takeIf { it.isNotBlank() }
     val hasMore = state.mediaHasMore[type] == true
     val loadingMore = state.mediaLoadingMore
     val gridState = rememberLazyGridState()
 
-    LaunchedEffect(gridState, hasMore, loadingMore, type) {
+    LaunchedEffect(gridState, hasMore, loadingMore, type, options.size) {
         snapshotFlow {
             val info = gridState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -1242,6 +1281,12 @@ private fun MediaPickerGrid(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            } else if (hasMore) {
+                Text(
+                    "Scroll for more",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
@@ -1257,9 +1302,9 @@ private fun MediaPickerGrid(
                 )
             }
         } else {
-            // Wireframe: dense portrait grid of candidates
+            val minCell = mediaGridMinSize(type)
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 96.dp),
+                columns = GridCells.Adaptive(minSize = minCell),
                 state = gridState,
                 modifier =
                     Modifier
@@ -1270,13 +1315,23 @@ private fun MediaPickerGrid(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 8.dp, top = 4.dp),
             ) {
-                items(options, key = { it.second.url }) { (sourceId, media) ->
-                    val isSelected = staged && selected?.candidate?.url == media.url
+                itemsIndexed(options, key = { _, pair -> pair.second.url }) { index, (sourceId, media) ->
+                    val isSelected =
+                        when {
+                            staged -> selected?.candidate?.url == media.url
+                            else -> existingRemote != null && media.url == existingRemote
+                        }
                     MediaThumb(
                         url = media.url,
-                        label = sourceId,
+                        sourceId = sourceId,
+                        media = media,
                         selected = isSelected,
                         onClick = { onSelect(sourceId, media) },
+                        onFocused = {
+                            if (hasMore && !loadingMore && index >= options.size - 6) {
+                                onLoadMore()
+                            }
+                        },
                         focusRequester =
                             if (media.url == options.firstOrNull()?.second?.url) {
                                 firstFocusRequester
@@ -1285,22 +1340,39 @@ private fun MediaPickerGrid(
                             },
                     )
                 }
-                if (hasMore) {
-                    item(key = "load-more") {
-                        CompactFilledButton(
-                            text = if (loadingMore) "…" else "More",
-                            onClick = onLoadMore,
-                            enabled = !loadingMore,
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(0.7f),
-                        )
-                    }
-                }
             }
         }
     }
+}
+
+/** Adaptive cell width — icons denser, heroes / banners wider. */
+private fun mediaGridMinSize(type: MediaType): Dp =
+    when (type) {
+        MediaType.Icon -> 72.dp
+        MediaType.Logo -> 128.dp
+        MediaType.Hero, MediaType.Banner -> 168.dp
+        MediaType.Screenshot, MediaType.Fanart -> 140.dp
+        else -> 96.dp
+    }
+
+/** Fallback aspect (width/height) when API omits dimensions. */
+private fun mediaTypeDefaultAspect(type: MediaType): Float =
+    when (type) {
+        MediaType.Icon -> 1f
+        MediaType.Logo -> 16f / 9f
+        MediaType.Hero, MediaType.Banner -> 3f
+        MediaType.Screenshot, MediaType.Fanart -> 16f / 9f
+        MediaType.Boxart -> 2f / 3f
+        else -> 1f
+    }
+
+private fun mediaAspectRatio(media: MediaCandidate): Float {
+    val w = media.width
+    val h = media.height
+    if (w != null && h != null && w > 0 && h > 0) {
+        return (w.toFloat() / h.toFloat()).coerceIn(0.35f, 4f)
+    }
+    return mediaTypeDefaultAspect(media.type)
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1378,16 +1450,71 @@ private fun CompactCandidateRow(
     }
 }
 
+private fun mediaAuthorHint(media: MediaCandidate): String? =
+    media.authorName?.takeIf { it.isNotBlank() }
+        ?: media.authorKey?.takeIf { it.isNotBlank() }
+
+private fun mediaContentDescription(
+    sourceId: String,
+    media: MediaCandidate,
+): String =
+    buildString {
+        append(scraperSourceDisplayName(sourceId))
+        media.score?.takeIf { it > 0 }?.let { append(" · $it") }
+        mediaAuthorHint(media)?.let { append(" · $it") }
+    }
+
+/** Short badge label for a scraper source id. */
+private fun scraperSourceBadgeLabel(sourceId: String): String =
+    when (sourceId) {
+        "steamgriddb" -> "SG"
+        "screenscraper" -> "SS"
+        "libretro" -> "LR"
+        "ra" -> "RA"
+        "romm" -> "RM"
+        "local" -> "LO"
+        else -> sourceId.take(2).uppercase()
+    }
+
+private fun scraperSourceDisplayName(sourceId: String): String =
+    when (sourceId) {
+        "steamgriddb" -> "SteamGridDB"
+        "screenscraper" -> "ScreenScraper"
+        "libretro" -> "Libretro"
+        "ra" -> "RetroAchievements"
+        "romm" -> "RomM"
+        "local" -> "Local"
+        else -> sourceId
+    }
+
+private fun scraperSourceBadgeColor(sourceId: String): Color =
+    when (sourceId) {
+        "steamgriddb" -> Color(0xFF395C6B)
+        "screenscraper" -> Color(0xFFC45C26)
+        "libretro" -> Color(0xFF3D5A80)
+        "ra" -> Color(0xFFB8860B)
+        "romm" -> Color(0xFF2E7D4F)
+        "local" -> Color(0xFF5C5C5C)
+        else -> Color(0xFF4A4A4A)
+    }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MediaThumb(
     url: String,
-    label: String,
+    sourceId: String,
+    media: MediaCandidate,
     selected: Boolean,
     onClick: () -> Unit,
+    onFocused: () -> Unit = {},
     focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
+    var aspect by remember(url, media.width, media.height, media.type) {
+        mutableFloatStateOf(mediaAspectRatio(media))
+    }
+    val authorHint = remember(media.authorName, media.authorKey) { mediaAuthorHint(media) }
+    val density = LocalDensity.current
     val border =
         if (selected || focused) {
             MaterialTheme.colorScheme.primary
@@ -1398,11 +1525,14 @@ private fun MediaThumb(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(0.7f)
+                .aspectRatio(aspect)
                 .then(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
-                ).onFocusChanged { focused = it.isFocused }
-                .wajihaGamepadFocus()
+                ).onFocusChanged { focusState ->
+                    val nowFocused = focusState.isFocused
+                    focused = nowFocused
+                    if (nowFocused) onFocused()
+                }.wajihaGamepadFocus()
                 .wajihaFocusIndicator(
                     highlighted = focused || selected,
                     shape = RoundedCornerShape(3.dp),
@@ -1420,8 +1550,16 @@ private fun MediaThumb(
     ) {
         AsyncImage(
             model = url,
-            contentDescription = label,
-            contentScale = ContentScale.Crop,
+            contentDescription = mediaContentDescription(sourceId, media),
+            contentScale = ContentScale.Fit,
+            onState = { state ->
+                if (state is AsyncImagePainter.State.Success) {
+                    val size = state.painter.intrinsicSize
+                    if (size.width > 0f && size.height > 0f && size.width.isFinite() && size.height.isFinite()) {
+                        aspect = (size.width / size.height).coerceIn(0.35f, 4f)
+                    }
+                }
+            },
             modifier =
                 Modifier
                     .fillMaxSize()
@@ -1430,18 +1568,45 @@ private fun MediaThumb(
         Box(
             modifier =
                 Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                    .align(Alignment.BottomEnd)
+                    .padding(4.dp),
         ) {
             Text(
-                text = label,
+                text = scraperSourceBadgeLabel(sourceId),
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(scraperSourceBadgeColor(sourceId).copy(alpha = 0.88f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
             )
+            if (focused && authorHint != null) {
+                Popup(
+                    alignment = Alignment.BottomEnd,
+                    offset = IntOffset(0, with(density) { (-22).dp.roundToPx() }),
+                    properties = PopupProperties(focusable = false),
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.inverseSurface,
+                        tonalElevation = 4.dp,
+                    ) {
+                        Text(
+                            text = authorHint,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.inverseOnSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = WajihaSpacing.sm,
+                                    vertical = WajihaSpacing.xs,
+                                ),
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -17,6 +17,7 @@ import com.wajiha.android.input.dispatchLauncherKeyEvent
 import com.wajiha.android.monitor.ForegroundAppMonitor
 import com.wajiha.android.ui.hideSystemStatusBar
 import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaLogKind
 import com.wajiha.log.WajihaTags
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.secondary.SecondaryApp
@@ -151,8 +152,8 @@ class SecondaryHomeActivity : ComponentActivity() {
             hideSystemStatusBar()
         } else if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
             WajihaLog.d(
-                WajihaTags.DISPLAY,
-                "onWindowFocusChanged: lost focus displayId=$displayId — fast reclaim",
+                WajihaLogKind.WINDOW,
+                "SecondaryHome.onWindowFocusChanged: lost focus displayId=$displayId — fast reclaim",
             )
             displayCoordinator.beginFastSecondaryReclaim(displayId)
         }
@@ -168,8 +169,8 @@ class SecondaryHomeActivity : ComponentActivity() {
         display?.displayId?.let { registerTask(it, taskId) }
         displayCoordinator.stopFastSecondaryReclaim()
         WajihaLog.d(
-            WajihaTags.DISPLAY,
-            "onResume: displayId=$visibleDisplayId taskId=$taskId",
+            WajihaLogKind.WINDOW,
+            "SecondaryHome.onResume: displayId=$visibleDisplayId taskId=$taskId",
         )
     }
 
@@ -177,8 +178,8 @@ class SecondaryHomeActivity : ComponentActivity() {
         val displayId = display?.displayId
         if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
             WajihaLog.d(
-                WajihaTags.DISPLAY,
-                "onPause: displayId=$displayId taskId=$taskId — fast reclaim",
+                WajihaLogKind.WINDOW,
+                "SecondaryHome.onPause: displayId=$displayId taskId=$taskId — fast reclaim",
             )
             displayCoordinator.beginFastSecondaryReclaim(displayId)
         }

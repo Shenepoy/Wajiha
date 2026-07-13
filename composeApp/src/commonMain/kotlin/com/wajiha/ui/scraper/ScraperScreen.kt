@@ -64,6 +64,8 @@ import com.wajiha.data.scraper.ScrapeFailureKind
 import com.wajiha.data.scraper.ScraperSettings
 import com.wajiha.data.scraper.SteamGridDbStyleHints
 import com.wajiha.data.scraper.parseSteamGridDbStyles
+import com.wajiha.input.GamepadHint
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadNavHost
 import com.wajiha.input.GamepadNavItem
@@ -121,9 +123,9 @@ fun ScraperScreen(
         showActionBar = true,
         gamepadHints =
             listOf(
-                "A" to "Confirm",
-                "B" to "Back",
-                "L2" to "Focus screen",
+                GamepadHint(GamepadHintButton.A, "Confirm"),
+                GamepadHint(GamepadHintButton.B, "Back"),
+                GamepadHint(GamepadHintButton.L2, "Focus screen"),
             ),
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
@@ -834,6 +836,38 @@ private fun ScraperSourceOptionsBlock(viewModel: ScraperViewModel) {
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
     }
 
+    Text("Media author ranking", style = MaterialTheme.typography.labelLarge)
+    Text(
+        text =
+            "Prefer or blacklist SteamGridDB authors (steam64 or name). " +
+                "Blacklisted authors are skipped even with the highest score.",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    CompactCredentialField(
+        "Preferred authors (comma separated)",
+        settings.preferredMediaAuthors.joinToString(", "),
+    ) { v ->
+        viewModel.update {
+            it.copy(
+                preferredMediaAuthors =
+                    v.split(',').map(String::trim).filter(String::isNotEmpty),
+            )
+        }
+    }
+    CompactCredentialField(
+        "Blacklisted authors (comma separated)",
+        settings.blacklistedMediaAuthors.joinToString(", "),
+    ) { v ->
+        viewModel.update {
+            it.copy(
+                blacklistedMediaAuthors =
+                    v.split(',').map(String::trim).filter(String::isNotEmpty),
+            )
+        }
+    }
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
     if ("libretro" in enabled) {
         Text("Libretro thumbnails", style = MaterialTheme.typography.labelLarge)
         SourceToggle("Fetch box art (Named_Boxarts)", settings.libretroFetchBoxart) { v ->
@@ -1275,9 +1309,18 @@ private fun ScraperBatchBlock(
     val progress by viewModel.progress.collectAsState()
     val inUsePlatforms by viewModel.inUsePlatforms.collectAsState()
     val batchFeedback by viewModel.batchFeedback.collectAsState()
+    val apiLogs by viewModel.apiLogs.collectAsState()
     val sourcesReady = viewModel.hasConfiguredSources(null)
     var issuesExpanded by remember { mutableStateOf(false) }
+    var showApiLogs by remember { mutableStateOf(false) }
     var mode by remember { mutableStateOf(ScrapeUiMode.FillGaps) }
+
+    ScrapeApiLogsDialog(
+        visible = showApiLogs,
+        entries = apiLogs,
+        onDismiss = { showApiLogs = false },
+        onClear = viewModel::clearApiLogs,
+    )
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         batchFeedback?.let { feedback ->
@@ -1329,6 +1372,9 @@ private fun ScraperBatchBlock(
                         Button(onClick = viewModel::pauseBatch) { Text("Pause") }
                     }
                     TextButton(onClick = viewModel::cancelBatch) { Text("Cancel") }
+                    TextButton(onClick = { showApiLogs = true }) {
+                        Text("API logs (${apiLogs.size})")
+                    }
                 }
             }
         } else {
@@ -1336,26 +1382,28 @@ private fun ScraperBatchBlock(
                 ScrapeModeSelector(
                     selected = mode,
                     onSelect = { mode = it },
-                    showReview = false,
-                    firstFocusRequester = firstFocusRequester,
-                    enabled = !progress.running,
-                )
-                GamepadButton(
-                    text =
+                    actionLabel =
                         when (mode) {
                             ScrapeUiMode.Force -> "Force scrape all platforms"
                             else -> "Fill gaps — all platforms"
                         },
-                    onClick = {
+                    onAction = {
                         viewModel.dismissBatchFeedback()
                         viewModel.startBatch(null, mode.toPolicy())
                     },
-                    enabled = sourcesReady,
-                    modifier = Modifier.fillMaxWidth(),
+                    showReview = false,
+                    firstFocusRequester = firstFocusRequester,
+                    enabled = !progress.running,
+                    actionEnabled = sourcesReady && !progress.running,
                 )
-                if (viewModel.canRetryFailed(null)) {
-                    TextButton(onClick = { viewModel.retryFailedBatch(null) }) {
-                        Text("Retry failed")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (viewModel.canRetryFailed(null)) {
+                        TextButton(onClick = { viewModel.retryFailedBatch(null) }) {
+                            Text("Retry failed")
+                        }
+                    }
+                    TextButton(onClick = { showApiLogs = true }) {
+                        Text("API logs (${apiLogs.size})")
                     }
                 }
                 if (progress.done > 0) {

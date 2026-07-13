@@ -88,8 +88,9 @@ When **Settings → detect external games** is enabled, `ExternalGameResolver` p
 
 `com.wajiha.data.scraper`:
 
-- `ScraperSource` — the plugin interface: `isConfigured`, `lookupResult` (typed `SourceLookupOutcome`: Hit / Miss / Failed), legacy `lookup`, and `search` (manual, by name). Implementations classify auth / network / rate-limit / HTTP failures instead of swallowing them to null.
-- `ScrapeEngine` — does the side effects. For one game: resolve effective settings via `ScraperSettings.forPlatform`, query every configured source once via `lookupResult`, return a typed `GameScrapeResult` (`Matched` / `Partial` / `NoMatch` / `Error`) with per-source summaries. Metadata comes from the first source in `metadataPriority` that matched; media downloads that all fail yield `Partial` rather than a silent success. Downloads run through `ImageProcessor` (Android: `AndroidImageProcessor`) which enforces `maxImageResolution`.
+- `ScraperSource` — the plugin interface: `isConfigured`, `lookupResult` (typed `SourceLookupOutcome`: Hit / Miss / Failed), and `search` (manual, by name). Implementations classify auth / network / rate-limit / HTTP failures instead of swallowing them to null. Each source owns call budgets / circuit cool-downs via `SourceHealthBudget`.
+- `ScrapeMatchTool` — searches configured sources, ranks media by match confidence (Hash > Name > Autocomplete), community score, and author prefer/blacklist, then auto-picks (`MatchMode.Auto`) or returns ordered options for Review.
+- `ScrapeEngine` — side effects only. `scrapeGame` / Review gather paths call `ScrapeMatchTool`, then download and persist. Metadata still follows `metadataPriority`. Media downloads that all fail yield `Partial`. Downloads run through `ImageProcessor` (Android: `AndroidImageProcessor`) which enforces `maxImageResolution`.
 - `BatchScraper` — sequential driver with `StateFlow` progress (matched / partial / noMatch / errorCount + capped `issues` list), pause (status “Paused”), cancel, preflight (`preflightMessage`), and `prepareRetryFailed` for Error+Partial games. Progress is checkpointed to `BatchProgressStore` after every game; user cancels clear the resumable flag; `restoreIfIdle()` seeds the UI after restart.
 - `ScrapeWorker` (androidApp) — hosts the batch as a `dataSync` foreground WorkManager job; notifications mirror split counts and issue lines. Enqueue is blocked when work is already active or preflight fails (`LibraryActions.startScrape` / `retryFailedScrape` return a reason string).
 
@@ -97,8 +98,8 @@ Sources and their quirks (see also [external-apis.md](external-apis.md)):
 
 | Source | Auth | Match | Notes |
 |---|---|---|---|
-| `screenscraper` | user account (+ optional dev creds) | crc/md5 + filename, then name search | region/language chains applied to names/synopsis/dates/media |
-| `steamgriddb` | API key | name autocomplete | fetches grids/heroes/logos/icons per candidate |
+| `screenscraper` | user account (+ optional dev creds) | hash+systeme → cleaned name → search → `gameid` hydrate | region/language chains; `romtype` / `systemeid` required without CRC |
+| `steamgriddb` | API key | autocomplete only; lazy art for chosen id | parses `score` + `author`; grids→boxart, heroes, logos, icons |
 | `libretro` | none | filename convention | needs `platforms.libretroName`; HEAD-checks thumbnail URLs |
 | `ra` | username + web API key | md5 | responses use PascalCase keys (`ID`, `Title`, ...) — keep the `@SerialName`s |
 | `romm` | server URL + basic auth | name search | lenient JSON (numbers as strings) |

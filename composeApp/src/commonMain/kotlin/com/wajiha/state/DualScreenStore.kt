@@ -153,6 +153,15 @@ class DualScreenStore {
     private val _settingsSectionLabel = MutableStateFlow<String?>(null)
     private val _gameDetailId = MutableStateFlow<Long?>(null)
     val gameDetailId: StateFlow<Long?> = _gameDetailId.asStateFlow()
+
+    /**
+     * Last menu destination published by whichever display currently (or most
+     * recently) owns the launcher menu. On SELECT swap the gaining menu display
+     * adopts this so Settings / Apps / … are not dropped when the losing side
+     * resets its local route to Home.
+     */
+    private val _menuRoute = MutableStateFlow(MenuRouteSnapshot())
+    val menuRoute: StateFlow<MenuRouteSnapshot> = _menuRoute.asStateFlow()
     private val _appsHeroCount = MutableStateFlow(0)
     private val _appsHeroFocusedLabel = MutableStateFlow<String?>(null)
     private val _systemHeroSnapshot = MutableStateFlow(HeroContext.System())
@@ -288,6 +297,7 @@ class DualScreenStore {
     // treat launcher foreground as session end; only [endGameSession] clears.
 
     fun onDisplaysChanged(secondaryDisplayId: Int?) {
+        val previous = _state.value
         _secondaryDisplayId.value = secondaryDisplayId
         _state.update { current ->
             when {
@@ -295,6 +305,18 @@ class DualScreenStore {
                 current == DualScreenState.SingleDisplay -> DualScreenState.DualBrowsing
                 else -> current
             }
+        }
+        val next = _state.value
+        if (previous != next) {
+            WajihaLog.i(
+                WajihaTags.DISPLAY,
+                "dualScreen: secondaryDisplayId=$secondaryDisplayId $previous→$next",
+            )
+        } else {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "dualScreen: secondaryDisplayId=$secondaryDisplayId state=$next",
+            )
         }
         recomputeGamepadOwner()
     }
@@ -513,6 +535,12 @@ class DualScreenStore {
 
     fun setSecondaryLauncherPanel(panel: LauncherPanel) {
         _secondaryPanel.value = panel
+    }
+
+    /** Publish the active menu route while this display owns the menu. */
+    fun publishMenuRoute(snapshot: MenuRouteSnapshot) {
+        if (_menuRoute.value == snapshot) return
+        _menuRoute.value = snapshot
     }
 
     fun setSettingsSectionLabel(label: String?) {

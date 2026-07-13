@@ -13,6 +13,8 @@ import com.wajiha.data.scraper.BatchScraper
 import com.wajiha.data.scraper.ScrapeRunPolicy
 import com.wajiha.data.scraper.ScraperSettingsRepository
 import com.wajiha.domain.repository.PlatformRepository
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaLogKind
 import kotlinx.coroutines.flow.first
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -33,6 +35,10 @@ class ScrapeWorker(
     override suspend fun doWork(): Result {
         val platformId = inputData.getString(KEY_PLATFORM_ID)
         val policy = ScrapeRunPolicy.fromName(inputData.getString(KEY_MODE))
+        WajihaLog.i(
+            WajihaLogKind.WORK,
+            "scrapeWorker: start platformId=$platformId mode=${policy.mode}",
+        )
         val platformLabel = platformId?.let { platformRepository.byId(it)?.name }
         setForeground(
             OperationNotificationHelper.scrapeForegroundInfo(
@@ -65,6 +71,11 @@ class ScrapeWorker(
         return try {
             batchScraper.runForPlatform(platformId, policy)
             val progress = batchScraper.progress.value
+            WajihaLog.i(
+                WajihaLogKind.WORK,
+                "scrapeWorker: done matched=${progress.matched} partial=${progress.partial} " +
+                    "errors=${progress.errorCount}",
+            )
             OperationNotificationHelper.postScrapeComplete(
                 context = applicationContext,
                 platformLabel = platformLabel,
@@ -113,6 +124,11 @@ class ScrapeWorker(
             policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps,
         ) {
             val settings = getKoin().get<ScraperSettingsRepository>().current()
+            WajihaLog.i(
+                WajihaLogKind.WORK,
+                "scrapeWorker: enqueued platformId=$platformId wifiOnly=${settings.wifiOnly} " +
+                    "mode=${policy.mode}",
+            )
             val constraints =
                 Constraints
                     .Builder()

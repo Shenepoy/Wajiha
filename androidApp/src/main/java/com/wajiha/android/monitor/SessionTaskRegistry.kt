@@ -12,6 +12,9 @@ import com.wajiha.log.WajihaTags
  * Caches emulator task IDs at launch time — [ActivityManager.getRunningTasks] from a
  * normal app cannot see other packages' background tasks on Thor, but moveTaskToFront
  * still works with a known taskId from the launch window.
+ *
+ * Automatic display reclaim must never cold-start via [allowColdStart]; that path
+ * reopens an emulator the user dismissed from Recents while Now Playing is still up.
  */
 internal object SessionTaskRegistry {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -48,9 +51,15 @@ internal object SessionTaskRegistry {
         components.remove(packageName)
     }
 
+    /**
+     * @param allowColdStart when true (explicit user focus), may [startActivity] the
+     * cached launch component. Automatic reclaim must pass false so a dismissed task
+     * is not relaunched.
+     */
     fun moveToFront(
         context: Context,
         packageName: String,
+        allowColdStart: Boolean = false,
     ): Boolean {
         taskIds[packageName]?.let { id ->
             if (moveTaskId(context, id)) {
@@ -65,6 +74,13 @@ internal object SessionTaskRegistry {
         TopDisplayTaskResolver.taskIdForPackage(context, packageName)?.let { id ->
             taskIds[packageName] = id
             if (moveTaskId(context, id)) return true
+        }
+        if (!allowColdStart) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "SessionTaskRegistry: no live task, skip cold-start pkg=$packageName",
+            )
+            return false
         }
         components[packageName]?.let { component ->
             if (TopDisplayTaskResolver.reorderComponentToFront(context, component)) return true

@@ -49,6 +49,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
+import com.wajiha.input.GamepadHint
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.requestContentFocus
 import com.wajiha.log.WajihaLog
@@ -217,23 +219,27 @@ fun BottomScreen(
         remember(state.platforms, menuOpen, sessionFocused, gridSessions.size) {
             buildList {
                 if (menuOpen) {
-                    add("B" to "Back")
+                    add(GamepadHint(GamepadHintButton.B, "Back"))
                 } else if (sessionFocused) {
-                    add("A" to "Switch")
-                    add("Y" to "Close")
-                    add("X" to "Menu")
-                    if (gridSessions.size > 1) add("Up/Down" to "Sessions")
-                    add("Right" to "Games")
-                    add("B" to "Back")
-                    add("L2" to "Focus screen")
-                    add("SELECT" to "Swap")
+                    add(GamepadHint(GamepadHintButton.A, "Switch"))
+                    add(GamepadHint(GamepadHintButton.Y, "Close"))
+                    add(GamepadHint(GamepadHintButton.X, "Menu"))
+                    if (gridSessions.size > 1) {
+                        add(GamepadHint(GamepadHintButton.DpadUpDown, "Sessions"))
+                    }
+                    add(GamepadHint(GamepadHintButton.DpadRight, "Games"))
+                    add(GamepadHint(GamepadHintButton.B, "Back"))
+                    add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+                    add(GamepadHint(GamepadHintButton.Select, "Swap"))
                 } else {
-                    add("A" to "Launch")
-                    add("X" to "Menu")
-                    add("B" to "Back")
-                    if (state.platforms.isNotEmpty()) add("L1/R1" to "Filter")
-                    add("L2" to "Focus screen")
-                    add("SELECT" to "Swap")
+                    add(GamepadHint(GamepadHintButton.A, "Launch"))
+                    add(GamepadHint(GamepadHintButton.X, "Menu"))
+                    add(GamepadHint(GamepadHintButton.B, "Back"))
+                    if (state.platforms.isNotEmpty()) {
+                        add(GamepadHint(GamepadHintButton.L1R1, "Filter"))
+                    }
+                    add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+                    add(GamepadHint(GamepadHintButton.Select, "Swap"))
                 }
             }
         }

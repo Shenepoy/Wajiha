@@ -1,18 +1,19 @@
 package com.wajiha.log
 
-actual object WajihaLog {
-    actual fun d(
-        tag: String,
-        message: String,
-    ) = Unit
+/** Monotonic-ish tick for rate limits; iOS has no file sink. */
+private var iosTickMs: Long = 0L
 
-    actual fun i(
-        tag: String,
-        message: String,
-    ) = Unit
+internal actual fun currentTimeMs(): Long {
+    iosTickMs += 50L
+    return iosTickMs
+}
 
-    actual fun w(
-        tag: String,
-        message: String,
-    ) = Unit
+internal actual fun platformLog(
+    level: WajihaLogLevel,
+    tag: String,
+    message: String,
+) {
+    // Gating is entirely in WajihaLog.emit / WajihaLogGate — do not re-filter here
+    // or setKindEnabled(kind, true) cannot unlock DEBUG on iOS.
+    println("$level/$tag: $message")
 }

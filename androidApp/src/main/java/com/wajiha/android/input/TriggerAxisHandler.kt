@@ -4,8 +4,9 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.Window
 import androidx.activity.ComponentActivity
+import com.wajiha.input.ControllerGlyphStore
 import com.wajiha.log.WajihaLog
-import com.wajiha.log.WajihaTags
+import com.wajiha.log.WajihaLogKind
 import com.wajiha.platform.AppActions
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
@@ -15,15 +16,19 @@ import com.wajiha.state.SystemNotificationStore
  * Thor / Xbox expose L2/R2 as analog axes — typically [MotionEvent.AXIS_BRAKE] /
  * [MotionEvent.AXIS_GAS] (axis 23 / 22), sometimes also LTRIGGER/RTRIGGER.
  * Edge-detect presses so L2 toggles gamepad ownership and R2 the notification panel.
+ *
+ * Trigger pressed state is tracked **per [MotionEvent.getDeviceId]** so multiple
+ * controllers cannot race a single global edge detector.
  */
 class TriggerAxisHandler(
     private val store: DualScreenStore,
     private val notifications: SystemNotificationStore,
     private val appActions: AppActions,
+    private val glyphStore: ControllerGlyphStore,
+    private val deviceRegistry: GamepadDeviceRegistry,
 ) {
     private val triggers = LauncherTriggerActions(store, notifications, appActions)
-    private var l2Pressed = false
-    private var r2Pressed = false
+    private val byDevice = mutableMapOf<Int, DeviceTriggerState>()
     private var lastLoggedBucket: Int = -1
 
     /**
@@ -44,8 +49,8 @@ class TriggerAxisHandler(
         if (original != null && original !is TriggerWindowCallback) {
             window.callback = TriggerWindowCallback(original, gate, this)
         }
-        WajihaLog.i(
-            WajihaTags.GAMEPAD,
+        WajihaLog.d(
+            WajihaLogKind.INPUT,
             "TriggerAxisHandler installed on ${activity.javaClass.simpleName}",
         )
     }
@@ -75,33 +80,53 @@ class TriggerAxisHandler(
             val bucket = ((l2 * 20).toInt() shl 8) or (r2 * 20).toInt()
             if (bucket != lastLoggedBucket) {
                 lastLoggedBucket = bucket
-                WajihaLog.i(
-                    WajihaTags.GAMEPAD,
-                    "axis: BRAKE/L2=$l2 GAS/R2=$r2 action=${event.actionMasked} " +
-                        "src=0x${Integer.toHexString(event.source)} dev=${event.deviceId}",
+                WajihaLog.d(
+                    WajihaLogKind.INPUT,
+                    "axis: L2=$l2 R2=$r2 device=${event.deviceId}",
+                    minIntervalMs = 100L,
                 )
             }
         }
 
+        val state = byDevice.getOrPut(event.deviceId) { DeviceTriggerState() }
         var handled = false
 
         val l2Down = l2 >= PRESS_THRESHOLD
-        if (l2Down != l2Pressed) {
-            l2Pressed = l2Down
+        if (l2Down != state.l2Pressed) {
+            state.l2Pressed = l2Down
+            WajihaLog.d(
+                WajihaLogKind.INPUT,
+                "trigger: L2 ${if (l2Down) "DOWN" else "UP"} src=axis device=${event.deviceId}",
+            )
             if (l2Down) {
+                noteGlyphInput(event.deviceId)
                 handled = triggers.onL2("axis")
             }
         }
 
         val r2Down = r2 >= PRESS_THRESHOLD
-        if (r2Down != r2Pressed) {
-            r2Pressed = r2Down
+        if (r2Down != state.r2Pressed) {
+            state.r2Pressed = r2Down
+            WajihaLog.d(
+                WajihaLogKind.INPUT,
+                "trigger: R2 ${if (r2Down) "DOWN" else "UP"} src=axis device=${event.deviceId}",
+            )
             if (r2Down) {
+                noteGlyphInput(event.deviceId)
                 handled = triggers.onR2("axis") || handled
             }
         }
 
         return handled
+    }
+
+    private fun noteGlyphInput(deviceId: Int) {
+        val controller = deviceRegistry.controllerForDeviceId(deviceId)
+        if (controller != null) {
+            glyphStore.noteInput(controller.stableId, controller.type)
+        } else {
+            glyphStore.noteInputByDeviceId(deviceId)
+        }
     }
 
     private fun isJoystickOrGamepad(event: MotionEvent): Boolean {
@@ -114,6 +139,11 @@ class TriggerAxisHandler(
     companion object {
         /** Thor analog triggers often peak below 1.0 — fire a bit early. */
         private const val PRESS_THRESHOLD = 0.35f
+    }
+
+    private class DeviceTriggerState {
+        var l2Pressed = false
+        var r2Pressed = false
     }
 }
 

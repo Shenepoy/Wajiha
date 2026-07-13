@@ -22,8 +22,12 @@ fun HttpRequestBuilder.screenScraperParams(
     devId: String,
     devPassword: String,
 ) {
-    parameter("devid", devId)
-    parameter("devpassword", devPassword)
+    // Developer pair is optional in-app (build-time). Never send empty strings —
+    // SS can stall or reject oddly on devid=/devpassword=.
+    if (devId.isNotBlank() && devPassword.isNotBlank()) {
+        parameter("devid", devId)
+        parameter("devpassword", devPassword)
+    }
     parameter("softname", "wajiha")
     parameter("output", "json")
     parameter("ssid", settings.screenScraperUser)

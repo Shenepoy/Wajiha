@@ -3,6 +3,7 @@ package com.wajiha.data.config
 import com.wajiha.data.WajihaJson
 import com.wajiha.data.db.EmulatorEntity
 import com.wajiha.data.db.PlatformEntity
+import com.wajiha.data.scraper.ScreenScraperSystemIds
 import com.wajiha.domain.repository.PlatformRepository
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import wajiha.composeapp.generated.resources.Res
@@ -74,7 +75,11 @@ class ConfigInstaller(
                     shortName = config.shortName,
                     extensions = config.extensions.joinToString(","),
                     raConsoleId = config.raConsoleId,
-                    screenScraperId = config.screenScraperId,
+                    // Keep a user-set id; otherwise fill from config / known SS map.
+                    screenScraperId =
+                        existing?.screenScraperId
+                            ?: config.screenScraperId
+                            ?: ScreenScraperSystemIds.resolve(config.id),
                     libretroName = config.libretroName,
                     boxartAspectRatio = config.boxartAspectRatio,
                     sortIndex = config.sortIndex,
@@ -155,6 +160,7 @@ object ConfigMerger {
                         sortIndex = index,
                         extensions = (platform.extensions + match.extensions).distinct().sorted(),
                         raConsoleId = platform.raConsoleId ?: match.raConsoleId,
+                        screenScraperId = platform.screenScraperId ?: match.screenScraperId,
                         emulators =
                             platform.emulators +
                                 match.emulators

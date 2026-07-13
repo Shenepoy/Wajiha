@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.wajiha.data.WajihaJson
+import com.wajiha.log.WajihaLog
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -38,7 +39,13 @@ class ScraperSettingsRepository(
                         ScraperSettings()
                     }
                 } ?: ScraperSettings()
-            prefs[KEY] = json.encodeToString(ScraperSettings.serializer(), transform(old))
+            val new = transform(old)
+            prefs[KEY] = json.encodeToString(ScraperSettings.serializer(), new)
+            WajihaLog.setting(
+                "scraper",
+                "sources=${new.enabledSources.size} wifiOnly=${new.wifiOnly} " +
+                    "ssUser=${new.screenScraperUser.isNotBlank()}",
+            )
         }
     }
 

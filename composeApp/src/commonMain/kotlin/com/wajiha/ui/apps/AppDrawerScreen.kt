@@ -37,6 +37,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.wajiha.input.GamepadHint
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.requestContentFocus
 import com.wajiha.log.WajihaLog
@@ -109,13 +111,13 @@ fun AppDrawerScreen(
         remember(menuOpen) {
             buildList {
                 if (menuOpen) {
-                    add("B" to "Back")
+                    add(GamepadHint(GamepadHintButton.B, "Back"))
                 } else {
-                    add("A" to "Open app")
-                    add("Y" to "Bottom screen")
-                    add("X" to "Menu")
-                    add("B" to "Back")
-                    add("L2" to "Focus screen")
+                    add(GamepadHint(GamepadHintButton.A, "Open app"))
+                    add(GamepadHint(GamepadHintButton.Y, "Bottom screen"))
+                    add(GamepadHint(GamepadHintButton.X, "Menu"))
+                    add(GamepadHint(GamepadHintButton.B, "Back"))
+                    add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
                 }
             }
         }

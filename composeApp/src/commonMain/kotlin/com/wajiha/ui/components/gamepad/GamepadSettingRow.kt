@@ -11,6 +11,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
@@ -52,6 +54,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +67,8 @@ import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 
 /** Compact row height for multi-choice list items (denser than [WajihaSpacing.touchMin]). */
 private val MultiChoiceItemMinHeight = 34.dp
@@ -74,6 +79,8 @@ data class MultiChoiceOption(
     val label: String,
     val description: String? = null,
     val icon: String? = null,
+    /** Optional Kenney / drawable leading icon (takes precedence over [icon] text). */
+    val iconRes: DrawableResource? = null,
     val enabled: Boolean = true,
 )
 
@@ -389,7 +396,8 @@ private fun MultiChoiceSettingRow(
     val headerHighlight = !useCustomNav && headerFocused && !expanded
     val canReset = onReset != null && !isAtDefault
     val feedback = LocalUiFeedback.current
-    val selectedLabel = options.firstOrNull { it.value == selected }?.label.orEmpty()
+    val selectedOption = options.firstOrNull { it.value == selected }
+    val selectedLabel = selectedOption?.label.orEmpty()
 
     val headerFocusRequester = focusRequester ?: remember { FocusRequester() }
     val sectionScroll = LocalSettingSectionScroll.current
@@ -497,6 +505,14 @@ private fun MultiChoiceSettingRow(
                 overrideHint = overrideHint,
                 modifier = Modifier.weight(1f),
             )
+            selectedOption?.iconRes?.let { res ->
+                Image(
+                    painter = painterResource(res),
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    contentScale = ContentScale.Fit,
+                )
+            }
             Text(
                 text = selectedLabel,
                 style = MaterialTheme.typography.labelMedium,
@@ -669,19 +685,32 @@ private fun MultiChoiceListItem(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
     ) {
-        val leading = option.icon ?: if (selected) "●" else "○"
-        Text(
-            text = leading,
-            style = MaterialTheme.typography.labelMedium,
-            color =
-                when {
-                    !option.enabled -> detailColor
-                    selected -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            modifier = Modifier.size(20.dp),
-            textAlign = TextAlign.Center,
-        )
+        val iconRes = option.iconRes
+        if (iconRes != null) {
+            Image(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier =
+                    Modifier
+                        .size(28.dp)
+                        .then(if (option.enabled) Modifier else Modifier.alpha(disabledAlpha)),
+                contentScale = ContentScale.Fit,
+            )
+        } else {
+            val leading = option.icon ?: if (selected) "●" else "○"
+            Text(
+                text = leading,
+                style = MaterialTheme.typography.labelMedium,
+                color =
+                    when {
+                        !option.enabled -> detailColor
+                        selected -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                modifier = Modifier.size(20.dp),
+                textAlign = TextAlign.Center,
+            )
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = option.label,

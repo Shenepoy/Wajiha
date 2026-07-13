@@ -2,6 +2,7 @@ package com.wajiha.data.scraper.sources
 
 import com.wajiha.data.WajihaJson
 import com.wajiha.data.scraper.HttpJsonResult
+import com.wajiha.data.scraper.MatchConfidence
 import com.wajiha.data.scraper.MediaCandidate
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeCandidate
@@ -11,6 +12,8 @@ import com.wajiha.data.scraper.ScrapeQuery
 import com.wajiha.data.scraper.ScrapedMetadata
 import com.wajiha.data.scraper.ScraperSettings
 import com.wajiha.data.scraper.ScraperSource
+import com.wajiha.data.scraper.ScreenScraperSystemIds
+import com.wajiha.data.scraper.SourceHealthBudget
 import com.wajiha.data.scraper.SourceLookupOutcome
 import com.wajiha.data.scraper.classifyHttpStatus
 import com.wajiha.data.scraper.getStringResult
@@ -22,9 +25,10 @@ import io.ktor.client.request.parameter
 import kotlinx.serialization.Serializable
 
 /**
- * ScreenScraper.fr (api2). Hash-first lookup (crc/md5), name search fallback.
- * User account credentials are the user's; optional developer credentials come
- * from build config (passed in [devId]/[devPassword]).
+ * ScreenScraper.fr (api2).
+ *
+ * Lookup ladder: hash+systeme → cleaned romnom+systeme → jeuRecherche →
+ * hydrate winner via `jeuInfos&gameid=` so media/metadata are complete.
  */
 class ScreenScraperSource(
     private val http: HttpClient,
@@ -34,6 +38,8 @@ class ScreenScraperSource(
     override val id = "screenscraper"
     override val displayName = "ScreenScraper"
 
+    private val health = SourceHealthBudget(id, maxCallsPerWindow = 50)
+
     override fun isConfigured(settings: ScraperSettings): Boolean =
         settings.screenScraperUser.isNotBlank() && settings.screenScraperPassword.isNotBlank()
 
@@ -41,20 +47,77 @@ class ScreenScraperSource(
         query: ScrapeQuery,
         settings: ScraperSettings,
     ): SourceLookupOutcome {
-        val result =
-            http.getStringResult("https://api.screenscraper.fr/api2/jeuInfos.php") {
-                screenScraperParams(settings, devId, devPassword)
-                parameter("romtype", "rom")
-                parameter("romnom", query.fileName)
-                if (query.fileSize > 0) parameter("romtaille", query.fileSize)
-                query.crc32?.let { parameter("crc", it) }
-                query.md5?.let { parameter("md5", it) }
-                query.screenScraperId?.let { parameter("systemeid", it) }
-            }
-        return when (result) {
-            is HttpJsonResult.Failed -> SourceLookupOutcome.Failed(result.failure)
-            is HttpJsonResult.Ok -> parseJeuOutcome(result.value, settings)
+        if (!health.isAvailable()) {
+            return SourceLookupOutcome.Failed(
+                ScrapeFailure(ScrapeFailureKind.RateLimited, "ScreenScraper temporarily unavailable"),
+            )
         }
+        val systemeid =
+            query.screenScraperId
+                ?: ScreenScraperSystemIds.resolve(query.platformId)
+        val hasHash = !query.crc32.isNullOrBlank() || !query.md5.isNullOrBlank()
+        if (systemeid == null && !hasHash) {
+            return searchAndHydrate(query.displayName, settings, systemeid = null)
+        }
+
+        // 1) Hash / filename infos
+        val infos =
+            jeuInfos(
+                settings = settings,
+                systemeid = systemeid,
+                romNom = query.fileName,
+                fileSize = query.fileSize,
+                crc32 = query.crc32,
+                md5 = query.md5,
+                gameId = null,
+            )
+        when (infos) {
+            is SourceLookupOutcome.Hit -> {
+                val confidence =
+                    if (hasHash) MatchConfidence.Hash else MatchConfidence.Name
+                return SourceLookupOutcome.Hit(
+                    infos.candidate.copy(matchConfidence = confidence),
+                )
+            }
+
+            is SourceLookupOutcome.Failed -> {
+                if (infos.failure.kind.tripsCircuit()) {
+                    health.trip(infos.failure.message)
+                    return infos
+                }
+            }
+
+            SourceLookupOutcome.Miss -> {
+                Unit
+            }
+        }
+
+        // 2) Cleaned romnom without region tags
+        val cleaned = cleanRomSearchName(query.displayName.ifBlank { query.fileName })
+        if (cleaned.isNotBlank() && cleaned != query.fileName) {
+            val cleanedInfos =
+                jeuInfos(
+                    settings = settings,
+                    systemeid = systemeid,
+                    romNom = cleaned,
+                    fileSize = query.fileSize,
+                    crc32 = null,
+                    md5 = null,
+                    gameId = null,
+                )
+            if (cleanedInfos is SourceLookupOutcome.Hit) {
+                return SourceLookupOutcome.Hit(
+                    cleanedInfos.candidate.copy(matchConfidence = MatchConfidence.Name),
+                )
+            }
+            if (cleanedInfos is SourceLookupOutcome.Failed && cleanedInfos.failure.kind.tripsCircuit()) {
+                health.trip(cleanedInfos.failure.message)
+                return cleanedInfos
+            }
+        }
+
+        // 3) Name search → hydrate first hit by gameid
+        return searchAndHydrate(cleaned.ifBlank { query.displayName }, settings, systemeid)
     }
 
     override suspend fun search(
@@ -62,16 +125,119 @@ class ScreenScraperSource(
         query: ScrapeQuery,
         settings: ScraperSettings,
     ): List<ScrapeCandidate> {
+        val systemeid =
+            query.screenScraperId
+                ?: ScreenScraperSystemIds.resolve(query.platformId)
+        return searchCandidates(name, settings, systemeid)
+    }
+
+    private suspend fun searchAndHydrate(
+        name: String,
+        settings: ScraperSettings,
+        systemeid: Int?,
+    ): SourceLookupOutcome {
+        val hits = searchCandidates(name, settings, systemeid)
+        if (hits.isEmpty()) return SourceLookupOutcome.Miss
+        val first = hits.first()
+        val gameId = first.sourceGameId
+        val hydrated =
+            jeuInfos(
+                settings = settings,
+                systemeid = systemeid,
+                romNom = null,
+                fileSize = 0,
+                crc32 = null,
+                md5 = null,
+                gameId = gameId,
+            )
+        return when (hydrated) {
+            is SourceLookupOutcome.Hit -> {
+                SourceLookupOutcome.Hit(
+                    hydrated.candidate.copy(matchConfidence = MatchConfidence.Name),
+                )
+            }
+
+            else -> {
+                SourceLookupOutcome.Hit(
+                    first.copy(matchConfidence = MatchConfidence.Name),
+                )
+            }
+        }
+    }
+
+    private suspend fun jeuInfos(
+        settings: ScraperSettings,
+        systemeid: Int?,
+        romNom: String?,
+        fileSize: Long,
+        crc32: String?,
+        md5: String?,
+        gameId: String?,
+    ): SourceLookupOutcome {
+        health.recordCall()
+        val result =
+            http.getStringResult("https://api.screenscraper.fr/api2/jeuInfos.php") {
+                screenScraperParams(settings, devId, devPassword)
+                if (gameId != null) {
+                    parameter("gameid", gameId)
+                } else {
+                    parameter("romtype", romTypeFor(romNom))
+                    if (!romNom.isNullOrBlank()) parameter("romnom", romNom)
+                    // Skip huge sizes without a hash — Switch XCIs (~15GB) make SS hang
+                    // and we already send systemeid + cleaned name for matching.
+                    val hasHash = !crc32.isNullOrBlank() || !md5.isNullOrBlank()
+                    if (fileSize > 0 && (hasHash || fileSize < 512L * 1024 * 1024)) {
+                        parameter("romtaille", fileSize)
+                    }
+                    crc32?.let { parameter("crc", it) }
+                    md5?.let { parameter("md5", it) }
+                }
+                systemeid?.let { parameter("systemeid", it) }
+            }
+        return when (result) {
+            is HttpJsonResult.Failed -> {
+                val failure = result.failure
+                if (failure.kind.tripsCircuit()) {
+                    SourceLookupOutcome.Failed(failure)
+                } else {
+                    // 400 "systemeid obligatoire" etc. → treat as miss for ladder
+                    SourceLookupOutcome.Miss
+                }
+            }
+
+            is HttpJsonResult.Ok -> {
+                parseJeuOutcome(result.value, settings)
+            }
+        }
+    }
+
+    private suspend fun searchCandidates(
+        name: String,
+        settings: ScraperSettings,
+        systemeid: Int?,
+    ): List<ScrapeCandidate> {
+        val cleaned = cleanRomSearchName(name)
+        if (cleaned.isBlank()) return emptyList()
+        if (!health.isAvailable()) return emptyList()
+        health.recordCall()
         val result =
             http.getStringResult("https://api.screenscraper.fr/api2/jeuRecherche.php") {
                 screenScraperParams(settings, devId, devPassword)
-                parameter("recherche", name)
-                query.screenScraperId?.let { parameter("systemeid", it) }
+                parameter("recherche", cleaned)
+                systemeid?.let { parameter("systemeid", it) }
             }
         val response =
             when (result) {
-                is HttpJsonResult.Failed -> return emptyList()
-                is HttpJsonResult.Ok -> result.value
+                is HttpJsonResult.Failed -> {
+                    if (result.failure.kind.tripsCircuit()) {
+                        health.trip(result.failure.message)
+                    }
+                    return emptyList()
+                }
+
+                is HttpJsonResult.Ok -> {
+                    result.value
+                }
             }
         if (response.contains("\"error\"", ignoreCase = true)) return emptyList()
         return try {
@@ -79,7 +245,9 @@ class ScreenScraperSource(
             parsed.response
                 ?.jeux
                 .orEmpty()
-                .mapNotNull { it.toCandidate(settings) }
+                .mapNotNull { jeu ->
+                    jeu.toCandidate(settings)?.copy(matchConfidence = MatchConfidence.Name)
+                }
         } catch (_: Exception) {
             emptyList()
         }
@@ -108,7 +276,11 @@ class ScreenScraperSource(
                         )
                     }
                 }
-            return SourceLookupOutcome.Failed(failure)
+            return if (failure.kind == ScrapeFailureKind.Unknown) {
+                SourceLookupOutcome.Miss
+            } else {
+                SourceLookupOutcome.Failed(failure)
+            }
         }
         return try {
             val candidate =
@@ -186,6 +358,17 @@ class ScreenScraperSource(
                         addAll(media.filter { it.type == MediaType.Fanart }.map { it.copy(type = MediaType.Hero) })
                     }
                 }
+            val noteScore =
+                note
+                    ?.text
+                    ?.substringBefore('/')
+                    ?.trim()
+                    ?.toFloatOrNull()
+            val scoreInt = noteScore?.let { (it * 10).toInt() }
+            val scoredMedia =
+                expandedMedia.map { m ->
+                    m.copy(score = m.score ?: scoreInt)
+                }
             return ScrapeCandidate(
                 sourceId = "screenscraper",
                 sourceGameId = gameId,
@@ -201,17 +384,12 @@ class ScreenScraperSource(
                             genres.orEmpty().firstNotNullOfOrNull { genre ->
                                 pickLang(genre.noms, settings.languagePriority)
                             },
-                        rating =
-                            note
-                                ?.text
-                                ?.substringBefore('/')
-                                ?.trim()
-                                ?.toFloatOrNull(),
+                        rating = noteScore,
                         ageRating = ageRating,
                         players = joueurs?.text,
                         region = region,
                     ),
-                media = expandedMedia.distinctBy { it.type to it.url },
+                media = scoredMedia.distinctBy { it.type to it.url },
                 thumbnailUrl = media.firstOrNull { it.type == MediaType.Boxart }?.url,
             )
         }
@@ -357,6 +535,31 @@ class ScreenScraperSource(
             )
         }
     }
+}
+
+private fun ScrapeFailureKind.tripsCircuit(): Boolean =
+    this == ScrapeFailureKind.Auth ||
+        this == ScrapeFailureKind.RateLimited ||
+        this == ScrapeFailureKind.Network ||
+        this == ScrapeFailureKind.Http
+
+/** SS romtype: iso for optical/disc images, rom otherwise. */
+internal fun romTypeFor(fileName: String?): String {
+    val ext = fileName?.substringAfterLast('.', "")?.lowercase().orEmpty()
+    return when (ext) {
+        "iso", "cue", "chd", "gdi", "cdi", "bin", "mdf", "nrg" -> "iso"
+        else -> "rom"
+    }
+}
+
+/** Strip region/language dump tags for name search. */
+internal fun cleanRomSearchName(raw: String): String {
+    var s = raw.substringBeforeLast('.').trim()
+    // Remove (...) and [...] tags commonly used in dumps
+    s = s.replace(Regex("""\([^)]*\)"""), " ")
+    s = s.replace(Regex("""\[[^\]]*\]"""), " ")
+    s = s.replace(Regex("""\s+"""), " ").trim()
+    return s
 }
 
 private fun acceptsScreenScraperType(

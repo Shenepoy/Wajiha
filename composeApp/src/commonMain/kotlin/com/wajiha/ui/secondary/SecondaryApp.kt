@@ -34,6 +34,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.wajiha.input.GamepadHint
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.requestContentFocus
 import com.wajiha.input.wajihaGamepadFocus
@@ -44,6 +46,8 @@ import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.LauncherPanel
+import com.wajiha.state.MenuDestination
+import com.wajiha.state.MenuRouteSnapshot
 import com.wajiha.state.SecondaryMode
 import com.wajiha.ui.apps.AppDrawerScreen
 import com.wajiha.ui.components.LocalUiFeedback
@@ -145,11 +149,100 @@ fun SecondaryApp() {
             route = SecondaryRoute.GameDetail
         }
 
-        // Swapped roles: menu lives on primary — keep secondary as hero-only.
-        LaunchedEffect(secondaryShowsHero) {
-            if (secondaryShowsHero && route != SecondaryRoute.Modes) {
+        // SELECT swap: adopt shared menu snapshot when this display gains the
+        // menu; only clear local route when becoming hero (leave snapshot).
+        LaunchedEffect(secondaryShowsMenu) {
+            if (secondaryShowsMenu) {
+                val snap = store.menuRoute.value
+                platformDetailId = snap.platformDetailId
+                gameDetailId = snap.gameDetailId
+                when (snap.destination) {
+                    MenuDestination.Home -> {
+                        route = SecondaryRoute.Modes
+                        store.setSecondaryMode(SecondaryMode.GameGrid)
+                    }
+
+                    MenuDestination.Settings -> {
+                        route = SecondaryRoute.Settings
+                    }
+
+                    MenuDestination.PlatformPicker -> {
+                        route = SecondaryRoute.PlatformPicker
+                    }
+
+                    MenuDestination.PlatformDetail -> {
+                        route = SecondaryRoute.PlatformDetail
+                    }
+
+                    MenuDestination.Scraper -> {
+                        route = SecondaryRoute.Scraper
+                    }
+
+                    MenuDestination.Apps -> {
+                        route = SecondaryRoute.Modes
+                        store.setSecondaryMode(SecondaryMode.AppDock)
+                    }
+
+                    MenuDestination.System -> {
+                        route = SecondaryRoute.Modes
+                        store.setSecondaryMode(SecondaryMode.QuickSettings)
+                    }
+
+                    MenuDestination.GameDetail -> {
+                        route = SecondaryRoute.GameDetail
+                    }
+
+                    MenuDestination.NowRunning -> {
+                        route = SecondaryRoute.Modes
+                        store.setSecondaryMode(SecondaryMode.NowPlaying)
+                    }
+                }
+            } else if (route != SecondaryRoute.Modes) {
                 route = SecondaryRoute.Modes
             }
+        }
+
+        // Publish while owning the menu (key on route/mode only so swap adopt wins).
+        LaunchedEffect(route, mode, platformDetailId, gameDetailId) {
+            if (!secondaryShowsMenu) return@LaunchedEffect
+            val destination =
+                when (route) {
+                    SecondaryRoute.Settings -> {
+                        MenuDestination.Settings
+                    }
+
+                    SecondaryRoute.PlatformPicker -> {
+                        MenuDestination.PlatformPicker
+                    }
+
+                    SecondaryRoute.PlatformDetail -> {
+                        MenuDestination.PlatformDetail
+                    }
+
+                    SecondaryRoute.Scraper -> {
+                        MenuDestination.Scraper
+                    }
+
+                    SecondaryRoute.GameDetail -> {
+                        MenuDestination.GameDetail
+                    }
+
+                    SecondaryRoute.Modes -> {
+                        when (mode) {
+                            SecondaryMode.AppDock -> MenuDestination.Apps
+                            SecondaryMode.QuickSettings -> MenuDestination.System
+                            SecondaryMode.NowPlaying -> MenuDestination.NowRunning
+                            else -> MenuDestination.Home
+                        }
+                    }
+                }
+            store.publishMenuRoute(
+                MenuRouteSnapshot(
+                    destination = destination,
+                    platformDetailId = platformDetailId,
+                    gameDetailId = gameDetailId,
+                ),
+            )
         }
 
         // Dual-display: secondary owns gamepad while on settings/apps modes
@@ -489,7 +582,11 @@ fun SecondaryApp() {
                         WajihaScreen(
                             layerId = "secondary_clock",
                             showActionBar = true,
-                            gamepadHints = listOf("B" to "Games", "L2" to "Focus screen"),
+                            gamepadHints =
+                                listOf(
+                                    GamepadHint(GamepadHintButton.B, "Games"),
+                                    GamepadHint(GamepadHintButton.L2, "Focus screen"),
+                                ),
                             gamepadOwner = GamepadOwner.Secondary,
                             onClaimGamepad = store::claimGamepad,
                             onOwnerGainedFocus = { clockFocus.requestContentFocus() },
@@ -545,17 +642,41 @@ private fun SecondaryModeFrame(
 
     val modeHints =
         when (current) {
-            SecondaryMode.NowPlaying -> listOf("B" to "Games", "L1/R1" to "Tab")
-            SecondaryMode.RunningApps -> runningAppsGamepadHints + ("L1/R1" to "Tab")
-            SecondaryMode.QuickSettings -> quickSettingsGamepadHints + listOf("B" to "Games", "L1/R1" to "Tab")
-            SecondaryMode.Achievements -> listOf("B" to "Games", "L1/R1" to "Tab")
-            else -> secondaryModeTabGamepadHints
+            SecondaryMode.NowPlaying -> {
+                listOf(
+                    GamepadHint(GamepadHintButton.B, "Games"),
+                    GamepadHint(GamepadHintButton.L1R1, "Tab"),
+                )
+            }
+
+            SecondaryMode.RunningApps -> {
+                runningAppsGamepadHints + GamepadHint(GamepadHintButton.L1R1, "Tab")
+            }
+
+            SecondaryMode.QuickSettings -> {
+                quickSettingsGamepadHints +
+                    listOf(
+                        GamepadHint(GamepadHintButton.B, "Games"),
+                        GamepadHint(GamepadHintButton.L1R1, "Tab"),
+                    )
+            }
+
+            SecondaryMode.Achievements -> {
+                listOf(
+                    GamepadHint(GamepadHintButton.B, "Games"),
+                    GamepadHint(GamepadHintButton.L1R1, "Tab"),
+                )
+            }
+
+            else -> {
+                secondaryModeTabGamepadHints
+            }
         }
     val contentFocus = remember { FocusRequester() }
     WajihaScreen(
         layerId = "secondary_mode_${current.name}",
         showActionBar = true,
-        gamepadHints = modeHints + ("L2" to "Focus screen"),
+        gamepadHints = modeHints + GamepadHint(GamepadHintButton.L2, "Focus screen"),
         gamepadOwner = GamepadOwner.Secondary,
         onClaimGamepad = store::claimGamepad,
         onOwnerGainedFocus = { contentFocus.requestContentFocus() },

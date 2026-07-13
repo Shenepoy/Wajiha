@@ -880,39 +880,31 @@ private fun ScraperSectionContent(
     ScrapeModeSelector(
         selected = mode,
         onSelect = { mode = it },
+        actionLabel =
+            when (mode) {
+                ScrapeUiMode.Review -> "Open Manual"
+                ScrapeUiMode.Force -> "Force scrape"
+                ScrapeUiMode.FillGaps -> "Scrape"
+            },
+        onAction = {
+            when (mode) {
+                ScrapeUiMode.Review -> {
+                    if (game == null) return@ScrapeModeSelector
+                    reviewing = true
+                    reviewViewModel.openGame(game)
+                }
+
+                else -> {
+                    onScrape(mode.toPolicy())
+                }
+            }
+        },
         firstFocusRequester = firstFocusRequester,
         enabled = !state.scraping,
+        actionEnabled = !state.scraping && sourcesReady,
         helperText = mode.singleGameHelperText(),
         singleGameLabels = true,
     )
-
-    when (mode) {
-        ScrapeUiMode.Review -> {
-            GamepadButton(
-                text = "Open Manual",
-                onClick = {
-                    if (game == null) return@GamepadButton
-                    reviewing = true
-                    reviewViewModel.openGame(game)
-                },
-                enabled = !state.scraping && sourcesReady,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        else -> {
-            GamepadButton(
-                text =
-                    when (mode) {
-                        ScrapeUiMode.Force -> "Force scrape"
-                        else -> "Scrape"
-                    },
-                onClick = { onScrape(mode.toPolicy()) },
-                enabled = !state.scraping && sourcesReady,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
 
     Text(
         text =
@@ -926,7 +918,7 @@ private fun ScraperSectionContent(
                 }
 
                 mode == ScrapeUiMode.FillGaps -> {
-                    "Preferred artwork present."
+                    "Preferred artwork present — use Force or Manual to replace."
                 }
 
                 else -> {

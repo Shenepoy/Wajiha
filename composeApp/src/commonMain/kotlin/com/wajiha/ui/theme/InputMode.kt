@@ -53,7 +53,7 @@ val LocalGamepadFocusChromeScope = compositionLocalOf { GamepadFocusChromeScope.
 
 /**
  * True when gamepad focus rings and nav highlights should render for the current scope.
- * [GamepadActionBar] hints are always visible and do not use this helper.
+ * [GamepadActionBar] is separate: Auto + no connected pad hides the hint bar.
  */
 @Composable
 fun showGamepadChrome(highlighted: Boolean = true): Boolean {

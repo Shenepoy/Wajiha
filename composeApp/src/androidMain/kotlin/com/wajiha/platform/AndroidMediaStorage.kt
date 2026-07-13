@@ -7,7 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Stores downloaded media under `files/media/<gameId>/<type>.<ext>`. */
+/**
+ * Stores downloaded media under `files/media/<gameId>/<type>_<stamp>.<ext>`.
+ *
+ * Filenames are unique per save so Coil (and any path-keyed cache) picks up
+ * replacements instead of keeping a stale bitmap for `boxart.png`.
+ */
 class AndroidMediaStorage(
     context: Context,
 ) : MediaStorage {
@@ -22,18 +27,26 @@ class AndroidMediaStorage(
         withContext(Dispatchers.IO) {
             val dir = File(root, gameId.toString()).apply { mkdirs() }
             val ext = extension.trimStart('.').ifBlank { "png" }
-            val file = File(dir, "${type.dbName}.$ext")
-            // Remove stale files of the same type with a different extension
-            dir
-                .listFiles()
-                ?.filter {
-                    it.name.startsWith("${type.dbName}.") && it.name != file.name
-                }?.forEach { it.delete() }
+            deleteFilesForType(dir, type)
+            val file = File(dir, "${type.dbName}_${System.currentTimeMillis()}.$ext")
             file.writeBytes(bytes)
             file.absolutePath
         }
 
     override suspend fun delete(path: String) {
         withContext(Dispatchers.IO) { File(path).delete() }
+    }
+
+    private fun deleteFilesForType(
+        dir: File,
+        type: MediaType,
+    ) {
+        val legacyPrefix = "${type.dbName}."
+        val stampedPrefix = "${type.dbName}_"
+        dir
+            .listFiles()
+            ?.filter { f ->
+                f.name.startsWith(legacyPrefix) || f.name.startsWith(stampedPrefix)
+            }?.forEach { it.delete() }
     }
 }

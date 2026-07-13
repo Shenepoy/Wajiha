@@ -4,7 +4,9 @@ import android.os.Looper
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import com.wajiha.data.prefs.SettingsRepository
+import com.wajiha.input.ControllerGlyphStore
 import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaLogKind
 import com.wajiha.log.WajihaTags
 import com.wajiha.platform.AppActions
 import com.wajiha.platform.UiSound
@@ -39,6 +41,8 @@ class GamepadKeyRouter(
     private val appActions: AppActions,
     private val notifications: SystemNotificationStore,
     private val scope: CoroutineScope,
+    private val glyphStore: ControllerGlyphStore,
+    private val deviceRegistry: GamepadDeviceRegistry,
 ) {
     private val triggers = LauncherTriggerActions(store, notifications, appActions)
     private var primaryRef: WeakReference<ComponentActivity>? = null
@@ -80,20 +84,42 @@ class GamepadKeyRouter(
         localDispatch: (KeyEvent) -> Boolean,
     ): Boolean {
         if (
-            event.action == KeyEvent.ACTION_DOWN &&
             event.repeatCount == 0 &&
             (
-                event.keyCode == KeyEvent.KEYCODE_BUTTON_L1 ||
+                event.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                    event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                    event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                    event.keyCode == KeyEvent.KEYCODE_BUTTON_A ||
+                    event.keyCode == KeyEvent.KEYCODE_BUTTON_B ||
+                    event.keyCode == KeyEvent.KEYCODE_BUTTON_X ||
+                    event.keyCode == KeyEvent.KEYCODE_BUTTON_Y ||
+                    event.keyCode == KeyEvent.KEYCODE_BUTTON_L1 ||
                     event.keyCode == KeyEvent.KEYCODE_BUTTON_R1 ||
                     event.keyCode == KeyEvent.KEYCODE_BUTTON_L2 ||
-                    event.keyCode == KeyEvent.KEYCODE_BUTTON_R2
+                    event.keyCode == KeyEvent.KEYCODE_BUTTON_R2 ||
+                    event.keyCode == KeyEvent.KEYCODE_BUTTON_SELECT ||
+                    event.keyCode == KeyEvent.KEYCODE_BUTTON_START ||
+                    // Some pads / Thor expose shoulders as PAGE_UP / PAGE_DOWN.
+                    event.keyCode == KeyEvent.KEYCODE_PAGE_UP ||
+                    event.keyCode == KeyEvent.KEYCODE_PAGE_DOWN
             )
         ) {
-            WajihaLog.i(
-                WajihaTags.GAMEPAD,
-                "key: ${KeyEvent.keyCodeToString(event.keyCode)} from=$from " +
-                    "scan=${event.scanCode} device=${event.deviceId}",
+            val action =
+                when (event.action) {
+                    KeyEvent.ACTION_DOWN -> "DOWN"
+                    KeyEvent.ACTION_UP -> "UP"
+                    else -> "action=${event.action}"
+                }
+            WajihaLog.d(
+                WajihaLogKind.INPUT,
+                "key: ${KeyEvent.keyCodeToString(event.keyCode)} $action from=$from " +
+                    "device=${event.deviceId}",
+                minIntervalMs = 16L,
             )
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                noteGlyphInput(event.deviceId)
+            }
         }
         if (isSwapScreenKey(event.keyCode) && event.action == KeyEvent.ACTION_UP) {
             scope.launch {
@@ -143,6 +169,15 @@ class GamepadKeyRouter(
             handleGamepadKey(target, event) { remapped ->
                 target.dispatchKeyEvent(remapped)
             } || target.dispatchKeyEvent(event)
+        }
+    }
+
+    private fun noteGlyphInput(deviceId: Int) {
+        val controller = deviceRegistry.controllerForDeviceId(deviceId)
+        if (controller != null) {
+            glyphStore.noteInput(controller.stableId, controller.type)
+        } else {
+            glyphStore.noteInputByDeviceId(deviceId)
         }
     }
 

@@ -150,6 +150,22 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.setFocusPlacement(placement) }
     }
 
+    fun setControllerGlyphsEnabled(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setControllerGlyphsEnabled(value) }
+    }
+
+    fun setControllerGlyphScheme(scheme: String) {
+        viewModelScope.launch { settingsRepository.setControllerGlyphScheme(scheme) }
+    }
+
+    fun setControllerGlyphFaceStyle(style: String) {
+        viewModelScope.launch { settingsRepository.setControllerGlyphFaceStyle(style) }
+    }
+
+    fun setControllerGlyphOtherStyle(style: String) {
+        viewModelScope.launch { settingsRepository.setControllerGlyphOtherStyle(style) }
+    }
+
     fun setTopHeroBackdrop(value: Boolean) {
         viewModelScope.launch { settingsRepository.setTopHeroBackdrop(value) }
     }

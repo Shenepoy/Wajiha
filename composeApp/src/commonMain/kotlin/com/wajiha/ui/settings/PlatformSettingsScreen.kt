@@ -577,8 +577,52 @@ private fun PlatformScraperTabContent(
         ScrapeModeSelector(
             selected = mode,
             onSelect = { mode = it },
+            actionLabel =
+                when (mode) {
+                    ScrapeUiMode.Review -> {
+                        "Start review"
+                    }
+
+                    ScrapeUiMode.Force -> {
+                        if (scrapeBusy) "Scraping…" else "Force scrape"
+                    }
+
+                    ScrapeUiMode.FillGaps -> {
+                        if (scrapeBusy) "Scraping…" else "Fill gaps"
+                    }
+                },
+            onAction = {
+                when (mode) {
+                    ScrapeUiMode.Review -> {
+                        scope.launch {
+                            val games =
+                                scraperViewModel.reviewQueueGames(
+                                    platform.id,
+                                    includeScraped,
+                                )
+                            if (games.isEmpty()) {
+                                scraperViewModel.dismissBatchFeedback()
+                                return@launch
+                            }
+                            reviewing = true
+                            reviewViewModel.openQueue(games) {
+                                reviewing = false
+                            }
+                        }
+                    }
+
+                    else -> {
+                        scraperViewModel.dismissBatchFeedback()
+                        scraperViewModel.startBatch(platform.id, mode.toPolicy())
+                    }
+                }
+            },
             firstFocusRequester = firstFocusRequester,
             enabled = !progress.running,
+            actionEnabled =
+                !progress.running &&
+                    sourcesReady &&
+                    (mode != ScrapeUiMode.Review || (estimate ?: 0) > 0),
         )
 
         if (mode == ScrapeUiMode.Review) {
@@ -612,63 +656,17 @@ private fun PlatformScraperTabContent(
             )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            if (canRetry && mode != ScrapeUiMode.Review) {
+        if (canRetry && mode != ScrapeUiMode.Review) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
                 GamepadButton(
                     text = "Retry failed",
                     onClick = { scraperViewModel.retryFailedBatch(platform.id) },
                     outlined = true,
                     enabled = !progress.running,
                 )
-            }
-            when (mode) {
-                ScrapeUiMode.Review -> {
-                    GamepadButton(
-                        text = "Start review",
-                        onClick = {
-                            scope.launch {
-                                val games =
-                                    scraperViewModel.reviewQueueGames(
-                                        platform.id,
-                                        includeScraped,
-                                    )
-                                if (games.isEmpty()) {
-                                    scraperViewModel.dismissBatchFeedback()
-                                    return@launch
-                                }
-                                reviewing = true
-                                reviewViewModel.openQueue(games) {
-                                    reviewing = false
-                                }
-                            }
-                        },
-                        enabled = !progress.running && sourcesReady && (estimate ?: 0) > 0,
-                        modifier = Modifier.padding(start = WajihaSpacing.sm),
-                    )
-                }
-
-                else -> {
-                    GamepadButton(
-                        text =
-                            if (scrapeBusy) {
-                                "Scraping…"
-                            } else {
-                                when (mode) {
-                                    ScrapeUiMode.Force -> "Force scrape"
-                                    else -> "Fill gaps"
-                                }
-                            },
-                        onClick = {
-                            scraperViewModel.dismissBatchFeedback()
-                            scraperViewModel.startBatch(platform.id, mode.toPolicy())
-                        },
-                        enabled = !progress.running && sourcesReady,
-                        modifier = Modifier.padding(start = WajihaSpacing.sm),
-                    )
-                }
             }
         }
 

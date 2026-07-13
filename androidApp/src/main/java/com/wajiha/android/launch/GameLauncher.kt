@@ -13,7 +13,7 @@ import com.wajiha.data.db.GameEntity
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.PlatformRepository
 import com.wajiha.log.WajihaLog
-import com.wajiha.log.WajihaTags
+import com.wajiha.log.WajihaLogKind
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingState
@@ -40,10 +40,17 @@ class GameLauncher(
     suspend fun launchGame(gameId: Long): LaunchResult {
         val game =
             gameRepository.byId(gameId)
-                ?: return LaunchResult.Failed("Game $gameId not found")
+                ?: return LaunchResult.Failed("Game $gameId not found").also {
+                    WajihaLog.w(WajihaLogKind.LAUNCH, "launchGame: failed gameId=$gameId reason=not found")
+                }
         val emulator =
             platformRepository.resolveEmulator(game.platformId, game.emulatorOverrideId)
-                ?: return LaunchResult.Failed("No emulator configured for ${game.platformId}")
+                ?: return LaunchResult.Failed("No emulator configured for ${game.platformId}").also {
+                    WajihaLog.w(
+                        WajihaLogKind.LAUNCH,
+                        "launchGame: failed gameId=$gameId reason=no emulator platform=${game.platformId}",
+                    )
+                }
         return launchGame(game, emulator, game.launchOnDisplay)
     }
 
@@ -53,10 +60,17 @@ class GameLauncher(
     ): LaunchResult {
         val game =
             gameRepository.byId(gameId)
-                ?: return LaunchResult.Failed("Game $gameId not found")
+                ?: return LaunchResult.Failed("Game $gameId not found").also {
+                    WajihaLog.w(WajihaLogKind.LAUNCH, "launchGame: failed gameId=$gameId reason=not found")
+                }
         val emulator =
             platformRepository.resolveEmulator(game.platformId, game.emulatorOverrideId)
-                ?: return LaunchResult.Failed("No emulator configured for ${game.platformId}")
+                ?: return LaunchResult.Failed("No emulator configured for ${game.platformId}").also {
+                    WajihaLog.w(
+                        WajihaLogKind.LAUNCH,
+                        "launchGame: failed gameId=$gameId reason=no emulator platform=${game.platformId}",
+                    )
+                }
         return launchGame(game, emulator, displayId)
     }
 
@@ -93,8 +107,9 @@ class GameLauncher(
             )
         dualScreenStore.beginGameSession(session)
         WajihaLog.i(
-            WajihaTags.LAUNCH,
-            "launchGame: pkg=$packageName displayId=$resolvedDisplay gameId=${game.id}",
+            WajihaLogKind.LAUNCH,
+            "launchGame: start pkg=$packageName displayId=$resolvedDisplay " +
+                "gameId=${game.id} name=${game.displayName} emu=${emulator.id}",
         )
         val result = EmulatorLauncher.launch(context, spec)
         if (result is LaunchResult.Success) {
@@ -105,8 +120,13 @@ class GameLauncher(
             foregroundAppMonitor.onSessionStarted(packageName)
             displayCoordinator.focusGameOnPrimary(packageName)
             KeepAliveService.start(context)
+            WajihaLog.i(WajihaLogKind.LAUNCH, "launchGame: ok pkg=$packageName gameId=${game.id}")
         } else {
             dualScreenStore.endGameSession(packageName)
+            WajihaLog.w(
+                WajihaLogKind.LAUNCH,
+                "launchGame: failed pkg=$packageName gameId=${game.id} result=$result",
+            )
         }
         return result
     }

@@ -1,6 +1,7 @@
 package com.wajiha.data.config
 
 import com.wajiha.data.WajihaJson
+import com.wajiha.data.scraper.ScreenScraperSystemIds
 import kotlinx.serialization.Serializable
 
 /**
@@ -70,6 +71,7 @@ object IisuImporter {
                     .distinct()
                     .sorted(),
             raConsoleId = console.retroAchievementsId?.toIntOrNull(),
+            screenScraperId = ScreenScraperSystemIds.resolve(console.shortName),
             sortIndex = sortIndex,
             emulators = emulators,
         )

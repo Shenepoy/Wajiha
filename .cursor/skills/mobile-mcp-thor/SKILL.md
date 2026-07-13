@@ -4,7 +4,7 @@ description: >-
   Automate Wajiha UI testing on the AYN Thor via Mobile MCP (user-Mobile MCP).
   Use when testing Wajiha on Thor, verifying session grid / dual-display behavior,
   gamepad flows, or any Thor UI automation. Covers device targeting, MCP tool
-  workflow, dual-display caveats, and adb fallbacks.
+  workflow, dual-display caveats, adb fallbacks, and install → launch.
 ---
 
 # Mobile MCP — Thor (Wajiha)
@@ -15,18 +15,65 @@ description: >-
 - Verifying **session grid**, multi-session, game launch, or gamepad chrome
 - UI automation when the app is already running (user rule: do not build/run the project)
 - Any task mentioning **Mobile MCP**, **Thor**, or **10.0.0.174**
+- **Installing / updating** the debug APK on Thor
 
 ## Setup
 
 | Item | Value |
 |------|-------|
 | MCP server | `user-Mobile MCP` (configured in `~/.cursor/mcp.json` via `npx -y @mobilenext/mobile-mcp@latest`) |
-| Thor device ID | `10.0.0.174:39537` |
+| Thor device ID | `10.0.0.174:39537` (fallback: `10.0.0.174:5555` if 39537 is offline) |
 | Wajiha package | `com.wajiha` |
 
-**Always pass `"device": "10.0.0.174:39537"` on every Mobile MCP call.**
+**Always pass the live Thor `device` id on every Mobile MCP call** (from `mobile_list_available_devices`).
 
-Before calling tools, read the tool schema from the MCP descriptors folder.
+Before calling tools, read the tool schema from GetMcpTools.
+
+## Install / update APK
+
+When the user asks to **install** (or after building a new debug APK):
+
+```
+Task progress:
+- [ ] Confirm Thor online (adb / mobile_list_available_devices)
+- [ ] Build debug APK if needed (`:androidApp:assembleDebug`)
+- [ ] Install APK (`adb install -r` or `mobile_install_app`)
+- [ ] Launch Wajiha immediately after install
+```
+
+1. **Build** (only when sources changed or no APK yet):
+
+```bash
+./gradlew :androidApp:assembleDebug
+```
+
+APK path: `androidApp/build/outputs/apk/debug/androidApp-debug.apk`
+
+2. **Install** (replace existing):
+
+```bash
+ADB="adb -s <thor-device-id>"
+$ADB install -r -d androidApp/build/outputs/apk/debug/androidApp-debug.apk
+```
+
+Or MCP: `mobile_install_app` with `device` + `path` to the APK.
+
+3. **Launch after install (required)** — do not stop at install success:
+
+```json
+{ "device": "<thor-device-id>", "packageName": "com.wajiha" }
+```
+
+Use `mobile_launch_app`. Prefer a cold start: `mobile_terminate_app` then `mobile_launch_app`.
+
+adb fallback:
+
+```bash
+$ADB shell am force-stop com.wajiha
+$ADB shell am start -n com.wajiha/.MainActivity
+# Dual-display: bottom launcher if needed
+# $ADB shell am start --display 4 -n com.wajiha/.MainActivity
+```
 
 ## Standard workflow
 
@@ -41,12 +88,12 @@ Task progress:
 
 ### 1. Confirm device
 
-`mobile_list_available_devices` — expect `10.0.0.174:39537`. If missing, stop; do not guess another device.
+`mobile_list_available_devices` — expect Thor at `10.0.0.174:…`. If missing, stop; do not guess another device.
 
 ### 2. Launch Wajiha
 
 ```json
-{ "device": "10.0.0.174:39537", "packageName": "com.wajiha" }
+{ "device": "<thor-device-id>", "packageName": "com.wajiha" }
 ```
 
 Use `mobile_launch_app`. To cold-start, `mobile_terminate_app` first, then launch.
@@ -172,7 +219,7 @@ $ADB shell am broadcast -a com.wajiha.DEBUG_CLEAR_SUPPRESS -p $PKG
 $ADB shell am broadcast -a com.wajiha.DEBUG_SIMULATE_FOREGROUND -p $PKG --es package org.ppsspp.ppsspp
 
 # Tail debug output while testing
-$ADB logcat -s Wajiha/Debug:I Wajiha/NowPlaying:D
+$ADB logcat -s Wajiha/Debug:I Wajiha/Session:I Wajiha/Launch:I Wajiha/Display:D
 ```
 
 | Action | Purpose |
@@ -193,13 +240,16 @@ Use broadcasts **before** Mobile MCP when diagnosing session-grid / top-display 
 - [ ] Confirm expected display focused before listing elements
 ```
 
+After any **install / update**, always run the launch step (terminate + launch) before testing.
+
 ## Common pitfalls
 
 - **Forgot `device` param** — every call fails or hits wrong target
+- **Installed but did not launch** — after `install -r` / `mobile_install_app`, always launch Wajiha
 - **Stale element list** — always re-list after navigation
 - **Wrong display** — bottom grid invisible in screenshot → focus display 4 or use `-d 4`
 - **Cached emulator sessions** — old tiles skew multi-session tests; kill emulators first
-- **Running the project** — assume app is already installed; do not Gradle-run unless asked
+- **Running the project** — assume app is already installed; do not Gradle-run unless asked to install/build
 
 ## All 23 Mobile MCP tools
 

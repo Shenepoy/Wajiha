@@ -1,0 +1,98 @@
+package com.wajiha.data.scraper
+
+/**
+ * ScreenScraper.fr `systemeid` values keyed by Wajiha / Daijishō platform ids.
+ *
+ * Used when a platform row has no [com.wajiha.data.db.PlatformEntity.screenScraperId]
+ * yet — large ROMs often lack CRC, and SS requires `systemeid` in that case.
+ *
+ * IDs from https://www.screenscraper.fr/ (systemeinfos) / EmulationStation maps.
+ */
+object ScreenScraperSystemIds {
+    private val byPlatformId: Map<String, Int> =
+        mapOf(
+            "3do" to 29,
+            "3ds" to 17,
+            "amiga" to 64,
+            "arcade" to 75,
+            "atari2600" to 26,
+            "atari5200" to 40,
+            "atari7800" to 41,
+            "atomiswave" to 53,
+            "c64" to 66,
+            "cdi" to 133,
+            "channelf" to 80,
+            "coleco" to 48,
+            "cpc" to 65,
+            "cps1" to 6,
+            "cps2" to 7,
+            "cps3" to 8,
+            "doom" to 204,
+            "dos" to 135,
+            "dreamcast" to 23,
+            "fbneo" to 75,
+            "fds" to 106,
+            "gamegear" to 21,
+            "gb" to 9,
+            "gba" to 12,
+            "gbc" to 10,
+            "gc" to 13,
+            "genesis" to 1,
+            "gw" to 52,
+            "intellivision" to 115,
+            "jaguar" to 27,
+            "jaguarcd" to 171,
+            "lynx" to 28,
+            "mame" to 75,
+            "master" to 2,
+            "megaduck" to 90,
+            "msx" to 113,
+            "n64" to 14,
+            "naomi" to 56,
+            "nds" to 15,
+            "ndsi" to 15,
+            "neogeo" to 142,
+            "neogeocd" to 70,
+            "nes" to 3,
+            "ngage" to 30,
+            "ngp" to 25,
+            "ngpc" to 82,
+            "odyssey2" to 104,
+            "pc88" to 221,
+            "pc98" to 208,
+            "pcfx" to 72,
+            "pico" to 234,
+            "pokemini" to 211,
+            "ps2" to 58,
+            "ps3" to 59,
+            "psp" to 61,
+            "pspminis" to 172,
+            "psx" to 57,
+            "satellaview" to 107,
+            "saturn" to 22,
+            "sega32x" to 19,
+            "segacd" to 20,
+            "sg1000" to 109,
+            "snes" to 4,
+            "snesmsu1" to 210,
+            "supergrafx" to 105,
+            "switch" to 225,
+            "tg16" to 31,
+            "tgcd" to 114,
+            "uzebox" to 216,
+            "vectrex" to 102,
+            "virtualboy" to 11,
+            "vita" to 62,
+            "wii" to 16,
+            "wiiu" to 18,
+            "ws" to 45,
+            "wsc" to 46,
+            "x68000" to 79,
+            "xbox" to 32,
+            "xbox360" to 33,
+            "zxspectrum" to 76,
+        )
+
+    /** Resolve SS system id for a Wajiha platform id, or null if unknown. */
+    fun resolve(platformId: String): Int? = byPlatformId[platformId.lowercase()]
+}

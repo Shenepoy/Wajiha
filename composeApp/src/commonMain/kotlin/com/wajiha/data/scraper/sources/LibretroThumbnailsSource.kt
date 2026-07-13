@@ -82,8 +82,8 @@ class LibretroThumbnailsSource(
         query: ScrapeQuery,
         settings: ScraperSettings,
     ): List<ScrapeCandidate> {
-        val candidate =
-            lookup(
+        val outcome =
+            lookupResult(
                 ScrapeQuery(
                     gameId = query.gameId,
                     displayName = name,
@@ -99,7 +99,7 @@ class LibretroThumbnailsSource(
                 ),
                 settings,
             )
-        return listOfNotNull(candidate)
+        return listOfNotNull((outcome as? SourceLookupOutcome.Hit)?.candidate)
     }
 
     private sealed class ExistsResult {

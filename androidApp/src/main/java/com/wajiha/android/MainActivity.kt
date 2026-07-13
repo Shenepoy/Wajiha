@@ -25,6 +25,7 @@ import com.wajiha.android.service.KeepAliveService
 import com.wajiha.android.system.SystemController
 import com.wajiha.android.ui.hideSystemStatusBar
 import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaLogKind
 import com.wajiha.log.WajihaTags
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
@@ -103,6 +104,11 @@ class MainActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemStatusBar()
+        WajihaLog.d(
+            WajihaLogKind.WINDOW,
+            "MainActivity.onWindowFocusChanged: hasFocus=$hasFocus " +
+                "displayId=${display?.displayId} taskId=$taskId",
+        )
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
@@ -152,6 +158,11 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         hideSystemStatusBar()
+        WajihaLog.i(
+            WajihaLogKind.WINDOW,
+            "MainActivity.onResume: displayId=${display?.displayId} taskId=$taskId " +
+                "sessions=${dualScreenStore.hasActiveSessions()}",
+        )
         // Returning from an external game: close the session, restore browsing
         sessionTracker.onLauncherResumed(dualScreenStore.hasActiveSessions())
         foregroundAppMonitor.onLauncherForegrounded()
@@ -169,6 +180,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        WajihaLog.i(
+            WajihaLogKind.WINDOW,
+            "MainActivity.onPause: displayId=${display?.displayId} taskId=$taskId",
+        )
         gamepadGate.onLauncherBackgrounded()
         if ((display?.displayId ?: Display.DEFAULT_DISPLAY) == Display.DEFAULT_DISPLAY) {
             displayCoordinator.onPrimaryMainStopped()

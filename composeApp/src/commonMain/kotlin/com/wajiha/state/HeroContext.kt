@@ -52,3 +52,26 @@ enum class LauncherPanel {
     System,
     GameDetail,
 }
+
+/**
+ * Shared menu destination for SELECT / swap-screen handoff between primary and
+ * secondary activities. Local Compose routes stay per-activity; this snapshot is
+ * what the display that gains the menu adopts so Settings (etc.) survive a swap.
+ */
+enum class MenuDestination {
+    Home,
+    Settings,
+    PlatformPicker,
+    PlatformDetail,
+    Scraper,
+    Apps,
+    System,
+    GameDetail,
+    NowRunning,
+}
+
+data class MenuRouteSnapshot(
+    val destination: MenuDestination = MenuDestination.Home,
+    val platformDetailId: String? = null,
+    val gameDetailId: Long? = null,
+)

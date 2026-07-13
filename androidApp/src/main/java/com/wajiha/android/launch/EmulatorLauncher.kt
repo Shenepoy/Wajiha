@@ -13,9 +13,12 @@ import android.os.StrictMode
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
+import com.wajiha.android.detect.RomPathMatcher
 import com.wajiha.android.monitor.SessionTaskRegistry
 import com.wajiha.android.util.PackageKiller
 import com.wajiha.domain.EmulatorPackages
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaLogKind
 import java.io.File
 
 /**
@@ -42,6 +45,12 @@ object EmulatorLauncher {
         context: Context,
         spec: LaunchSpec,
     ): LaunchResult {
+        WajihaLog.i(
+            WajihaLogKind.LAUNCH,
+            "launch: pkg=${spec.packageName} activity=${spec.activityName} " +
+                "displayId=${spec.launchDisplayId} killBefore=${spec.killBeforeLaunch} " +
+                "keepSaf=${spec.keepSafUri}",
+        )
         try {
             if (spec.killBeforeLaunch) {
                 PackageKiller.forceStopPackageBestEffort(context, spec.packageName)
@@ -82,10 +91,9 @@ object EmulatorLauncher {
             var isMultiFile = false
 
             if (uriData?.scheme == "content") {
-                masterRealPath = resolveSafUriToPath(uriData)
-                val masterFileName = getFileNameFromUri(context, uriData) ?: ""
-                val masterExt = masterFileName.substringAfterLast('.', "").lowercase()
-                isMultiFile = masterExt in multiFileExtensions
+                masterRealPath = RomPathMatcher.resolveSafUriToPath(uriData)
+                val masterExt = extensionFromContentUri(context, uriData).orEmpty()
+                isMultiFile = isMultiFileExtension(masterExt)
 
                 if (masterRealPath != null && !isMultiFile && !spec.keepSafUri) {
                     // Single-file ROMs: rewrap through our FileProvider so emulators
@@ -115,6 +123,12 @@ object EmulatorLauncher {
                 flagStringToIntent(flag)?.let { intent.addFlags(it) }
             }
 
+            // Collect post-rewrap content:// URIs actually attached to the intent.
+            val contentUrisToGrant = linkedSetOf<Uri>()
+            if (uriData?.scheme == "content") {
+                contentUrisToGrant += uriData
+            }
+
             for (extra in resolvedExtras) {
                 val value = extra.value
 
@@ -132,11 +146,16 @@ object EmulatorLauncher {
                 }
 
                 val finalValue =
-                    if (value.startsWith("content://") && needsRealPathForMultiFile) {
-                        resolveMultiFileExtraToFileUri(context, value)
-                    } else {
-                        value
-                    }
+                    resolveContentExtraValue(
+                        context,
+                        value,
+                        needsRealPathForMultiFile,
+                        spec.keepSafUri,
+                    )
+
+                if (finalValue.startsWith("content://")) {
+                    contentUrisToGrant += Uri.parse(finalValue)
+                }
 
                 when (extra.type) {
                     "string" -> {
@@ -180,27 +199,16 @@ object EmulatorLauncher {
                 )
             }
 
-            // Grant SAF permissions for any remaining content:// URI
-            val primaryContentUri: Uri? =
-                when {
-                    uriData?.scheme == "content" -> {
-                        uriData
-                    }
-
-                    else -> {
-                        resolvedExtras
-                            .firstOrNull { it.value.startsWith("content://") }
-                            ?.let { Uri.parse(it.value) }
-                    }
-                }
+            val primaryContentUri = contentUrisToGrant.firstOrNull()
             if (primaryContentUri != null) {
-                grantPrimary(context, spec.packageName, intent, primaryContentUri)
+                for (uri in contentUrisToGrant) {
+                    grantPrimary(context, spec.packageName, intent, uri)
+                }
                 grantParentTreePermission(context, spec.packageName, intent, primaryContentUri)
                 grantSubfolderContentsIfZip(context, spec.packageName, intent, primaryContentUri)
 
-                val masterFileName = getFileNameFromUri(context, primaryContentUri) ?: ""
-                val masterExt = masterFileName.substringAfterLast('.', "").lowercase()
-                if (masterExt in multiFileExtensions) {
+                val masterExt = extensionFromContentUri(context, primaryContentUri)
+                if (masterExt != null && isMultiFileExtension(masterExt)) {
                     if (isMultiFile && DocumentsContract.isDocumentUri(context, primaryContentUri) &&
                         !needsRealPathForMultiFile
                     ) {
@@ -229,16 +237,26 @@ object EmulatorLauncher {
                 context.startActivity(intent)
             }
             SessionTaskRegistry.recordLaunch(context, spec.packageName, spec.activityName)
+            WajihaLog.i(
+                WajihaLogKind.LAUNCH,
+                "launch: startActivity ok pkg=${spec.packageName} " +
+                    "data=${uriData?.scheme} grants=${contentUrisToGrant.size}",
+            )
             return LaunchResult.Success
         } catch (e: ActivityNotFoundException) {
-            return if (!isPackageInstalled(context, spec.packageName)) {
-                LaunchResult.EmulatorNotInstalled(spec.packageName)
-            } else {
-                LaunchResult.ActivityNotFound(spec.packageName)
-            }
+            val result =
+                if (!isPackageInstalled(context, spec.packageName)) {
+                    LaunchResult.EmulatorNotInstalled(spec.packageName)
+                } else {
+                    LaunchResult.ActivityNotFound(spec.packageName)
+                }
+            WajihaLog.w(WajihaLogKind.LAUNCH, "launch: $result — ${e.message}")
+            return result
         } catch (e: SecurityException) {
+            WajihaLog.w(WajihaLogKind.LAUNCH, "launch: PermissionDenied — ${e.message}")
             return LaunchResult.PermissionDenied(e.message)
         } catch (e: Exception) {
+            WajihaLog.w(WajihaLogKind.LAUNCH, "launch: Failed — ${e.message}")
             return LaunchResult.Failed(e.message)
         }
     }
@@ -260,20 +278,21 @@ object EmulatorLauncher {
         intent: Intent,
         uri: Uri,
     ) {
-        // Synchronous grant — FLAG_GRANT_READ_URI_PERMISSION alone is processed
-        // asynchronously and can lose the first-launch race.
+        // READ only — folder picks persist READ; startActivity rejects WRITE grants
+        // the caller does not hold (PS2 SAF trees).
         try {
             context.grantUriPermission(
                 packageName,
                 uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
             )
-        } catch (_: Exception) {
+        } catch (_: SecurityException) {
         }
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         if (intent.clipData == null) {
             intent.clipData = ClipData.newRawUri("ROM", uri)
+        } else {
+            intent.clipData?.addItem(ClipData.Item(uri))
         }
     }
 
@@ -286,7 +305,7 @@ object EmulatorLauncher {
                 val raw = value.removePrefix("wajiha-realpath:")
                 if (raw.startsWith("content://")) {
                     val uri = Uri.parse(raw)
-                    resolveSafUriToPath(uri) ?: run {
+                    RomPathMatcher.resolveSafUriToPath(uri) ?: run {
                         val fileName = getFileNameFromUri(context, uri) ?: "rom"
                         cacheContentUriToFile(context, uri, fileName)?.absolutePath ?: raw
                     }
@@ -321,26 +340,6 @@ object EmulatorLauncher {
             "brought-to-front" -> Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
             else -> flag.removePrefix("raw:").toIntOrNull()
         }
-
-    private fun resolveSafUriToPath(uri: Uri): String? {
-        try {
-            if (uri.authority != "com.android.externalstorage.documents") return null
-            var docId = DocumentsContract.getDocumentId(uri)
-            if (docId.contains("%3A") || docId.contains("%3a")) {
-                docId = Uri.decode(docId)
-            }
-            val split = docId.split(":")
-            if (split.size < 2) return null
-            val (type, path) = split
-            return if ("primary".equals(type, ignoreCase = true)) {
-                Environment.getExternalStorageDirectory().toString() + "/" + path
-            } else {
-                "/storage/$type/$path"
-            }
-        } catch (_: Exception) {
-            return null
-        }
-    }
 
     private fun getFileNameFromUri(
         context: Context,
@@ -448,10 +447,9 @@ object EmulatorLauncher {
             context.grantUriPermission(
                 packageName,
                 treeUri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
             )
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             intent.addFlags(Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
 
             if (intent.clipData == null) {
@@ -459,7 +457,8 @@ object EmulatorLauncher {
             } else {
                 intent.clipData?.addItem(ClipData.Item(treeUri))
             }
-        } catch (_: Exception) {
+        } catch (_: SecurityException) {
+        } catch (_: IllegalArgumentException) {
         }
     }
 
@@ -515,10 +514,10 @@ object EmulatorLauncher {
                 context.grantUriPermission(
                     packageName,
                     subfolderTreeUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
                 )
                 intent.clipData?.addItem(ClipData.Item(subfolderTreeUri))
-            } catch (_: Exception) {
+            } catch (_: SecurityException) {
             }
 
             val subfolderChildrenUri =
@@ -542,10 +541,10 @@ object EmulatorLauncher {
                             context.grantUriPermission(
                                 packageName,
                                 childUri,
-                                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION,
                             )
                             intent.clipData?.addItem(ClipData.Item(childUri))
-                        } catch (_: Exception) {
+                        } catch (_: SecurityException) {
                         }
                     }
                 }
@@ -600,7 +599,7 @@ object EmulatorLauncher {
                                     Intent.FLAG_GRANT_READ_URI_PERMISSION,
                                 )
                                 intent.clipData?.addItem(ClipData.Item(childUri))
-                            } catch (_: Exception) {
+                            } catch (_: SecurityException) {
                             }
                         }
                     }
@@ -609,31 +608,52 @@ object EmulatorLauncher {
         }
     }
 
+    private fun extensionFromContentUri(
+        context: Context,
+        uri: Uri,
+    ): String? {
+        val fileName = getFileNameFromUri(context, uri) ?: return null
+        return fileName.substringAfterLast('.', "").lowercase()
+    }
+
+    private fun isMultiFileExtension(ext: String): Boolean = ext in multiFileExtensions
+
+    /**
+     * Extras (e.g. Aether `bootPath`) keep the original SAF `content://` URI so the
+     * emulator retains tree/prefix grants. FileProvider rewrap is for intent **data**
+     * only — Aether/Nether load CHD via a string extra and black-screen on our
+     * FileProvider URI.
+     */
+    private fun resolveContentExtraValue(
+        context: Context,
+        value: String,
+        needsRealPathForMultiFile: Boolean,
+        @Suppress("UNUSED_PARAMETER") keepSafUri: Boolean,
+    ): String {
+        if (!value.startsWith("content://")) return value
+        val uri = Uri.parse(value)
+        val ext = extensionFromContentUri(context, uri) ?: return value
+        val isMulti = isMultiFileExtension(ext)
+        return if (isMulti && needsRealPathForMultiFile) {
+            val realPath = RomPathMatcher.resolveSafUriToPath(uri) ?: return value
+            "file://$realPath"
+        } else {
+            value
+        }
+    }
+
     private fun resolveToFileProviderUri(
         context: Context,
         contentUri: Uri,
     ): Uri? {
-        val realPath = resolveSafUriToPath(contentUri) ?: return null
+        val realPath = RomPathMatcher.resolveSafUriToPath(contentUri) ?: return null
         val file = File(realPath)
         if (!file.exists()) return null
         return try {
             FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        } catch (_: Exception) {
+        } catch (_: IllegalArgumentException) {
             null
         }
-    }
-
-    private fun resolveMultiFileExtraToFileUri(
-        context: Context,
-        value: String,
-    ): String {
-        if (!value.startsWith("content://")) return value
-        val uri = Uri.parse(value)
-        val fileName = getFileNameFromUri(context, uri) ?: return value
-        val ext = fileName.substringAfterLast('.', "").lowercase()
-        if (ext !in multiFileExtensions) return value
-        val realPath = resolveSafUriToPath(uri) ?: return value
-        return "file://$realPath"
     }
 
     private fun grantSiblingFileProviderPermissions(
@@ -668,14 +688,15 @@ object EmulatorLauncher {
                         context.grantUriPermission(
                             packageName,
                             siblingUri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
                         )
                         intent.clipData?.addItem(ClipData.Item(siblingUri))
-                    } catch (_: Exception) {
+                    } catch (_: SecurityException) {
+                    } catch (_: IllegalArgumentException) {
                     }
                 }
             }
-        } catch (_: Exception) {
+        } catch (_: SecurityException) {
         }
     }
 }

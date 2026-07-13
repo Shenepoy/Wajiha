@@ -10,6 +10,8 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.wajiha.domain.repository.PlatformRepository
 import com.wajiha.domain.scan.LibraryScanner
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaLogKind
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.util.concurrent.TimeUnit
@@ -28,6 +30,11 @@ class LibraryScanWorker(
 
     override suspend fun doWork(): Result {
         val platformId = inputData.getString(KEY_PLATFORM_ID)
+        val computeHashes = inputData.getBoolean(KEY_COMPUTE_HASHES, true)
+        WajihaLog.i(
+            WajihaLogKind.WORK,
+            "libraryWorker: start platformId=$platformId computeHashes=$computeHashes",
+        )
         val platformLabel = platformId?.let { platformRepository.byId(it)?.name }
         setForeground(
             OperationNotificationHelper.scanForegroundInfo(
@@ -88,7 +95,14 @@ class LibraryScanWorker(
                 failureMessages = result.failureMessages,
             )
 
-            if (result.error != null && result.gamesAdded == 0) {
+            val retry = result.error != null && result.gamesAdded == 0
+            WajihaLog.i(
+                WajihaLogKind.WORK,
+                "libraryWorker: done added=${result.gamesAdded} removed=${result.gamesRemoved} " +
+                    "skipped=${result.gamesSkipped} foldersFailed=${result.foldersFailed} retry=$retry",
+            )
+
+            if (retry) {
                 Result.retry()
             } else {
                 Result.success(
@@ -115,6 +129,10 @@ class LibraryScanWorker(
             platformId: String? = null,
             computeHashes: Boolean = true,
         ) {
+            WajihaLog.i(
+                WajihaLogKind.WORK,
+                "libraryWorker: enqueued platformId=$platformId",
+            )
             val request =
                 OneTimeWorkRequestBuilder<LibraryScanWorker>()
                     .setInputData(

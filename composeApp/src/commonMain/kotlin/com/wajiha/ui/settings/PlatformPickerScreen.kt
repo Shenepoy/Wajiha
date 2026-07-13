@@ -17,6 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.wajiha.data.db.PlatformEntity
+import com.wajiha.input.GamepadHint
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadNavHost
 import com.wajiha.input.GamepadNavItem
 import com.wajiha.input.GamepadNavMode
@@ -84,10 +86,10 @@ fun PlatformPickerScreen(
         showActionBar = true,
         gamepadHints =
             listOf(
-                "A" to "Add/Open",
-                "B" to "Back",
-                "L2" to "Focus screen",
-                "Search" to "A to edit",
+                GamepadHint(GamepadHintButton.A, "Add/Open"),
+                GamepadHint(GamepadHintButton.B, "Back"),
+                GamepadHint(GamepadHintButton.L2, "Focus screen"),
+                GamepadHint(GamepadHintButton.A, "Edit search"),
             ),
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,

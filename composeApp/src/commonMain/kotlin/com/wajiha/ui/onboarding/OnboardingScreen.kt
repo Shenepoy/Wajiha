@@ -42,6 +42,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.wajiha.input.GamepadHint
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.requestContentFocus
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.PermissionStates
@@ -98,9 +100,9 @@ fun OnboardingScreen(
         showActionBar = true,
         gamepadHints =
             listOf(
-                "A" to "Continue",
-                "B" to "Back / Skip",
-                "L2" to "Focus screen",
+                GamepadHint(GamepadHintButton.A, "Continue"),
+                GamepadHint(GamepadHintButton.B, "Back / Skip"),
+                GamepadHint(GamepadHintButton.L2, "Focus screen"),
             ),
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,

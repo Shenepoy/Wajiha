@@ -1,5 +1,6 @@
 package com.wajiha.di
 
+import com.wajiha.input.ControllerGlyphStore
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.SystemNotificationStore
 import com.wajiha.ui.components.UiFeedback
@@ -33,6 +34,7 @@ val stateModule: Module =
     module {
         single { DualScreenStore() }
         single { SystemNotificationStore() }
+        single { ControllerGlyphStore() }
     }
 
 val uiModule: Module =

@@ -10,6 +10,8 @@ import com.wajiha.data.scraper.BatchScrapeProgress
 import com.wajiha.data.scraper.BatchScraper
 import com.wajiha.data.scraper.CredentialTestResult
 import com.wajiha.data.scraper.PlatformScraperOverride
+import com.wajiha.data.scraper.ScrapeApiLog
+import com.wajiha.data.scraper.ScrapeApiLogEntry
 import com.wajiha.data.scraper.ScrapeCandidate
 import com.wajiha.data.scraper.ScrapeEngine
 import com.wajiha.data.scraper.ScrapeRunPolicy
@@ -62,6 +64,11 @@ class ScraperViewModel(
             .stateIn(viewModelScope, SharingStarted.Eagerly, ScraperSettings())
 
     val progress: StateFlow<BatchScrapeProgress> = batchScraper.progress
+
+    /** In-memory scraper HTTP exchange log for the API logs viewer. */
+    val apiLogs: StateFlow<List<ScrapeApiLogEntry>> = ScrapeApiLog.entries
+
+    fun clearApiLogs() = ScrapeApiLog.clear()
 
     init {
         // Show the persisted snapshot (last run / interrupted run) after restart

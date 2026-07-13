@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.wajiha.log.WajihaLog
 import com.wajiha.state.NowPlayingDisplayMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -48,6 +49,14 @@ data class AppSettings(
     val focusThickness: Int = 2,
     /** Focus ring placement: Inside (inset on bounds) or Outside (outset beyond bounds). */
     val focusPlacement: String = "Inside",
+    /** Show scheme-aware controller glyphs in the bottom action bar (false = Text labels). */
+    val controllerGlyphsEnabled: Boolean = true,
+    /** Auto / Xbox / PlayStation / Switch / Steam Deck / Steam Controller / Text. */
+    val controllerGlyphScheme: String = "Auto",
+    /** Color / ColorOutline / White / Dark — Kenney face-button appearance. */
+    val controllerGlyphFaceStyle: String = "Color",
+    /** Filled / Outline — Kenney look for shoulders, d-pad, and system buttons. */
+    val controllerGlyphOtherStyle: String = "Filled",
     // Top-screen game hero / Info preview elements (all on by default except section hint / cover border)
     val topHeroBackdrop: Boolean = true,
     val topHeroCover: Boolean = true,
@@ -95,6 +104,10 @@ class SettingsRepository(
                 focusColor = normalizeFocusColor(prefs[FOCUS_COLOR]),
                 focusThickness = normalizeFocusThickness(prefs[FOCUS_THICKNESS]),
                 focusPlacement = normalizeFocusPlacement(prefs[FOCUS_PLACEMENT]),
+                controllerGlyphsEnabled = prefs[CONTROLLER_GLYPHS_ENABLED] ?: true,
+                controllerGlyphScheme = normalizeControllerGlyphScheme(prefs[CONTROLLER_GLYPH_SCHEME]),
+                controllerGlyphFaceStyle = normalizeControllerGlyphFaceStyle(prefs[CONTROLLER_GLYPH_FACE_STYLE]),
+                controllerGlyphOtherStyle = normalizeControllerGlyphOtherStyle(prefs[CONTROLLER_GLYPH_OTHER_STYLE]),
                 topHeroBackdrop = prefs[TOP_HERO_BACKDROP] ?: true,
                 topHeroCover = prefs[TOP_HERO_COVER] ?: true,
                 topHeroCoverBorder = prefs[TOP_HERO_COVER_BORDER] ?: false,
@@ -112,37 +125,41 @@ class SettingsRepository(
             )
         }
 
-    suspend fun setBlackoutOnLaunch(value: Boolean) = dataStore.edit { it[BLACKOUT_ON_LAUNCH] = value }
+    suspend fun setBlackoutOnLaunch(value: Boolean) = setPref(BLACKOUT_ON_LAUNCH, value, "blackoutOnLaunch")
 
-    suspend fun setDetectManualLaunches(value: Boolean) = dataStore.edit { it[DETECT_MANUAL] = value }
+    suspend fun setDetectManualLaunches(value: Boolean) = setPref(DETECT_MANUAL, value, "detectManualLaunches")
 
-    suspend fun setMemoryGuardEnabled(value: Boolean) = dataStore.edit { it[MEMORY_GUARD_ENABLED] = value }
+    suspend fun setMemoryGuardEnabled(value: Boolean) = setPref(MEMORY_GUARD_ENABLED, value, "memoryGuardEnabled")
 
-    suspend fun setRomReconciliationEnabled(value: Boolean) = dataStore.edit { it[ROM_RECONCILIATION_ENABLED] = value }
+    suspend fun setRomReconciliationEnabled(value: Boolean) = setPref(ROM_RECONCILIATION_ENABLED, value, "romReconciliationEnabled")
 
     suspend fun setRomReconciliationShowFilenameFallback(value: Boolean) =
-        dataStore.edit { it[ROM_RECONCILIATION_FILENAME_FALLBACK] = value }
+        setPref(ROM_RECONCILIATION_FILENAME_FALLBACK, value, "romReconciliationShowFilenameFallback")
 
-    suspend fun setGameSecondaryMode(value: String) = dataStore.edit { it[GAME_SECONDARY_MODE] = value }
+    suspend fun setGameSecondaryMode(value: String) = setPref(GAME_SECONDARY_MODE, value, "gameSecondaryMode")
 
-    suspend fun setNowPlayingDisplay(value: String) = dataStore.edit { it[NOW_PLAYING_DISPLAY] = normalizeNowPlayingDisplay(value) }
+    suspend fun setNowPlayingDisplay(value: String) = setPref(NOW_PLAYING_DISPLAY, normalizeNowPlayingDisplay(value), "nowPlayingDisplay")
 
-    suspend fun setGameDimEnabled(value: Boolean) = dataStore.edit { it[GAME_DIM_ENABLED] = value }
+    suspend fun setGameDimEnabled(value: Boolean) = setPref(GAME_DIM_ENABLED, value, "gameDimEnabled")
 
-    suspend fun setGameDimOnlyOnNowPlaying(value: Boolean) = dataStore.edit { it[GAME_DIM_ONLY_ON_NOW_PLAYING] = value }
+    suspend fun setGameDimOnlyOnNowPlaying(value: Boolean) = setPref(GAME_DIM_ONLY_ON_NOW_PLAYING, value, "gameDimOnlyOnNowPlaying")
 
-    suspend fun setGameDimPercent(value: Int) = dataStore.edit { it[GAME_DIM_PERCENT] = normalizeGameDimPercent(value) }
+    suspend fun setGameDimPercent(value: Int) = setPref(GAME_DIM_PERCENT, normalizeGameDimPercent(value), "gameDimPercent")
 
     suspend fun setGameplayDimTimeoutSeconds(value: Int) =
-        dataStore.edit { it[GAMEPLAY_DIM_TIMEOUT_SECONDS] = normalizeGameplayDimTimeoutSeconds(value) }
+        setPref(
+            GAMEPLAY_DIM_TIMEOUT_SECONDS,
+            normalizeGameplayDimTimeoutSeconds(value),
+            "gameplayDimTimeoutSeconds",
+        )
 
-    suspend fun setGridRows(value: Int) = dataStore.edit { it[GRID_ROWS] = value }
+    suspend fun setGridRows(value: Int) = setPref(GRID_ROWS, value, "gridRows")
 
-    suspend fun setSoundsEnabled(value: Boolean) = dataStore.edit { it[SOUNDS_ENABLED] = value }
+    suspend fun setSoundsEnabled(value: Boolean) = setPref(SOUNDS_ENABLED, value, "soundsEnabled")
 
-    suspend fun setOnboardingDone(value: Boolean) = dataStore.edit { it[ONBOARDING_DONE] = value }
+    suspend fun setOnboardingDone(value: Boolean) = setPref(ONBOARDING_DONE, value, "onboardingDone")
 
-    suspend fun setSwapScreenRoles(value: Boolean) = dataStore.edit { it[SWAP_SCREEN_ROLES] = value }
+    suspend fun setSwapScreenRoles(value: Boolean) = setPref(SWAP_SCREEN_ROLES, value, "swapScreenRoles")
 
     suspend fun toggleSwapScreenRoles(): Boolean {
         var next = false
@@ -150,49 +167,72 @@ class SettingsRepository(
             next = !(prefs[SWAP_SCREEN_ROLES] ?: false)
             prefs[SWAP_SCREEN_ROLES] = next
         }
+        WajihaLog.setting("swapScreenRoles", next)
         return next
     }
 
-    suspend fun setTheme(value: String) = dataStore.edit { it[THEME] = value }
+    suspend fun setTheme(value: String) = setPref(THEME, value, "theme")
 
-    suspend fun setFocusBorderStyle(value: String) = dataStore.edit { it[FOCUS_BORDER_STYLE] = normalizeFocusBorderStyle(value) }
+    suspend fun setFocusBorderStyle(value: String) = setPref(FOCUS_BORDER_STYLE, normalizeFocusBorderStyle(value), "focusBorderStyle")
 
-    suspend fun setFocusColor(value: String) = dataStore.edit { it[FOCUS_COLOR] = normalizeFocusColor(value) }
+    suspend fun setFocusColor(value: String) = setPref(FOCUS_COLOR, normalizeFocusColor(value), "focusColor")
 
-    suspend fun setFocusThickness(value: Int) = dataStore.edit { it[FOCUS_THICKNESS] = normalizeFocusThickness(value) }
+    suspend fun setFocusThickness(value: Int) = setPref(FOCUS_THICKNESS, normalizeFocusThickness(value), "focusThickness")
 
-    suspend fun setFocusPlacement(value: String) = dataStore.edit { it[FOCUS_PLACEMENT] = normalizeFocusPlacement(value) }
+    suspend fun setFocusPlacement(value: String) = setPref(FOCUS_PLACEMENT, normalizeFocusPlacement(value), "focusPlacement")
 
-    suspend fun setTopHeroBackdrop(value: Boolean) = dataStore.edit { it[TOP_HERO_BACKDROP] = value }
+    suspend fun setControllerGlyphsEnabled(value: Boolean) = setPref(CONTROLLER_GLYPHS_ENABLED, value, "controllerGlyphsEnabled")
 
-    suspend fun setTopHeroCover(value: Boolean) = dataStore.edit { it[TOP_HERO_COVER] = value }
+    suspend fun setControllerGlyphScheme(value: String) =
+        setPref(CONTROLLER_GLYPH_SCHEME, normalizeControllerGlyphScheme(value), "controllerGlyphScheme")
 
-    suspend fun setTopHeroCoverBorder(value: Boolean) = dataStore.edit { it[TOP_HERO_COVER_BORDER] = value }
+    suspend fun setControllerGlyphFaceStyle(value: String) =
+        setPref(CONTROLLER_GLYPH_FACE_STYLE, normalizeControllerGlyphFaceStyle(value), "controllerGlyphFaceStyle")
 
-    suspend fun setTopHeroLogo(value: Boolean) = dataStore.edit { it[TOP_HERO_LOGO] = value }
+    suspend fun setControllerGlyphOtherStyle(value: String) =
+        setPref(CONTROLLER_GLYPH_OTHER_STYLE, normalizeControllerGlyphOtherStyle(value), "controllerGlyphOtherStyle")
 
-    suspend fun setTopHeroPlatformIcon(value: Boolean) = dataStore.edit { it[TOP_HERO_PLATFORM_ICON] = value }
+    suspend fun setTopHeroBackdrop(value: Boolean) = setPref(TOP_HERO_BACKDROP, value, "topHeroBackdrop")
 
-    suspend fun setTopHeroPlatform(value: Boolean) = dataStore.edit { it[TOP_HERO_PLATFORM] = value }
+    suspend fun setTopHeroCover(value: Boolean) = setPref(TOP_HERO_COVER, value, "topHeroCover")
 
-    suspend fun setTopHeroTitle(value: Boolean) = dataStore.edit { it[TOP_HERO_TITLE] = value }
+    suspend fun setTopHeroCoverBorder(value: Boolean) = setPref(TOP_HERO_COVER_BORDER, value, "topHeroCoverBorder")
 
-    suspend fun setTopHeroMetadata(value: Boolean) = dataStore.edit { it[TOP_HERO_METADATA] = value }
+    suspend fun setTopHeroLogo(value: Boolean) = setPref(TOP_HERO_LOGO, value, "topHeroLogo")
 
-    suspend fun setTopHeroDescription(value: Boolean) = dataStore.edit { it[TOP_HERO_DESCRIPTION] = value }
+    suspend fun setTopHeroPlatformIcon(value: Boolean) = setPref(TOP_HERO_PLATFORM_ICON, value, "topHeroPlatformIcon")
 
-    suspend fun setTopHeroPlayStats(value: Boolean) = dataStore.edit { it[TOP_HERO_PLAY_STATS] = value }
+    suspend fun setTopHeroPlatform(value: Boolean) = setPref(TOP_HERO_PLATFORM, value, "topHeroPlatform")
 
-    suspend fun setTopHeroFavorite(value: Boolean) = dataStore.edit { it[TOP_HERO_FAVORITE] = value }
+    suspend fun setTopHeroTitle(value: Boolean) = setPref(TOP_HERO_TITLE, value, "topHeroTitle")
 
-    suspend fun setTopHeroSectionHint(value: Boolean) = dataStore.edit { it[TOP_HERO_SECTION_HINT] = value }
+    suspend fun setTopHeroMetadata(value: Boolean) = setPref(TOP_HERO_METADATA, value, "topHeroMetadata")
 
-    suspend fun setIgnorePatternFilesEnabled(value: Boolean) = dataStore.edit { it[IGNORE_PATTERN_FILES_ENABLED] = value }
+    suspend fun setTopHeroDescription(value: Boolean) = setPref(TOP_HERO_DESCRIPTION, value, "topHeroDescription")
 
-    suspend fun setIgnoreFileNamePatterns(patterns: List<String>) =
+    suspend fun setTopHeroPlayStats(value: Boolean) = setPref(TOP_HERO_PLAY_STATS, value, "topHeroPlayStats")
+
+    suspend fun setTopHeroFavorite(value: Boolean) = setPref(TOP_HERO_FAVORITE, value, "topHeroFavorite")
+
+    suspend fun setTopHeroSectionHint(value: Boolean) = setPref(TOP_HERO_SECTION_HINT, value, "topHeroSectionHint")
+
+    suspend fun setIgnorePatternFilesEnabled(value: Boolean) = setPref(IGNORE_PATTERN_FILES_ENABLED, value, "ignorePatternFilesEnabled")
+
+    suspend fun setIgnoreFileNamePatterns(patterns: List<String>) {
         dataStore.edit {
             it[IGNORE_FILE_NAME_PATTERNS] = serializeIgnoreFileNamePatterns(patterns)
         }
+        WajihaLog.setting("ignoreFileNamePatterns", patterns.size)
+    }
+
+    private suspend fun <T> setPref(
+        key: Preferences.Key<T>,
+        value: T,
+        name: String,
+    ) {
+        dataStore.edit { it[key] = value }
+        WajihaLog.setting(name, value)
+    }
 
     suspend fun addIgnoreFileNamePattern(pattern: String) {
         val normalized = pattern.trim().lowercase()
@@ -297,6 +337,21 @@ class SettingsRepository(
 
         fun normalizeNowPlayingDisplay(value: String?): String = NowPlayingDisplayMode.fromName(value).name
 
+        fun normalizeControllerGlyphScheme(value: String?): String =
+            com.wajiha.input.ControllerGlyphScheme
+                .fromName(value)
+                .name
+
+        fun normalizeControllerGlyphFaceStyle(value: String?): String =
+            com.wajiha.input.ControllerGlyphFaceStyle
+                .fromName(value)
+                .name
+
+        fun normalizeControllerGlyphOtherStyle(value: String?): String =
+            com.wajiha.input.ControllerGlyphOtherStyle
+                .fromName(value)
+                .name
+
         private val BLACKOUT_ON_LAUNCH = booleanPreferencesKey("blackout_on_launch")
         val DETECT_MANUAL = booleanPreferencesKey("detect_manual_launches")
         val MEMORY_GUARD_ENABLED = booleanPreferencesKey("memory_guard_enabled")
@@ -320,6 +375,10 @@ class SettingsRepository(
         private val FOCUS_COLOR = stringPreferencesKey("focus_color")
         private val FOCUS_THICKNESS = intPreferencesKey("focus_thickness")
         private val FOCUS_PLACEMENT = stringPreferencesKey("focus_placement")
+        private val CONTROLLER_GLYPHS_ENABLED = booleanPreferencesKey("controller_glyphs_enabled")
+        private val CONTROLLER_GLYPH_SCHEME = stringPreferencesKey("controller_glyph_scheme")
+        private val CONTROLLER_GLYPH_FACE_STYLE = stringPreferencesKey("controller_glyph_face_style")
+        private val CONTROLLER_GLYPH_OTHER_STYLE = stringPreferencesKey("controller_glyph_other_style")
         private val TOP_HERO_BACKDROP = booleanPreferencesKey("top_hero_backdrop")
         private val TOP_HERO_COVER = booleanPreferencesKey("top_hero_cover")
         private val TOP_HERO_COVER_BORDER = booleanPreferencesKey("top_hero_cover_border")

@@ -184,19 +184,15 @@ class GameDetailViewModel(
             scrapeMessageSuccess.value = null
             try {
                 val settings = scraperSettings.current().forPlatform(game.platformId)
-                val candidates = scrapeEngine.searchAll(game.displayName, game, settings)
-                val pick = candidates.firstOrNull { it.sourceId == sourceId }
+                val options =
+                    scrapeEngine.gatherReviewMedia(game, mediaType, settings, game.displayName)
+                val pick = options.options.firstOrNull { it.first == sourceId }
                 if (pick == null) {
-                    scrapeMessage.value = "No match from $sourceId"
-                    scrapeMessageSuccess.value = false
-                    return@launch
-                }
-                val media = pick.media.firstOrNull { it.type == mediaType }
-                if (media == null) {
                     scrapeMessage.value = "No ${mediaType.dbName} from $sourceId"
                     scrapeMessageSuccess.value = false
                     return@launch
                 }
+                val media = pick.second
                 val path = scrapeEngine.download(game.id, media, settings)
                 if (path == null) {
                     scrapeMessage.value = "Download failed"
@@ -227,6 +223,9 @@ class GameDetailViewModel(
         val game = uiState.value.game ?: return
         viewModelScope.launch {
             val existing = gameRepository.mediaOfType(game.id, type.dbName) ?: return@launch
+            existing.localPath?.let { path ->
+                scrapeEngine.deleteStoredMedia(path)
+            }
             gameRepository.deleteMedia(existing.id)
             scrapeMessage.value = "Removed ${type.dbName}"
             scrapeMessageSuccess.value = true

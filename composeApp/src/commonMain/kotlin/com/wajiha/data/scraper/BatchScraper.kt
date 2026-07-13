@@ -7,6 +7,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.wajiha.data.WajihaJson
 import com.wajiha.data.db.GameEntity
 import com.wajiha.domain.repository.GameRepository
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaTags
+import com.wajiha.log.logClockMs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -307,6 +310,11 @@ class BatchScraper(
                 failed = if (retryIds != null || !canResume) 0 else base.failed,
             )
         progressStore.save(_progress.value)
+        WajihaLog.i(
+            WajihaTags.SCRAPE,
+            "batch: start platform=$platformId policy=${policy.mode} " +
+                "total=${filtered.size} resume=$canResume",
+        )
         userCancelled = false
         var interrupted = false
         var lastCheckpointAt = 0L
@@ -333,7 +341,7 @@ class BatchScraper(
                         )
                     }
                 _progress.value = applyResult(_progress.value, game, result)
-                val now = System.currentTimeMillis()
+                val now = logClockMs()
                 if (now - lastCheckpointAt >= CHECKPOINT_INTERVAL_MS) {
                     lastCheckpointAt = now
                     progressStore.save(_progress.value)
@@ -352,6 +360,13 @@ class BatchScraper(
                 )
             pauseFlag.value = false
             val resumable = interrupted && !userCancelled
+            val done = _progress.value
+            WajihaLog.i(
+                WajihaTags.SCRAPE,
+                "batch: done matched=${done.matched} partial=${done.partial} " +
+                    "noMatch=${done.noMatch} errors=${done.errorCount} " +
+                    "interrupted=$interrupted cancelled=$userCancelled",
+            )
             withContext(NonCancellable) {
                 try {
                     progressStore.save(_progress.value.copy(running = resumable))

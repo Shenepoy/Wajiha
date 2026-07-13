@@ -1,6 +1,7 @@
 package com.wajiha.data.config
 
 import com.wajiha.data.WajihaJson
+import com.wajiha.data.scraper.ScreenScraperSystemIds
 import kotlinx.serialization.Serializable
 
 /**
@@ -60,12 +61,14 @@ object DaijishouImporter {
             file.playerList.mapIndexed { index, player ->
                 toEmulatorConfig(player, isDefault = index == 0)
             }
+        val platformId = platform.uniqueId
         return PlatformConfig(
-            id = platform.uniqueId,
+            id = platformId,
             name = platform.name,
-            shortName = platform.shortname ?: platform.uniqueId,
+            shortName = platform.shortname ?: platformId,
             extensions = extensionsFromPlayers(file.playerList),
             raConsoleId = platform.retroAchievementsConsoleIdList.firstOrNull(),
+            screenScraperId = ScreenScraperSystemIds.resolve(platformId),
             libretroName =
                 platform.scraperSourceList
                     .firstOrNull { it.startsWith("LIBRETRO:") }

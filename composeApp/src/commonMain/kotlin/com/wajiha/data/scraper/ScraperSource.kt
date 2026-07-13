@@ -17,12 +17,6 @@ interface ScraperSource {
         settings: ScraperSettings,
     ): SourceLookupOutcome
 
-    /** Convenience unwrap of [lookupResult] for callers that only need a candidate. */
-    suspend fun lookup(
-        query: ScrapeQuery,
-        settings: ScraperSettings,
-    ): ScrapeCandidate? = (lookupResult(query, settings) as? SourceLookupOutcome.Hit)?.candidate
-
     /** Manual search by name for the match UI. */
     suspend fun search(
         name: String,

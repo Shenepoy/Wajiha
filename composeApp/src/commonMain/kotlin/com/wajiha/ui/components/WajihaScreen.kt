@@ -12,6 +12,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.input.key.KeyEvent
+import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadScreen
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.gamepad.GamepadActionBar
@@ -26,7 +27,7 @@ fun WajihaScreen(
     title: String? = null,
     onBack: (() -> Unit)? = null,
     showActionBar: Boolean = false,
-    gamepadHints: List<Pair<String, String>>? = null,
+    gamepadHints: List<GamepadHint>? = null,
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     onPreviewKey: ((KeyEvent) -> Boolean)? = null,

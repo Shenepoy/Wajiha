@@ -18,10 +18,8 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 /**
- * Core scraping orchestrator. Runs the configured source chain for one game:
- * metadata from the first source (in [ScraperSettings.metadataPriority]) that
- * matches, media per type from the per-type priority chain. Side effects
- * (downloads, DB writes) all happen here; sources only return candidates.
+ * Core scraping orchestrator. Uses [ScrapeMatchTool] to search/rank sources,
+ * then downloads and persists media. Side effects live here; sources stay pure.
  */
 class ScrapeEngine(
     private val sources: List<ScraperSource>,
@@ -30,6 +28,7 @@ class ScrapeEngine(
     private val mediaStorage: MediaStorage,
     private val http: HttpClient,
     private val imageProcessor: ImageProcessor = NoopImageProcessor,
+    private val matchTool: ScrapeMatchTool = ScrapeMatchTool(sources),
 ) {
     private val downloadSemaphore = Semaphore(4)
 
@@ -39,6 +38,10 @@ class ScrapeEngine(
         sources.filter { it.id in settings.enabledSources && it.isConfigured(settings) }
 
     fun hasConfiguredSources(settings: ScraperSettings): Boolean = configuredSources(settings).isNotEmpty()
+
+    suspend fun deleteStoredMedia(path: String) {
+        runCatching { mediaStorage.delete(path) }
+    }
 
     suspend fun buildQuery(game: GameEntity): ScrapeQuery {
         val platform = platformRepository.byId(game.platformId)
@@ -58,14 +61,16 @@ class ScrapeEngine(
             md5 = game.md5,
             platformId = game.platformId,
             platformName = platform?.name ?: game.platformId,
-            screenScraperId = platform?.screenScraperId,
+            screenScraperId =
+                platform?.screenScraperId
+                    ?: ScreenScraperSystemIds.resolve(game.platformId),
             raConsoleId = platform?.raConsoleId,
             libretroName = platform?.libretroName,
         )
 
     /**
-     * Automatically scrapes one game: queries every configured source once,
-     * applies metadata from the priority chain and media per-type priority.
+     * Automatically scrapes one game via [ScrapeMatchTool] ranking
+     * (score + author prefer/blacklist), then persists.
      */
     suspend fun scrapeGame(
         game: GameEntity,
@@ -74,50 +79,69 @@ class ScrapeEngine(
     ): GameScrapeResult {
         val effective = settings.forPlatform(game.platformId)
         val query = buildQuery(game)
-        val active = configuredSources(effective)
-        if (active.isEmpty()) {
+        if (!hasConfiguredSources(effective)) {
             WajihaLog.w(WajihaTags.SCRAPE, "gameId=${game.id}: no sources configured")
             return GameScrapeResult.notConfigured(game.id)
         }
 
-        val sourceOutcomes = linkedMapOf<String, SourceLookupOutcome>()
-        val candidates = mutableMapOf<String, ScrapeCandidate>()
-        for (source in active) {
-            val outcome =
-                try {
-                    source.lookupResult(query, effective)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    WajihaLog.w(
-                        WajihaTags.SCRAPE,
-                        "gameId=${game.id} source=${source.id} lookup failed: ${e.message}",
-                    )
-                    SourceLookupOutcome.Failed(classifyThrowable(e))
-                }
-            sourceOutcomes[source.id] = outcome
-            if (outcome is SourceLookupOutcome.Hit) {
-                candidates[source.id] = outcome.candidate
+        val existing = gameRepository.media(game.id).associateBy { it.type }
+        // FillGaps only considers preferred artwork (matches batch needsGapFill + UI copy).
+        // Force considers every non-music type and overwrites.
+        val typesToConsider =
+            if (policy.overwriteMedia) {
+                MediaType.entries.filter { it != MediaType.Music }
+            } else {
+                GapFillMediaTypes
             }
-        }
-        val summaries = sourceOutcomes.map { (id, outcome) -> outcome.toSummary(id) }
-        if (candidates.isEmpty()) {
-            WajihaLog.i(WajihaTags.SCRAPE, "gameId=${game.id} name=${game.displayName}: no match")
-            return GameScrapeResult.noMatch(game.id, summaries)
+        val neededTypes =
+            typesToConsider.filter { type ->
+                val hasExisting = !existing[type.dbName]?.localPath.isNullOrBlank()
+                when {
+                    policy.overwriteMedia -> true
+                    hasExisting -> false
+                    else -> true
+                }
+            }
+
+        // Nothing missing and metadata already scraped — skip (do not search).
+        val needMetadata = policy.overwriteMetadata || game.scrapedAt == null
+        if (neededTypes.isEmpty() && !needMetadata) {
+            WajihaLog.i(
+                WajihaTags.SCRAPE,
+                "gameId=${game.id} name=${game.displayName}: skip — media already present",
+            )
+            return GameScrapeResult.alreadyComplete(game.id)
         }
 
-        return applyCandidates(
+        val bundle =
+            matchTool.searchMatches(
+                query = query,
+                settings = effective,
+                neededTypes = neededTypes,
+                mode = MatchMode.Auto,
+            )
+
+        if (bundle.metadataCandidates.isEmpty() &&
+            bundle.mediaByType.isEmpty() &&
+            bundle.gameMatches.isEmpty()
+        ) {
+            WajihaLog.i(WajihaTags.SCRAPE, "gameId=${game.id} name=${game.displayName}: no match")
+            return GameScrapeResult.noMatch(game.id, bundle.sourceSummaries)
+        }
+
+        val selection = matchTool.pickBest(bundle, effective, neededTypes)
+        return applyRankedSelection(
             game = game,
-            candidates = candidates,
+            selection = selection,
             settings = effective,
             policy = policy,
-            sourceSummaries = summaries,
+            sourceSummaries = bundle.sourceSummaries,
         )
     }
 
     /**
      * Applies a manually chosen candidate from one source. Metadata comes from
-     * that candidate; its media wins for every type it offers.
+     * that candidate; its media is ranked (score / author prefs) per type.
      */
     suspend fun applyManualMatch(
         game: GameEntity,
@@ -133,12 +157,25 @@ class ScrapeEngine(
                         .mapNotNull { type ->
                             val list = candidate.media.filter { it.type == type }
                             if (list.isEmpty()) return@mapNotNull null
-                            val pick =
-                                list.pickMedia(
-                                    platformSettings.regionPriority,
-                                    platformSettings.mediaVariantIndex,
-                                ) ?: list.first()
-                            type to StagedMediaPick(candidate.sourceId, pick)
+                            val options =
+                                list.map { media ->
+                                    RankedMediaOption(
+                                        sourceId = candidate.sourceId,
+                                        candidate = media,
+                                        score = media.score ?: 0,
+                                        authorKey = media.authorKey,
+                                        authorDisplay = media.authorName,
+                                        rankReason = "",
+                                        confidence = candidate.matchConfidence,
+                                    )
+                                }
+                            val policy = MatchRankPolicy.fromSettings(platformSettings, type)
+                            val best =
+                                MediaRanker.pickBestOption(
+                                    MediaRanker.rankMediaOptions(options, policy),
+                                    policy,
+                                ) ?: return@mapNotNull null
+                            type to StagedMediaPick(best.sourceId, best.candidate)
                         }.toMap(),
             )
         return applySelection(game, selection, settings)
@@ -175,7 +212,10 @@ class ScrapeEngine(
         val existing = gameRepository.media(game.id).associateBy { it.type }
         for ((type, stagedOrNull) in selection.media) {
             if (stagedOrNull == null || stagedOrNull.candidate == null) {
-                existing[type.dbName]?.let { gameRepository.deleteMedia(it.id) }
+                existing[type.dbName]?.let { row ->
+                    row.localPath?.let { path -> runCatching { mediaStorage.delete(path) } }
+                    gameRepository.deleteMedia(row.id)
+                }
                 continue
             }
             val media = stagedOrNull.candidate
@@ -232,70 +272,25 @@ class ScrapeEngine(
         )
     }
 
-    /**
-     * Lookup + search candidates for the review picker (search first, then
-     * hash/lookup hits for sources that don't search by name).
-     */
-    suspend fun gatherReviewCandidates(
-        game: GameEntity,
-        settings: ScraperSettings,
-        searchName: String? = null,
-    ): List<ScrapeCandidate> {
-        val effective = settings.forPlatform(game.platformId)
-        val name = searchName?.takeIf { it.isNotBlank() } ?: game.displayName
-        val searched = searchAll(name, game, effective)
-
-        val query = buildQuery(game)
-        val fromLookup = mutableListOf<ScrapeCandidate>()
-        for (source in configuredSources(effective)) {
-            when (val outcome = source.lookupResult(query, effective)) {
-                is SourceLookupOutcome.Hit -> fromLookup += outcome.candidate
-                else -> Unit
-            }
-        }
-        return (searched + fromLookup).distinctBy { it.sourceId to it.sourceGameId }
-    }
-
-    /**
-     * Lazy media options for one review slot. Searches/looks up sources and
-     * returns only [type] (client-side filter). SteamGridDB first page is included.
-     */
-    suspend fun gatherReviewMedia(
-        game: GameEntity,
-        type: MediaType,
-        settings: ScraperSettings,
-        searchName: String? = null,
-    ): List<Pair<String, MediaCandidate>> {
-        val candidates = gatherReviewCandidates(game, settings, searchName)
-        return candidates
-            .flatMap { c ->
-                c.media.filter { it.type == type }.map { c.sourceId to it }
-            }.distinctBy { it.second.url }
-    }
-
     @OptIn(ExperimentalTime::class)
-    private suspend fun applyCandidates(
+    private suspend fun applyRankedSelection(
         game: GameEntity,
-        candidates: Map<String, ScrapeCandidate>,
+        selection: ScrapeSelection,
         settings: ScraperSettings,
-        policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps,
-        sourceSummaries: List<SourceResultSummary> = emptyList(),
+        policy: ScrapeRunPolicy,
+        sourceSummaries: List<SourceResultSummary>,
     ): GameScrapeResult {
         val overwriteMeta = policy.overwriteMetadata
-        val overwriteMedia = policy.overwriteMedia
-        // --- metadata: first source in the chain that has any ---
         var metadataSource: String? = null
         var updated = game
-        val chain = if (overwriteMeta) candidates.keys.toList() else settings.metadataPriority
-        for (sourceId in chain) {
-            val meta = candidates[sourceId]?.metadata ?: continue
-            updated = updated.mergeMetadata(meta, overwrite = overwriteMeta)
-            metadataSource = sourceId
-            break
-        }
-        // RA game id can come from RA even when it isn't the metadata source
-        candidates["ra"]?.metadata?.raGameId?.let { raId ->
-            if (updated.raGameId == null) updated = updated.copy(raGameId = raId)
+        selection.metadataFrom?.let { candidate ->
+            candidate.metadata?.let { meta ->
+                updated = updated.mergeMetadata(meta, overwrite = overwriteMeta)
+                metadataSource = candidate.sourceId
+            }
+            candidate.metadata?.raGameId?.let { raId ->
+                if (updated.raGameId == null) updated = updated.copy(raGameId = raId)
+            }
         }
         updated = updated.copy(scrapedAt = Clock.System.now().toEpochMilliseconds())
         gameRepository.update(updated)
@@ -306,37 +301,12 @@ class ScrapeEngine(
                 "ageRating=${updated.ageRating}",
         )
 
-        // --- media: per-type source priority, first hit wins ---
         var saved = 0
         var failed = 0
         var attempted = 0
-        val existing = gameRepository.media(game.id).associateBy { it.type }
-        for (type in MediaType.entries) {
-            val hasExisting = existing[type.dbName]?.localPath != null
-            if (hasExisting && !overwriteMedia) continue
-            if (policy.onlyMissingMedia && hasExisting) continue
-
-            val priority =
-                if (overwriteMedia) {
-                    candidates.keys.toList()
-                } else {
-                    settings.mediaPriority[type.dbName] ?: continue
-                }
-            val pick =
-                priority.firstNotNullOfOrNull { sourceId ->
-                    candidates[sourceId]
-                        ?.media
-                        ?.filter { it.type == type }
-                        ?.takeIf { it.isNotEmpty() }
-                        ?.let { list ->
-                            (
-                                list.pickMedia(settings.regionPriority, settings.mediaVariantIndex)
-                                    ?: list.first()
-                            ) to sourceId
-                        }
-                } ?: continue
-
-            val (media, sourceId) = pick
+        for ((type, staged) in selection.media) {
+            val media = staged?.candidate ?: continue
+            val sourceId = staged.sourceId
             attempted++
             val localPath = download(game.id, media, settings)
             if (localPath == null) {
@@ -362,11 +332,12 @@ class ScrapeEngine(
             saved++
             WajihaLog.d(
                 WajihaTags.SCRAPE,
-                "gameId=${game.id} saved ${type.dbName} from=$sourceId",
+                "gameId=${game.id} saved ${type.dbName} from=$sourceId " +
+                    "score=${media.score} author=${media.authorName ?: media.authorKey}",
             )
         }
 
-        val offeredMedia = candidates.values.any { it.media.isNotEmpty() }
+        val offeredMedia = selection.media.values.any { it?.candidate != null }
         val outcome =
             when {
                 saved > 0 || (!offeredMedia && metadataSource != null) -> GameScrapeOutcome.Matched
@@ -406,6 +377,72 @@ class ScrapeEngine(
                 },
             message = message,
             sourceSummaries = sourceSummaries,
+        )
+    }
+
+    /**
+     * Ranked game matches for the review picker (via [ScrapeMatchTool]).
+     */
+    suspend fun gatherReviewCandidates(
+        game: GameEntity,
+        settings: ScraperSettings,
+        searchName: String? = null,
+    ): List<ScrapeCandidate> {
+        val effective = settings.forPlatform(game.platformId)
+        val query = buildQuery(game)
+        val bundle =
+            matchTool.searchMatches(
+                query = query,
+                settings = effective,
+                neededTypes = MediaType.entries.filter { it != MediaType.Music },
+                mode = MatchMode.Review,
+                searchName = searchName,
+            )
+        // Attach top ranked media onto each game match for the review UI
+        return bundle.gameMatches
+            .map { match ->
+                val media =
+                    bundle.mediaByType.values
+                        .flatten()
+                        .filter { it.sourceId == match.sourceId }
+                        .map { it.candidate }
+                        .ifEmpty { match.candidate.media }
+                match.candidate.copy(media = media.distinctBy { it.type to it.url })
+            }.distinctBy { it.sourceId to it.sourceGameId }
+    }
+
+    /**
+     * Lazy media options for one review slot — ranked by score / author prefs.
+     */
+
+    /**
+     * Review media gallery for one type, plus SGDB paging context when available.
+     */
+    suspend fun gatherReviewMedia(
+        game: GameEntity,
+        type: MediaType,
+        settings: ScraperSettings,
+        searchName: String? = null,
+    ): ReviewMediaGatherResult {
+        val effective = settings.forPlatform(game.platformId)
+        val query = buildQuery(game)
+        val bundle =
+            matchTool.searchMatches(
+                query = query,
+                settings = effective,
+                neededTypes = listOf(type),
+                mode = MatchMode.Review,
+                searchName = searchName,
+            )
+        return ReviewMediaGatherResult(
+            options =
+                bundle.mediaByType[type]
+                    .orEmpty()
+                    .map { it.sourceId to it.candidate }
+                    .distinctBy { it.second.url },
+            steamGridDbCandidate =
+                bundle.gameMatches.firstOrNull { it.sourceId == "steamgriddb" }?.candidate,
+            steamGridDbHasMore = bundle.steamGridDbHasMoreByType[type] == true,
         )
     }
 
@@ -465,29 +502,12 @@ class ScrapeEngine(
             }
         }
 
-    /** Manual search across all configured sources, for the match UI. */
+    /** Manual search across all configured sources — ranked via [ScrapeMatchTool]. */
     suspend fun searchAll(
         name: String,
         game: GameEntity,
         settings: ScraperSettings,
-    ): List<ScrapeCandidate> {
-        val effective = settings.forPlatform(game.platformId)
-        val query = buildQuery(game)
-        val out = mutableListOf<ScrapeCandidate>()
-        for (source in configuredSources(effective)) {
-            try {
-                out += source.search(name, query, effective)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                WajihaLog.w(
-                    WajihaTags.SCRAPE,
-                    "search source=${source.id}: ${e.message}",
-                )
-            }
-        }
-        return out
-    }
+    ): List<ScrapeCandidate> = gatherReviewCandidates(game, settings, searchName = name)
 
     /**
      * Loads the next SteamGridDB page for [type] on [candidate] (sourceGameId = SGDB id).

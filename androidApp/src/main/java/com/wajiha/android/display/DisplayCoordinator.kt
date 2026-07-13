@@ -170,8 +170,14 @@ class DisplayCoordinator(
         if (store.hasActiveSessions()) {
             val topGame = store.topDisplayForegroundPackage.value
             if (topGame != null && topGame != context.packageName && store.getSession(topGame) != null) {
-                focusGameOnPrimary(topGame)
-                return
+                // Only refocus a live task — never cold-start a Recents-dismissed emulator.
+                if (TopDisplayTaskResolver.taskIdForPackage(context, topGame) != null ||
+                    SessionTaskRegistry.hasTask(topGame)
+                ) {
+                    focusGameOnPrimary(topGame)
+                    return
+                }
+                SessionTaskRegistry.clear(topGame)
             }
         }
         mainHandler.postDelayed({
@@ -329,7 +335,8 @@ class DisplayCoordinator(
                 else -> 1_500L
             }
         mainHandler.postDelayed({
-            val moved = SessionTaskRegistry.moveToFront(context, packageName)
+            // Automatic focus never cold-starts (allowColdStart=false).
+            val moved = SessionTaskRegistry.moveToFront(context, packageName, allowColdStart = false)
             if (moved) {
                 WajihaLog.i(
                     WajihaTags.DISPLAY,
@@ -342,18 +349,11 @@ class DisplayCoordinator(
                 )
                 focusGameOnPrimary(packageName, attempt + 1)
             } else {
-                val reordered = SessionTaskRegistry.moveToFront(context, packageName)
-                if (reordered) {
-                    WajihaLog.i(
-                        WajihaTags.DISPLAY,
-                        "focusGameOnPrimary: reorderToFront pkg=$packageName",
-                    )
-                } else {
-                    WajihaLog.w(
-                        WajihaTags.DISPLAY,
-                        "focusGameOnPrimary: no task for pkg=$packageName",
-                    )
-                }
+                SessionTaskRegistry.clear(packageName)
+                WajihaLog.w(
+                    WajihaTags.DISPLAY,
+                    "focusGameOnPrimary: no live task for pkg=$packageName (skip cold-start)",
+                )
             }
         }, delayMs)
     }
@@ -429,7 +429,14 @@ class DisplayCoordinator(
     private fun refreshTopDisplayAfterSecondaryReclaim() {
         val topGame = store.topDisplayForegroundPackage.value
         if (topGame != null && topGame != context.packageName && store.getSession(topGame) != null) {
-            focusGameOnPrimary(topGame)
+            if (TopDisplayTaskResolver.taskIdForPackage(context, topGame) != null ||
+                SessionTaskRegistry.hasTask(topGame)
+            ) {
+                focusGameOnPrimary(topGame)
+            } else {
+                SessionTaskRegistry.clear(topGame)
+                if (!store.hasActiveSessions()) restorePrimaryHero()
+            }
         } else if (!store.hasActiveSessions()) {
             restorePrimaryHero()
         }

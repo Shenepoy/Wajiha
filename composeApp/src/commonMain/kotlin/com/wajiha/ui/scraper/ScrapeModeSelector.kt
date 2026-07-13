@@ -7,10 +7,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import com.wajiha.data.scraper.ScrapeRunMode
 import com.wajiha.data.scraper.ScrapeRunPolicy
+import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.theme.WajihaSpacing
 
@@ -50,14 +52,28 @@ fun ScrapeUiMode.singleGameChipLabel(): String =
         ScrapeUiMode.Review -> "Manual"
     }
 
+fun ScrapeUiMode.batchChipLabel(): String =
+    when (this) {
+        ScrapeUiMode.FillGaps -> "Fill gaps"
+        ScrapeUiMode.Force -> "Force"
+        ScrapeUiMode.Review -> "Manual"
+    }
+
+/**
+ * Mode chips and the primary Run action on one row.
+ * Focus order: first chip → other chips → action button.
+ */
 @Composable
 fun ScrapeModeSelector(
     selected: ScrapeUiMode,
     onSelect: (ScrapeUiMode) -> Unit,
+    actionLabel: String,
+    onAction: () -> Unit,
     modifier: Modifier = Modifier,
     showReview: Boolean = true,
     firstFocusRequester: FocusRequester? = null,
     enabled: Boolean = true,
+    actionEnabled: Boolean = enabled,
     helperText: String = selected.helperText(),
     /** When true, chips read Scrape | Force | Manual (game detail). */
     singleGameLabels: Boolean = false,
@@ -75,30 +91,40 @@ fun ScrapeModeSelector(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            modes.forEachIndexed { index, mode ->
-                GamepadChip(
-                    label =
-                        if (singleGameLabels) {
-                            mode.singleGameChipLabel()
-                        } else {
-                            when (mode) {
-                                ScrapeUiMode.FillGaps -> "Fill gaps"
-                                ScrapeUiMode.Force -> "Force"
-                                ScrapeUiMode.Review -> "Review"
-                            }
-                        },
-                    selected = selected == mode,
-                    onClick = { if (enabled) onSelect(mode) },
-                    focusRequester = if (index == 0) firstFocusRequester else null,
-                )
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                modes.forEachIndexed { index, mode ->
+                    GamepadChip(
+                        label =
+                            if (singleGameLabels) {
+                                mode.singleGameChipLabel()
+                            } else {
+                                mode.batchChipLabel()
+                            },
+                        selected = selected == mode,
+                        onClick = { if (enabled) onSelect(mode) },
+                        focusRequester = if (index == 0) firstFocusRequester else null,
+                    )
+                }
             }
+            GamepadButton(
+                text = actionLabel,
+                onClick = onAction,
+                enabled = actionEnabled,
+            )
         }
-        Text(
-            text = helperText,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (helperText.isNotBlank()) {
+            Text(
+                text = helperText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

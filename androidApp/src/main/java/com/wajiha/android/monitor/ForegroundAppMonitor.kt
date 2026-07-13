@@ -17,6 +17,7 @@ import com.wajiha.android.util.PackageKiller
 import com.wajiha.domain.GamingAppCatalog
 import com.wajiha.domain.repository.PlatformRepository
 import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaLogKind
 import com.wajiha.log.WajihaTags
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingState
@@ -160,9 +161,11 @@ class ForegroundAppMonitor(
 
     fun start() {
         if (job?.isActive == true) return
+        WajihaLog.i(WajihaTags.NOW_PLAYING, "monitor: start")
         job =
             scope.launch {
                 var lastPackagesRefresh = 0L
+                var pollCount = 0
                 while (isActive) {
                     val now = System.currentTimeMillis()
                     if (now - lastPackagesRefresh > PACKAGES_REFRESH_MS) {
@@ -171,6 +174,15 @@ class ForegroundAppMonitor(
                     }
                     if (hasUsageAccess()) {
                         poll()
+                        pollCount++
+                        if (pollCount % 8 == 0) {
+                            WajihaLog.d(
+                                WajihaLogKind.WORK,
+                                "poll: sessions=${store.activeSessions().size} " +
+                                    "top=${store.topDisplayForegroundPackage.value}",
+                                minIntervalMs = 2_000L,
+                            )
+                        }
                         // Idle path: poll skips running-apps refresh; keep the 10s throttle.
                         if (!store.hasActiveSessions()) {
                             refreshRunningApps(force = false)
@@ -189,6 +201,7 @@ class ForegroundAppMonitor(
     }
 
     fun stop() {
+        WajihaLog.i(WajihaTags.NOW_PLAYING, "monitor: stop")
         job?.cancel()
         job = null
     }
@@ -573,12 +586,16 @@ class ForegroundAppMonitor(
         sessionStartedAt: Long = 0L,
     ): Boolean {
         if (sessionController.isWithinLaunchGrace(sessionStartedAt, packageName)) return true
-        if (isPackageRecentlyUsed(packageName)) return true
-        if (sessionStartedAt > 0L && isUsageTimelineActive(packageName, sessionStartedAt)) return true
-        if (wasRecentlySeenForeground(packageName)) return true
+        // Process / live task first — recent usage alone must not keep a Recents-dismissed
+        // session alive (that path used to cold-start the emulator via display reclaim).
         if (hasRunningProcess(packageName)) return true
-        if (SessionTaskRegistry.hasTask(packageName)) return true
-        if (TopDisplayTaskResolver.taskIdForPackage(context, packageName) != null) return true
+        if (hasRunningTask(packageName)) return true
+        if (SessionTaskRegistry.hasTask(packageName)) {
+            // Resolver cannot see the task and the process is gone → Recents dismissed;
+            // drop the stale launch-window id so we do not pin/refocus forever.
+            SessionTaskRegistry.clear(packageName)
+        }
+        if (sessionStartedAt > 0L && isUsageTimelineActive(packageName, sessionStartedAt)) return true
         return false
     }
 
@@ -745,6 +762,8 @@ class ForegroundAppMonitor(
         trigger: String,
     ) {
         WajihaLog.i(WajihaTags.NOW_PLAYING, "endSession: $packageName ($trigger)")
+        // Match Y-close: block rediscovery while a dismissed process lingers.
+        suppressRediscovery(packageName)
         SessionTaskRegistry.clear(packageName)
         lastSeenForegroundAt.remove(packageName)
         externalGameResolver.clearSession(packageName)

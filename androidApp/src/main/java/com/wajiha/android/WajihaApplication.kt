@@ -39,6 +39,9 @@ import com.wajiha.data.scraper.MediaStorage
 import com.wajiha.di.ScreenScraperDevCredentials
 import com.wajiha.di.initKoin
 import com.wajiha.domain.repository.PlatformRepository
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaLogGate
+import com.wajiha.log.WajihaLogKind
 import com.wajiha.platform.AndroidImageProcessor
 import com.wajiha.platform.AndroidMediaStorage
 import com.wajiha.platform.AppActions
@@ -73,6 +76,7 @@ class WajihaApplication :
                 ) {
                     return
                 }
+                WajihaLog.i(WajihaLogKind.WORK, "trimMemory: level=$level")
                 runCatching {
                     GlobalContext
                         .get()
@@ -110,6 +114,8 @@ class WajihaApplication :
 
     override fun onCreate() {
         super.onCreate()
+        WajihaLogGate.verbose = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        WajihaLog.i(WajihaLogKind.WORK, "appStart: verbose=${WajihaLogGate.verbose}")
         val androidModule =
             module {
                 single<WajihaDatabase> {
@@ -128,12 +134,20 @@ class WajihaApplication :
                 single { DisplayCoordinator(this@WajihaApplication, get()) }
                 single(named("applicationScope")) { appScope }
                 single {
+                    com.wajiha.android.input.GamepadDeviceRegistry(
+                        context = this@WajihaApplication,
+                        glyphStore = get(),
+                    )
+                }
+                single {
                     com.wajiha.android.input.GamepadKeyRouter(
                         store = get(),
                         settingsRepository = get(),
                         appActions = get(),
                         notifications = get(),
                         scope = get(named("applicationScope")),
+                        glyphStore = get(),
+                        deviceRegistry = get(),
                     )
                 }
                 single {
@@ -141,6 +155,8 @@ class WajihaApplication :
                         store = get(),
                         notifications = get(),
                         appActions = get(),
+                        glyphStore = get(),
+                        deviceRegistry = get(),
                     )
                 }
                 single {
@@ -191,6 +207,7 @@ class WajihaApplication :
             androidContext(this@WajihaApplication)
         }
 
+        GlobalContext.get().get<com.wajiha.android.input.GamepadDeviceRegistry>().start()
         seedDefaultsIfNeeded()
         mirrorSettings()
         registerComponentCallbacks(memoryTrimCallbacks)
