@@ -67,6 +67,7 @@ private enum class SetupStep {
     Welcome,
     Theme,
     GrantAccess,
+    DisplayLayout,
     DefaultHome,
     AddGames,
     Done,
@@ -85,6 +86,8 @@ fun OnboardingScreen(
     var step by remember { mutableStateOf(SetupStep.Welcome) }
     var perms by remember { mutableStateOf(PermissionStates()) }
     val folders by settingsViewModel.folders.collectAsState()
+    val settings by settingsViewModel.settings.collectAsState()
+    val singleScreen = settings.singleScreen
     val contentFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -99,11 +102,13 @@ fun OnboardingScreen(
         modifier = modifier,
         showActionBar = true,
         gamepadHints =
-            listOf(
-                GamepadHint(GamepadHintButton.A, "Continue"),
-                GamepadHint(GamepadHintButton.B, "Back / Skip"),
-                GamepadHint(GamepadHintButton.L2, "Focus screen"),
-            ),
+            buildList {
+                add(GamepadHint(GamepadHintButton.A, "Continue"))
+                add(GamepadHint(GamepadHintButton.B, "Back / Skip"))
+                if (!singleScreen) {
+                    add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+                }
+            },
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onOwnerGainedFocus = { contentFocus.requestContentFocus() },
@@ -143,6 +148,7 @@ fun OnboardingScreen(
                         when (current) {
                             SetupStep.Welcome -> {
                                 WelcomeBeat(
+                                    singleScreen = singleScreen,
                                     onContinue = { step = SetupStep.Theme },
                                     onSkip = onFinished,
                                 )
@@ -162,16 +168,28 @@ fun OnboardingScreen(
                                 GrantAccessBeat(
                                     perms = perms,
                                     controls = controls,
+                                    singleScreen = singleScreen,
                                     onBack = { step = SetupStep.Theme },
-                                    onContinue = { step = SetupStep.DefaultHome },
+                                    onContinue = { step = SetupStep.DisplayLayout },
+                                )
+                            }
+
+                            SetupStep.DisplayLayout -> {
+                                DisplayLayoutBeat(
+                                    onPick = { single ->
+                                        settingsViewModel.setSingleScreen(single)
+                                        step = SetupStep.DefaultHome
+                                    },
+                                    onBack = { step = SetupStep.GrantAccess },
                                 )
                             }
 
                             SetupStep.DefaultHome -> {
                                 HomeBeat(
                                     isDefault = perms.isDefaultLauncher,
+                                    singleScreen = singleScreen,
                                     onOpenHome = controls::openHomeSettings,
-                                    onBack = { step = SetupStep.GrantAccess },
+                                    onBack = { step = SetupStep.DisplayLayout },
                                     onContinue = { step = SetupStep.AddGames },
                                 )
                             }
@@ -189,7 +207,7 @@ fun OnboardingScreen(
                             }
 
                             SetupStep.Done -> {
-                                DoneBeat(onFinished = onFinished)
+                                DoneBeat(singleScreen = singleScreen, onFinished = onFinished)
                             }
                         }
                     }
@@ -201,6 +219,7 @@ fun OnboardingScreen(
 
 @Composable
 private fun WelcomeBeat(
+    singleScreen: Boolean,
     onContinue: () -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -229,8 +248,13 @@ private fun WelcomeBeat(
     Spacer(modifier = Modifier.height(12.dp))
     Text(
         text =
-            "Top screen for game art. Bottom screen to browse and launch.\n" +
-                "Even games you start yourself show up as Now Playing.",
+            if (singleScreen) {
+                "Preview on top, library below — all on one display.\n" +
+                    "Even games you start yourself show up as Now Playing."
+            } else {
+                "Top screen for game art. Bottom screen to browse and launch.\n" +
+                    "Even games you start yourself show up as Now Playing."
+            },
         style = MaterialTheme.typography.bodyMedium,
         textAlign = TextAlign.Center,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -274,6 +298,7 @@ private fun ThemeBeat(
 private fun GrantAccessBeat(
     perms: PermissionStates,
     controls: SystemControls,
+    singleScreen: Boolean,
     onBack: () -> Unit,
     onContinue: () -> Unit,
 ) {
@@ -281,7 +306,11 @@ private fun GrantAccessBeat(
         listOf(
             GrantItem(
                 "Usage access",
-                "So the bottom screen can follow games you launch yourself",
+                if (singleScreen) {
+                    "So Wajiha can follow games you launch yourself"
+                } else {
+                    "So the bottom screen can follow games you launch yourself"
+                },
                 perms.usageAccess,
                 controls::requestUsageAccess,
             ),
@@ -324,21 +353,62 @@ private fun GrantAccessBeat(
 }
 
 @Composable
+private fun DisplayLayoutBeat(
+    onPick: (singleScreen: Boolean) -> Unit,
+    onBack: () -> Unit,
+) {
+    BeatTitle("One screen or two?")
+    BeatBody(
+        "Wajiha can use both screens on clamshell handhelds, or combine everything " +
+            "on the main display. Change anytime in Settings → Screens.",
+    )
+    Spacer(modifier = Modifier.height(20.dp))
+    ChoiceCard(
+        title = "Dual screens",
+        description =
+            "Art on one display, browse and launch on the other. " +
+                "Best on AYN Thor and clamshell handhelds.",
+    ) { onPick(false) }
+    Spacer(modifier = Modifier.height(10.dp))
+    ChoiceCard(
+        title = "Single screen",
+        description =
+            "Combined preview + library on the main display. " +
+                "Use this on phones or when you only want one panel.",
+    ) { onPick(true) }
+    BackOnly(onBack)
+}
+
+@Composable
 private fun HomeBeat(
     isDefault: Boolean,
+    singleScreen: Boolean,
     onOpenHome: () -> Unit,
     onBack: () -> Unit,
     onContinue: () -> Unit,
 ) {
     BeatTitle("Make Wajiha home")
     BeatBody(
-        if (isDefault) {
-            "Perfect — pressing HOME on either screen brings you back here, " +
-                "and the bottom screen stays in Wajiha."
-        } else {
-            "This is the big one for dual-screen devices. Set Wajiha as your " +
-                "default home app so HOME always returns here — and the bottom " +
-                "screen doesn't fall back to the stock launcher."
+        when {
+            isDefault && singleScreen -> {
+                "Perfect — pressing HOME brings you back here on the main display."
+            }
+
+            isDefault -> {
+                "Perfect — pressing HOME on either screen brings you back here, " +
+                    "and the bottom screen stays in Wajiha."
+            }
+
+            singleScreen -> {
+                "Set Wajiha as your default home app so HOME always returns here " +
+                    "on the main display."
+            }
+
+            else -> {
+                "This is the big one for dual-screen devices. Set Wajiha as your " +
+                    "default home app so HOME always returns here — and the bottom " +
+                    "screen doesn't fall back to the stock launcher."
+            }
         },
     )
     Spacer(modifier = Modifier.height(20.dp))
@@ -406,7 +476,10 @@ private fun AddGamesBeat(
 }
 
 @Composable
-private fun DoneBeat(onFinished: () -> Unit) {
+private fun DoneBeat(
+    singleScreen: Boolean,
+    onFinished: () -> Unit,
+) {
     Spacer(modifier = Modifier.height(40.dp))
     Text(
         text = "All set up!",
@@ -416,10 +489,17 @@ private fun DoneBeat(onFinished: () -> Unit) {
     Spacer(modifier = Modifier.height(12.dp))
     Text(
         text =
-            "Time to show you around.\n\n" +
-                "Bottom screen — browse and launch.\n" +
-                "Top screen — art and info for what's focused.\n" +
-                "Settings → Library — Add platform, then folders / Scraper.",
+            if (singleScreen) {
+                "Time to show you around.\n\n" +
+                    "Combined view — preview above, library below.\n" +
+                    "Settings → Library — Add platform, then folders / Scraper.\n" +
+                    "Settings → Screens — switch to dual anytime."
+            } else {
+                "Time to show you around.\n\n" +
+                    "Bottom screen — browse and launch.\n" +
+                    "Top screen — art and info for what's focused.\n" +
+                    "Settings → Library — Add platform, then folders / Scraper."
+            },
         style = MaterialTheme.typography.bodyLarge,
         textAlign = TextAlign.Center,
         color = MaterialTheme.colorScheme.onSurfaceVariant,

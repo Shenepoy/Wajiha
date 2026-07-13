@@ -14,8 +14,8 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.input.key.KeyEvent
 import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadScreen
+import com.wajiha.input.MirroredOrLocalGamepadActionBar
 import com.wajiha.state.GamepadOwner
-import com.wajiha.ui.components.gamepad.GamepadActionBar
 import com.wajiha.ui.components.gamepad.defaultGamepadHints
 import com.wajiha.ui.theme.WajihaSpacing
 
@@ -72,7 +72,11 @@ fun WajihaScreen(
                     content()
                 }
                 if (showActionBar) {
-                    GamepadActionBar(hints = gamepadHints ?: defaultGamepadHints())
+                    MirroredOrLocalGamepadActionBar(
+                        publisherId = layerId,
+                        hints = gamepadHints ?: defaultGamepadHints(),
+                        hostOwner = gamepadOwner,
+                    )
                 }
             }
         }

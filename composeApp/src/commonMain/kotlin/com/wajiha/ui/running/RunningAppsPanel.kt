@@ -95,7 +95,7 @@ fun RunningAppsPanel(
                         onClick = { appActions.moveAppToDisplay(app.packageName, 0) },
                         outlined = true,
                     )
-                    secondaryDisplayId?.let { displayId ->
+                    secondaryDisplayId?.takeIf { store.isDualLayout() }?.let { displayId ->
                         GamepadButton(
                             text = "Bottom",
                             onClick = { appActions.moveAppToDisplay(app.packageName, displayId) },

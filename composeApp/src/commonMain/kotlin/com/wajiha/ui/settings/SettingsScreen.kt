@@ -105,7 +105,7 @@ private enum class SettingsSection(
 ) {
     Library("Library"),
     Scraper("Scraper"),
-    DualScreen("Dual screen"),
+    Screens("Screens"),
     Appearance("Appearance"),
     System("System"),
 }
@@ -163,7 +163,7 @@ fun SettingsScreen(
         modifier = modifier,
         onBack = onBack,
         showActionBar = true,
-        gamepadHints = settingsGamepadHints,
+        gamepadHints = settingsGamepadHints(isDual = !settings.singleScreen),
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onOwnerGainedFocus = { sectionFocus.requestContentFocus() },
@@ -248,8 +248,8 @@ fun SettingsScreen(
                             )
                         }
 
-                        SettingsSection.DualScreen -> {
-                            DualScreenSectionContent(
+                        SettingsSection.Screens -> {
+                            ScreensSectionContent(
                                 settings = settings,
                                 settingsViewModel = settingsViewModel,
                                 perms = perms,
@@ -351,31 +351,63 @@ private fun ScraperSectionContent(
 }
 
 @Composable
-private fun DualScreenSectionContent(
+private fun ScreensSectionContent(
     settings: AppSettings,
     settingsViewModel: SettingsViewModel,
     perms: PermissionStates,
     systemControls: SystemControls,
     firstFocusRequester: FocusRequester? = null,
 ) {
+    val single = settings.singleScreen
     SettingsSectionBlurb(
-        "Control how Wajiha uses the top and bottom displays on clamshell handhelds.",
+        "Choose one screen or both. Single screen runs the combined launcher on the " +
+            "main display only; dual uses top and bottom on clamshell handhelds.",
     )
     SettingsToggleRow(
-        label = "Black out unused display when a game starts",
-        description = "Turn off the idle screen while a game runs for a cleaner play experience.",
-        checked = settings.blackoutOnLaunch,
-        onCheckedChange = settingsViewModel::setBlackoutOnLaunch,
+        label = "Single screen",
+        description =
+            "Use only the main display. Stops the bottom/secondary Wajiha launcher; " +
+                "the other panel (if any) is left to the system. Change anytime here.",
+        checked = single,
+        onCheckedChange = settingsViewModel::setSingleScreen,
         defaultChecked = false,
-        onReset = { settingsViewModel.setBlackoutOnLaunch(false) },
+        onReset = { settingsViewModel.setSingleScreen(false) },
         focusRequester = firstFocusRequester,
     )
+    if (single) {
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Show hero banner",
+            description =
+                "Preview artwork above the game grid. When off, the library fills the " +
+                    "screen and filter / settings return to the top bar.",
+            checked = settings.showHeroBanner,
+            onCheckedChange = settingsViewModel::setShowHeroBanner,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setShowHeroBanner(true) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Show selected game name",
+            description =
+                "Display the focused game's title above the library. Useful when the " +
+                    "hero banner is hidden.",
+            checked = settings.showSelectedGameName,
+            onCheckedChange = settingsViewModel::setShowSelectedGameName,
+            defaultChecked = false,
+            onReset = { settingsViewModel.setShowSelectedGameName(false) },
+        )
+    }
     SettingsGroupDivider()
     SettingsToggleRow(
         label = "Show Now Playing for games launched outside Wajiha",
         description =
-            "Detect when another app launches a game and " +
-                "show Now Playing on the secondary display.",
+            "Detect when another app launches a game and show Now Playing " +
+                if (single) {
+                    "on this display."
+                } else {
+                    "on the secondary display."
+                },
         checked = settings.detectManualLaunches,
         onCheckedChange = settingsViewModel::setDetectManualLaunches,
         defaultChecked = true,
@@ -415,47 +447,76 @@ private fun DualScreenSectionContent(
             onReset = { settingsViewModel.setRomReconciliationEnabled(false) },
         )
     }
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Swap screen roles (grid on top, hero on bottom)",
-        description = "Flip which display shows the game grid versus hero artwork.",
-        checked = settings.swapScreenRoles,
-        onCheckedChange = settingsViewModel::setSwapScreenRoles,
-        defaultChecked = false,
-        onReset = { settingsViewModel.setSwapScreenRoles(false) },
-    )
-    SettingsGroupDivider()
-    SettingsMultiChoiceRow(
-        label = "Bottom screen while a game runs",
-        description =
-            "Choose what the secondary display shows after you launch a game. " +
-                "Blackout turns the bottom screen off until you tap it.",
-        choiceOptions =
-            listOf(
-                MultiChoiceOption("NowPlaying", "Now Running", icon = "▶"),
-                MultiChoiceOption("QuickSettings", "Quick Settings", icon = "⚙"),
-                MultiChoiceOption("RunningApps", "Running Apps", icon = "▣"),
-                MultiChoiceOption("Achievements", "Achievements", icon = "★"),
-                MultiChoiceOption("Clock", "Clock", icon = "◷"),
-                MultiChoiceOption(
-                    value = "Off",
-                    label = "Blackout",
-                    description = "Screen off until you tap it.",
-                    icon = "◼",
+    if (!single) {
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Black out unused display when a game starts",
+            description =
+                "Turn off the idle screen while a game runs for a cleaner play experience.",
+            checked = settings.blackoutOnLaunch,
+            onCheckedChange = settingsViewModel::setBlackoutOnLaunch,
+            defaultChecked = false,
+            onReset = { settingsViewModel.setBlackoutOnLaunch(false) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Swap screen roles (grid on top, hero on bottom)",
+            description = "Flip which display shows the game grid versus hero artwork.",
+            checked = settings.swapScreenRoles,
+            onCheckedChange = settingsViewModel::setSwapScreenRoles,
+            defaultChecked = false,
+            onReset = { settingsViewModel.setSwapScreenRoles(false) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Swap gamepad hints",
+            description =
+                "Show the controller hint bar on the hero display instead of under " +
+                    "the game grid and menus.",
+            checked = settings.swapGamepadHints,
+            onCheckedChange = settingsViewModel::setSwapGamepadHints,
+            defaultChecked = false,
+            onReset = { settingsViewModel.setSwapGamepadHints(false) },
+        )
+        SettingsGroupDivider()
+        SettingsMultiChoiceRow(
+            label = "Bottom screen while a game runs",
+            description =
+                "Choose what the secondary display shows after you launch a game. " +
+                    "Blackout turns the bottom screen off until you tap it.",
+            choiceOptions =
+                listOf(
+                    MultiChoiceOption("NowPlaying", "Now Running", icon = "▶"),
+                    MultiChoiceOption("QuickSettings", "Quick Settings", icon = "⚙"),
+                    MultiChoiceOption("RunningApps", "Running Apps", icon = "▣"),
+                    MultiChoiceOption("Achievements", "Achievements", icon = "★"),
+                    MultiChoiceOption("Clock", "Clock", icon = "◷"),
+                    MultiChoiceOption(
+                        value = "Off",
+                        label = "Blackout",
+                        description = "Screen off until you tap it.",
+                        icon = "◼",
+                    ),
                 ),
-            ),
-        selected = settings.gameSecondaryMode,
-        onSelect = settingsViewModel::setGameSecondaryMode,
-        defaultValue = "NowPlaying",
-        onReset = { settingsViewModel.setGameSecondaryMode("NowPlaying") },
-    )
+            selected = settings.gameSecondaryMode,
+            onSelect = settingsViewModel::setGameSecondaryMode,
+            defaultValue = "NowPlaying",
+            onReset = { settingsViewModel.setGameSecondaryMode("NowPlaying") },
+        )
+    }
     SettingsGroupDivider()
     SettingsMultiChoiceRow(
         label = "Show active sessions",
         description =
-            "Choose how running games appear on the bottom screen while you play. " +
-                "None hides session indicators; grid tiles sit in the game strip; " +
-                "the floating chip stays above the action bar.",
+            if (single) {
+                "How running games appear on the library while you play. " +
+                    "None hides session indicators; grid tiles sit in the game strip; " +
+                    "the floating chip stays above the action bar."
+            } else {
+                "Choose how running games appear on the bottom screen while you play. " +
+                    "None hides session indicators; grid tiles sit in the game strip; " +
+                    "the floating chip stays above the action bar."
+            },
         choiceOptions =
             listOf(
                 MultiChoiceOption("None", "None", icon = "○"),
@@ -468,172 +529,178 @@ private fun DualScreenSectionContent(
         defaultValue = "Both",
         onReset = { settingsViewModel.setNowPlayingDisplay("Both") },
     )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Dim bottom screen while a game runs",
-        description =
-            "Darken the secondary display during gameplay. " +
-                "Blackout (Off) still turns the screen fully off.",
-        checked = settings.gameDimEnabled,
-        onCheckedChange = settingsViewModel::setGameDimEnabled,
-        defaultChecked = false,
-        onReset = { settingsViewModel.setGameDimEnabled(false) },
-    )
-    if (settings.gameDimEnabled) {
+    if (!single) {
         SettingsGroupDivider()
         SettingsToggleRow(
-            label = "Dim only on Now Playing page",
+            label = "Dim bottom screen while a game runs",
             description =
-                "When on, the dim scrim applies only while the bottom screen shows Now Playing. " +
-                    "When off, dim applies on any secondary screen except Blackout.",
-            checked = settings.gameDimOnlyOnNowPlaying,
-            onCheckedChange = settingsViewModel::setGameDimOnlyOnNowPlaying,
+                "Darken the secondary display during gameplay. " +
+                    "Blackout (Off) still turns the screen fully off.",
+            checked = settings.gameDimEnabled,
+            onCheckedChange = settingsViewModel::setGameDimEnabled,
+            defaultChecked = false,
+            onReset = { settingsViewModel.setGameDimEnabled(false) },
+        )
+        if (settings.gameDimEnabled) {
+            SettingsGroupDivider()
+            SettingsToggleRow(
+                label = "Dim only on Now Playing page",
+                description =
+                    "When on, the dim scrim applies only while the bottom screen shows Now Playing. " +
+                        "When off, dim applies on any secondary screen except Blackout.",
+                checked = settings.gameDimOnlyOnNowPlaying,
+                onCheckedChange = settingsViewModel::setGameDimOnlyOnNowPlaying,
+                defaultChecked = true,
+                onReset = { settingsViewModel.setGameDimOnlyOnNowPlaying(true) },
+            )
+            SettingsGroupDivider()
+            SettingsNumberRow(
+                label = "Dim strength",
+                description =
+                    "How dark the overlay is. 100% is near-black but still restores on tap.",
+                value = settings.gameDimPercent,
+                onValueChange = settingsViewModel::setGameDimPercent,
+                range = 0..100,
+                step = 10,
+                valueLabel = { "$it%" },
+                defaultValue = 90,
+                onReset = { settingsViewModel.setGameDimPercent(90) },
+            )
+            SettingsGroupDivider()
+            SettingsNumberRow(
+                label = "Dim after (seconds)",
+                description =
+                    "Wait before dimming after gameplay starts. Lifts while you use the bottom screen; " +
+                        "fades back after the same idle time. 0 = immediate dim, stay lifted on interaction.",
+                value = settings.gameplayDimTimeoutSeconds,
+                onValueChange = settingsViewModel::setGameplayDimTimeoutSeconds,
+                range = 0..120,
+                step = 1,
+                valueLabel = { if (it == 0) "0 (immediate)" else "$it s" },
+                defaultValue = 10,
+                onReset = { settingsViewModel.setGameplayDimTimeoutSeconds(10) },
+            )
+        }
+    }
+    // Dual-only hero piece toggles — hidden entirely in single-screen mode.
+    if (!single) {
+        SettingsGroupDivider()
+        SettingsSectionBlurb(
+            "Show or hide individual pieces of the top-screen game preview " +
+                "(library focus and game Info).",
+        )
+        SettingsToggleRow(
+            label = "Backdrop / hero art",
+            description = "Full-bleed background image behind the cover and metadata.",
+            checked = settings.topHeroBackdrop,
+            onCheckedChange = settingsViewModel::setTopHeroBackdrop,
             defaultChecked = true,
-            onReset = { settingsViewModel.setGameDimOnlyOnNowPlaying(true) },
+            onReset = { settingsViewModel.setTopHeroBackdrop(true) },
         )
         SettingsGroupDivider()
-        SettingsNumberRow(
-            label = "Dim strength",
-            description = "How dark the overlay is. 100% is near-black but still restores on tap.",
-            value = settings.gameDimPercent,
-            onValueChange = settingsViewModel::setGameDimPercent,
-            range = 0..100,
-            step = 10,
-            valueLabel = { "$it%" },
-            defaultValue = 90,
-            onReset = { settingsViewModel.setGameDimPercent(90) },
+        SettingsToggleRow(
+            label = "Cover / box art",
+            description = "Box art, video preview, or initials placeholder on the left.",
+            checked = settings.topHeroCover,
+            onCheckedChange = settingsViewModel::setTopHeroCover,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setTopHeroCover(true) },
         )
         SettingsGroupDivider()
-        SettingsNumberRow(
-            label = "Dim after (seconds)",
+        SettingsToggleRow(
+            label = "Cover border",
+            description = "Show border around game cover.",
+            checked = settings.topHeroCoverBorder,
+            onCheckedChange = settingsViewModel::setTopHeroCoverBorder,
+            defaultChecked = false,
+            onReset = { settingsViewModel.setTopHeroCoverBorder(false) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Logo overlay",
+            description = "Game logo drawn over the bottom of the cover art.",
+            checked = settings.topHeroLogo,
+            onCheckedChange = settingsViewModel::setTopHeroLogo,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setTopHeroLogo(true) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Platform icon",
+            description = "Small platform icon beside the platform name on the library hero.",
+            checked = settings.topHeroPlatformIcon,
+            onCheckedChange = settingsViewModel::setTopHeroPlatformIcon,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setTopHeroPlatformIcon(true) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Platform name",
+            description = "Platform label under or beside the game title.",
+            checked = settings.topHeroPlatform,
+            onCheckedChange = settingsViewModel::setTopHeroPlatform,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setTopHeroPlatform(true) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Title",
+            description = "Game display name on the top screen.",
+            checked = settings.topHeroTitle,
+            onCheckedChange = settingsViewModel::setTopHeroTitle,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setTopHeroTitle(true) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Metadata line",
             description =
-                "Wait before dimming after gameplay starts. Lifts while you use the bottom screen; " +
-                    "fades back after the same idle time. 0 = immediate dim, stay lifted on interaction.",
-            value = settings.gameplayDimTimeoutSeconds,
-            onValueChange = settingsViewModel::setGameplayDimTimeoutSeconds,
-            range = 0..120,
-            step = 1,
-            valueLabel = { if (it == 0) "0 (immediate)" else "$it s" },
-            defaultValue = 10,
-            onReset = { settingsViewModel.setGameplayDimTimeoutSeconds(10) },
+                "Developer, year, genre, region, and age rating on the library hero; " +
+                    "full metadata panel on Info.",
+            checked = settings.topHeroMetadata,
+            onCheckedChange = settingsViewModel::setTopHeroMetadata,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setTopHeroMetadata(true) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Description",
+            description = "Game synopsis / description text.",
+            checked = settings.topHeroDescription,
+            onCheckedChange = settingsViewModel::setTopHeroDescription,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setTopHeroDescription(true) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Play stats",
+            description = "Play count on the library hero; plays and play time on Info.",
+            checked = settings.topHeroPlayStats,
+            onCheckedChange = settingsViewModel::setTopHeroPlayStats,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setTopHeroPlayStats(true) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Favorite badge",
+            description = "★ Favorite label on the Info / game detail hero.",
+            checked = settings.topHeroFavorite,
+            onCheckedChange = settingsViewModel::setTopHeroFavorite,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setTopHeroFavorite(true) },
+        )
+        SettingsGroupDivider()
+        SettingsToggleRow(
+            label = "Section hint",
+            description =
+                "Controller / navigation hint under the title on Info " +
+                    "(\"Launch, emulator… on the bottom screen\").",
+            checked = settings.topHeroSectionHint,
+            onCheckedChange = settingsViewModel::setTopHeroSectionHint,
+            defaultChecked = false,
+            onReset = { settingsViewModel.setTopHeroSectionHint(false) },
         )
     }
-    SettingsGroupDivider()
-    SettingsSectionBlurb(
-        "Show or hide individual pieces of the top-screen game preview " +
-            "(library focus and game Info).",
-    )
-    SettingsToggleRow(
-        label = "Backdrop / hero art",
-        description = "Full-bleed background image behind the cover and metadata.",
-        checked = settings.topHeroBackdrop,
-        onCheckedChange = settingsViewModel::setTopHeroBackdrop,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroBackdrop(true) },
-    )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Cover / box art",
-        description = "Box art, video preview, or initials placeholder on the left.",
-        checked = settings.topHeroCover,
-        onCheckedChange = settingsViewModel::setTopHeroCover,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroCover(true) },
-    )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Cover border",
-        description = "Show border around game cover.",
-        checked = settings.topHeroCoverBorder,
-        onCheckedChange = settingsViewModel::setTopHeroCoverBorder,
-        defaultChecked = false,
-        onReset = { settingsViewModel.setTopHeroCoverBorder(false) },
-    )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Logo overlay",
-        description = "Game logo drawn over the bottom of the cover art.",
-        checked = settings.topHeroLogo,
-        onCheckedChange = settingsViewModel::setTopHeroLogo,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroLogo(true) },
-    )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Platform icon",
-        description = "Small platform icon beside the platform name on the library hero.",
-        checked = settings.topHeroPlatformIcon,
-        onCheckedChange = settingsViewModel::setTopHeroPlatformIcon,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroPlatformIcon(true) },
-    )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Platform name",
-        description = "Platform label under or beside the game title.",
-        checked = settings.topHeroPlatform,
-        onCheckedChange = settingsViewModel::setTopHeroPlatform,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroPlatform(true) },
-    )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Title",
-        description = "Game display name on the top screen.",
-        checked = settings.topHeroTitle,
-        onCheckedChange = settingsViewModel::setTopHeroTitle,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroTitle(true) },
-    )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Metadata line",
-        description =
-            "Developer, year, genre, region, and age rating on the library hero; " +
-                "full metadata panel on Info.",
-        checked = settings.topHeroMetadata,
-        onCheckedChange = settingsViewModel::setTopHeroMetadata,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroMetadata(true) },
-    )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Description",
-        description = "Game synopsis / description text.",
-        checked = settings.topHeroDescription,
-        onCheckedChange = settingsViewModel::setTopHeroDescription,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroDescription(true) },
-    )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Play stats",
-        description = "Play count on the library hero; plays and play time on Info.",
-        checked = settings.topHeroPlayStats,
-        onCheckedChange = settingsViewModel::setTopHeroPlayStats,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroPlayStats(true) },
-    )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Favorite badge",
-        description = "★ Favorite label on the Info / game detail hero.",
-        checked = settings.topHeroFavorite,
-        onCheckedChange = settingsViewModel::setTopHeroFavorite,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setTopHeroFavorite(true) },
-    )
-    SettingsGroupDivider()
-    SettingsToggleRow(
-        label = "Section hint",
-        description =
-            "Controller / navigation hint under the title on Info " +
-                "(\"Launch, emulator… on the bottom screen\").",
-        checked = settings.topHeroSectionHint,
-        onCheckedChange = settingsViewModel::setTopHeroSectionHint,
-        defaultChecked = false,
-        onReset = { settingsViewModel.setTopHeroSectionHint(false) },
-    )
 }
 
 @Composable

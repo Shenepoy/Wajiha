@@ -115,7 +115,7 @@ fun SecondaryApp() {
 
         // Setup runs on the top screen — keep the bottom screen friendly
         if (!settings.onboardingDone) {
-            SecondarySetupWaiting()
+            SecondarySetupWaiting(singleScreen = settings.singleScreen)
             return@WajihaTheme
         }
 
@@ -507,6 +507,7 @@ fun SecondaryApp() {
                             onRemoveFromLibrary = viewModel::removeFromLibrary,
                             onDeleteGameFile = viewModel::deleteGameFile,
                             secondaryDisplayId = secondaryDisplayId,
+                            dualDisplay = true,
                             onOpenApps = { store.setSecondaryMode(SecondaryMode.AppDock) },
                             onOpenSettings = {
                                 viewModel.playOpen()
@@ -542,6 +543,7 @@ fun SecondaryApp() {
                                 store.setAppsHeroDetail(apps.size, app?.label)
                             },
                             secondaryDisplayId = secondaryDisplayId,
+                            dualDisplay = true,
                             gamepadOwner = GamepadOwner.Secondary,
                             onClaimGamepad = store::claimGamepad,
                         )
@@ -784,7 +786,7 @@ private fun currentTimeText(): String {
 
 /** Cocoon-style: quiet bottom screen while setup talks on the top display. */
 @Composable
-private fun SecondarySetupWaiting() {
+private fun SecondarySetupWaiting(singleScreen: Boolean = false) {
     Box(
         modifier =
             Modifier
@@ -797,13 +799,13 @@ private fun SecondarySetupWaiting() {
             modifier = Modifier.padding(32.dp),
         ) {
             Text(
-                text = "Bottom Screen",
+                text = if (singleScreen) "Main display only" else "Bottom Screen",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "Getting ready…",
+                text = if (singleScreen) "Unused in single-screen mode" else "Getting ready…",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground,
@@ -811,8 +813,13 @@ private fun SecondarySetupWaiting() {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text =
-                    "Finish the quick tour on the top screen.\n" +
-                        "Your library will land here when you're done.",
+                    if (singleScreen) {
+                        "Finish setup on the main display.\n" +
+                            "This panel is left to the system while Single screen is on."
+                    } else {
+                        "Finish the quick tour on the top screen.\n" +
+                            "Your library will land here when you're done."
+                    },
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

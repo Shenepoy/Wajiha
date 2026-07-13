@@ -60,6 +60,17 @@ Full controller support for handhelds: D-pad focus, A confirm, B back, layered m
 
 Button icons use **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** (CC0) by [Kenney](https://kenney.nl).
 
+### Library grid: touch scroll → D-pad
+
+After you **touch-scroll** the home library, the **first D-pad press** does not step from the old (now off-screen) selection. It **snaps** onto a top-row tile that is still meaningfully on-screen:
+
+- Snap side follows **where selection sat when the scroll began** (left half of the screen → leading / first visible; right half → trailing / last visible) — not which D-pad direction you pressed.
+- Only tiles that are **≥ ~50% on-screen** count; when possible the snap prefers a **fully** on-screen edge tile so focus does not land on a thin peek.
+- Further D-pad presses then move normally one tile at a time (selection-driven scroll, at most one column per step).
+- Tapping a tile clears the pending snap so the next D-pad press moves from that game instead.
+
+Lists / settings use a simpler “land on the topmost in-view row” snap after touch scroll. Details and caveats: [docs/gamepad.md](docs/gamepad.md#touch-scroll--d-pad-snap) (this flow may still get a polish pass).
+
 ## Game detail & platform settings
 
 - **Game detail** — per-game metadata, media, launch options, play history (`GameDetailScreen`)
@@ -94,7 +105,7 @@ Concurrent emulator sessions appear as grid tiles in the game library; tap to sw
 
 State machine (see `DualScreenStore`): `SingleDisplay`, `DualBrowsing`, `GameRunning`, `AppOnSecondary`, `BlackoutSecondary`.
 
-- While browsing: top = hero, bottom = game grid (roles swappable in Settings → Dual screen).
+- While browsing: top = hero, bottom = game grid (roles swappable in Settings → Screens; optional **Swap gamepad hints** moves the controller bar to the hero).
 - While a game runs: the other screen shows your chosen mode — Now Playing, Quick Settings, Running Apps, Achievements, Clock, or Off (blackout, also available as blackout-on-launch). Every non-grid mode has a header with tabs to switch modes or return to the grid; a blacked-out screen restores on tap. The App Dock mode reuses the app drawer for launching regular apps from the bottom screen.
 - A foreground `KeepAliveService` holds launcher state while an external game is up; returning to Wajiha closes the play session and records playtime.
 - On single-display devices everything collapses into a combined vertical 3DS-like layout.

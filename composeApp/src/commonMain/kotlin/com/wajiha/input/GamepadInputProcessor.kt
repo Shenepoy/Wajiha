@@ -9,6 +9,8 @@ import kotlin.time.Clock
  */
 class GamepadInputProcessor(
     private val repeatIntervalMs: Long = 120L,
+    /** D-pad hold-to-scroll cadence (higher = slower focus moves). */
+    private val dpadRepeatIntervalMs: Long = 130L, // 120L
     private val gracePeriodMs: Long = 250L,
 ) {
     private var lastKey: Key? = null
@@ -27,7 +29,8 @@ class GamepadInputProcessor(
         val now = Clock.System.now().toEpochMilliseconds()
         if (now - layerPushedAtMs < gracePeriodMs) return true
         if (type != KeyEventType.KeyDown) return false
-        if (key == lastKey && now - lastEventTimeMs < repeatIntervalMs) {
+        val interval = if (key in dpadKeys) dpadRepeatIntervalMs else repeatIntervalMs
+        if (key == lastKey && now - lastEventTimeMs < interval) {
             return true
         }
         lastKey = key
@@ -40,6 +43,14 @@ class GamepadInputProcessor(
         lastEventTimeMs = 0L
     }
 }
+
+private val dpadKeys =
+    setOf(
+        Key.DirectionUp,
+        Key.DirectionDown,
+        Key.DirectionLeft,
+        Key.DirectionRight,
+    )
 
 private fun isShoulderTabKey(key: Key): Boolean =
     key == Key.ButtonL1 ||

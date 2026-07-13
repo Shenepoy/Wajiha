@@ -280,6 +280,32 @@ class DualScreenStore {
     /** Seconds before dim applies and before re-dimming after idle (0 = immediate / stay lifted). */
     var gameplayDimTimeoutSeconds: Int = 10
 
+    /**
+     * Primary-only launcher (Settings → Screens → Single screen). When true,
+     * [state] stays [DualScreenState.SingleDisplay] even if hardware secondary exists.
+     */
+    @Volatile
+    var forceSingleScreen: Boolean = false
+        private set
+
+    /** True when UI should use dual layout roles (not forced single / no secondary). */
+    fun isDualLayout(): Boolean = _state.value != DualScreenState.SingleDisplay
+
+    /**
+     * Apply the Single screen pref. Re-evaluates display state from the last
+     * known secondary id so toggling does not require a display reconnect.
+     */
+    fun setForceSingleScreen(enabled: Boolean) {
+        if (forceSingleScreen == enabled) return
+        forceSingleScreen = enabled
+        WajihaLog.i(WajihaTags.DISPLAY, "forceSingleScreen=$enabled")
+        onDisplaysChanged(_secondaryDisplayId.value)
+        if (enabled) {
+            stickyGamepadOwner = null
+            recomputeGamepadOwner()
+        }
+    }
+
     // ---- Game session ([sessionCache] + featured [nowPlaying]) ----
     //
     // State machine:
@@ -301,8 +327,9 @@ class DualScreenStore {
         _secondaryDisplayId.value = secondaryDisplayId
         _state.update { current ->
             when {
-                secondaryDisplayId == null -> DualScreenState.SingleDisplay
+                forceSingleScreen || secondaryDisplayId == null -> DualScreenState.SingleDisplay
                 current == DualScreenState.SingleDisplay -> DualScreenState.DualBrowsing
+                current == DualScreenState.AppOnSecondary -> current
                 else -> current
             }
         }
@@ -310,12 +337,14 @@ class DualScreenStore {
         if (previous != next) {
             WajihaLog.i(
                 WajihaTags.DISPLAY,
-                "dualScreen: secondaryDisplayId=$secondaryDisplayId $previous→$next",
+                "dualScreen: secondaryDisplayId=$secondaryDisplayId " +
+                    "forceSingle=$forceSingleScreen $previous→$next",
             )
         } else {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
-                "dualScreen: secondaryDisplayId=$secondaryDisplayId state=$next",
+                "dualScreen: secondaryDisplayId=$secondaryDisplayId " +
+                    "forceSingle=$forceSingleScreen state=$next",
             )
         }
         recomputeGamepadOwner()
@@ -432,7 +461,7 @@ class DualScreenStore {
         if (sessionCache.isEmpty()) {
             _nowPlaying.value = null
             _topDisplayForegroundPackage.value = null
-            if (_state.value != DualScreenState.SingleDisplay) {
+            if (_state.value != DualScreenState.SingleDisplay && !forceSingleScreen) {
                 _state.value = DualScreenState.DualBrowsing
                 _secondaryMode.value = SecondaryMode.GameGrid
             }

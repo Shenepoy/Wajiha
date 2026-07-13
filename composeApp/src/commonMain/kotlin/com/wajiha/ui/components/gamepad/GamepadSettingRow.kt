@@ -160,6 +160,8 @@ fun GamepadSettingRow(
     val feedback = LocalUiFeedback.current
     val canReset = onReset != null && !isAtDefault
     val stackedChoices = type == SettingType.BinaryChoice && options.size > 3
+    val localFocusRequester = remember { FocusRequester() }
+    val resolvedFocusRequester = focusRequester ?: localFocusRequester
 
     fun adjustNumber(delta: Int) {
         val changer = onNumberChange ?: return
@@ -219,7 +221,8 @@ fun GamepadSettingRow(
         Modifier
             .clip(WajihaShapes.focus)
             .wajihaFocusIndicator(highlighted = highlight)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusRequester(resolvedFocusRequester)
+            .reportSectionVisibleFocus(resolvedFocusRequester)
             .then(
                 if (!useCustomNav) {
                     Modifier
@@ -461,6 +464,7 @@ private fun MultiChoiceSettingRow(
                     .clip(WajihaShapes.focus)
                     .wajihaFocusIndicator(highlighted = headerHighlight)
                     .focusRequester(headerFocusRequester)
+                    .reportSectionVisibleFocus(headerFocusRequester)
                     .then(
                         if (!useCustomNav) {
                             Modifier

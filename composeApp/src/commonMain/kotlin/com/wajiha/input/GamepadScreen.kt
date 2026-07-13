@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
@@ -36,6 +37,12 @@ import com.wajiha.ui.theme.rememberInputModeController
  * [onPreviewKey] is registered on [GamepadLayers] for focus-independent dispatch
  * (Android activity bridge) and mirrored on [onPreviewKeyEvent] when the focus
  * tree tunnels through this root — no root focus target (that would steal indicators).
+ *
+ * The layer [DisposableEffect] keys only on [layerId]. Preview handlers are kept
+ * fresh via [rememberUpdatedState] so BottomScreen recompositions (common on the
+ * secondary display) do not re-push the layer, re-arm the input grace period, or
+ * climb above an open context-menu layer — which previously ate D-pad/A and made
+ * the game context menu appear dead after X opened it.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -52,10 +59,14 @@ fun GamepadScreen(
     val processor = remember { GamepadInputProcessor() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val latestPreviewKey = rememberUpdatedState(onPreviewKey)
 
-    DisposableEffect(layerId, onPreviewKey) {
+    DisposableEffect(layerId) {
+        val handler: (KeyEvent) -> Boolean = { event ->
+            latestPreviewKey.value?.invoke(event) == true
+        }
         GamepadLayers.stack.push(layerId)
-        GamepadLayers.stack.setPreviewHandler(layerId, onPreviewKey)
+        GamepadLayers.stack.setPreviewHandler(layerId, handler)
         processor.onLayerPushed()
         onDispose {
             GamepadLayers.stack.setPreviewHandler(layerId, null)
@@ -117,7 +128,14 @@ fun GamepadScreen(
                             onClaimGamepad(owner)
                         }
                         // Screen handlers (L1/R1 tab cycle, X, etc.) before grace/repeat throttle.
-                        if (onPreviewKey?.invoke(event) == true) return@onPreviewKeyEvent true
+                        if (latestPreviewKey.value?.invoke(event) == true) {
+                            return@onPreviewKeyEvent true
+                        }
+                        // Modal layers (context menu, dialogs) sit above this screen in
+                        // [GamepadLayers]; do not grace/throttle-steal keys from them.
+                        if (GamepadLayers.stack.topLayer != layerId) {
+                            return@onPreviewKeyEvent false
+                        }
                         processor.shouldConsume(event.type, event.key)
                     },
         ) {

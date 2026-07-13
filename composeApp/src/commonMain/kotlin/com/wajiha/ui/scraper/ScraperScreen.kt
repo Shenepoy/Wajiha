@@ -90,6 +90,7 @@ import com.wajiha.ui.components.gamepad.GamepadSettingRow
 import com.wajiha.ui.components.gamepad.MultiChoiceOption
 import com.wajiha.ui.components.gamepad.SettingType
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
+import com.wajiha.ui.components.gamepad.withoutDualScreenChrome
 import com.wajiha.ui.scraper.review.ScrapeReviewPicker
 import com.wajiha.ui.scraper.review.ScrapeReviewViewModel
 import com.wajiha.ui.theme.WajihaShapes
@@ -108,6 +109,9 @@ fun ScraperScreen(
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
 ) {
+    val dualStore = koinInject<DualScreenStore>()
+    val screenState by dualStore.state.collectAsState()
+    val isDual = screenState != DualScreenState.SingleDisplay
     val navController =
         rememberGamepadNavController(
             mode = GamepadNavMode.Vertical,
@@ -126,7 +130,7 @@ fun ScraperScreen(
                 GamepadHint(GamepadHintButton.A, "Confirm"),
                 GamepadHint(GamepadHintButton.B, "Back"),
                 GamepadHint(GamepadHintButton.L2, "Focus screen"),
-            ),
+            ).withoutDualScreenChrome(isDual),
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onOwnerGainedFocus = {

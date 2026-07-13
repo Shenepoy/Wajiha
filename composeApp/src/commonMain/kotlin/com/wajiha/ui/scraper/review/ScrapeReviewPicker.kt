@@ -77,6 +77,7 @@ import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadOverlayLayer
+import com.wajiha.input.MirroredOrLocalGamepadActionBar
 import com.wajiha.input.RememberGamepadOwnerFocus
 import com.wajiha.input.dismissKeyboardOnOutsideTap
 import com.wajiha.input.dismissTextEdit
@@ -86,10 +87,10 @@ import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.CriticalChangeActions
 import com.wajiha.ui.components.WajihaLoadingState
-import com.wajiha.ui.components.gamepad.GamepadActionBar
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadSafeTextField
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
+import com.wajiha.ui.components.gamepad.withoutDualScreenChrome
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
@@ -469,7 +470,9 @@ fun ScrapeReviewPicker(
                         )
                     }
 
-                    GamepadActionBar(
+                    MirroredOrLocalGamepadActionBar(
+                        publisherId = "scrape_review",
+                        hostOwner = menuOwner,
                         hints =
                             when {
                                 showPickerHere -> {
@@ -481,7 +484,7 @@ fun ScrapeReviewPicker(
                                             GamepadHintButton.Select,
                                             if (searchOpen) "Go" else "Search",
                                         ),
-                                    )
+                                    ).withoutDualScreenChrome(dualDisplay)
                                 }
 
                                 dualDisplay && inPicker -> {
@@ -508,7 +511,7 @@ fun ScrapeReviewPicker(
                                             GamepadHintButton.Select,
                                             if (searchOpen) "Go" else "Search",
                                         ),
-                                    )
+                                    ).withoutDualScreenChrome(dualDisplay)
                                 }
                             },
                     )

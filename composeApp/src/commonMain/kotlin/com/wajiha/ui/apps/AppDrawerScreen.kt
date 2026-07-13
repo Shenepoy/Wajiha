@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,6 +25,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,9 +49,13 @@ import com.wajiha.platform.LaunchableApp
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.gamepad.GamepadTile
+import com.wajiha.ui.components.gamepad.hasCenterInViewport
+import com.wajiha.ui.theme.InputMode
+import com.wajiha.ui.theme.LocalInputMode
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 
 /** App drawer: same NeoStation select/confirm model as game tiles. */
 @Composable
@@ -62,6 +68,7 @@ fun AppDrawerScreen(
     onBack: () -> Unit,
     onFocusChange: (LaunchableApp?) -> Unit = {},
     secondaryDisplayId: Int? = null,
+    dualDisplay: Boolean = false,
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -78,10 +85,42 @@ fun AppDrawerScreen(
     var restoreFocusPackage by remember { mutableStateOf<String?>(null) }
     val menuOpen = contextMenuTarget != null
     val bottomDisplayId = secondaryDisplayId ?: 4
+    val gridState = rememberLazyGridState()
+    val inputMode = LocalInputMode.current
+    var pendingViewportSnap by remember { mutableStateOf(false) }
 
     LaunchedEffect(apps.size, selectedPackage) {
         val focused = apps.firstOrNull { it.packageName == selectedPackage }
         onFocusChange(focused)
+    }
+
+    LaunchedEffect(gridState, inputMode) {
+        snapshotFlow {
+            gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset
+        }.drop(1)
+            .collect {
+                if (inputMode == InputMode.Touch) {
+                    pendingViewportSnap = true
+                }
+            }
+    }
+
+    fun snapFocusToTopVisible(): Boolean {
+        val layoutInfo = gridState.layoutInfo
+        val firstVisible =
+            layoutInfo.visibleItemsInfo
+                .filter { it.hasCenterInViewport(layoutInfo, horizontalScroll = false) }
+                .minWithOrNull(compareBy({ it.row }, { it.column }))
+                ?: return false
+        val pkg = firstVisible.key as? String ?: return false
+        val app = apps.firstOrNull { it.packageName == pkg } ?: return false
+        selectedPackage = pkg
+        onFocusChange(app)
+        try {
+            tileFocusRequesters[pkg]?.requestFocus()
+        } catch (_: Exception) {
+        }
+        return true
     }
 
     fun openContextMenu(packageName: String) {
@@ -108,16 +147,20 @@ fun AppDrawerScreen(
     }
 
     val gamepadHints =
-        remember(menuOpen) {
+        remember(menuOpen, dualDisplay) {
             buildList {
                 if (menuOpen) {
                     add(GamepadHint(GamepadHintButton.B, "Back"))
                 } else {
                     add(GamepadHint(GamepadHintButton.A, "Open app"))
-                    add(GamepadHint(GamepadHintButton.Y, "Bottom screen"))
+                    if (dualDisplay) {
+                        add(GamepadHint(GamepadHintButton.Y, "Bottom screen"))
+                    }
                     add(GamepadHint(GamepadHintButton.X, "Menu"))
                     add(GamepadHint(GamepadHintButton.B, "Back"))
-                    add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+                    if (dualDisplay) {
+                        add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+                    }
                 }
             }
         }
@@ -141,12 +184,25 @@ fun AppDrawerScreen(
             if (menuOpen) return@WajihaScreen false
             val pkg = selectedPackage
             when {
+                pendingViewportSnap &&
+                    (
+                        GamepadKeys.isUp(event.type, event.key) ||
+                            GamepadKeys.isDown(event.type, event.key) ||
+                            GamepadKeys.isLeft(event.type, event.key) ||
+                            GamepadKeys.isRight(event.type, event.key)
+                    ) -> {
+                    // Land on the top in-view tile only — next press moves.
+                    pendingViewportSnap = false
+                    snapFocusToTopVisible()
+                    true
+                }
+
                 GamepadKeys.isX(event.type, event.key) && pkg != null -> {
                     openContextMenu(pkg)
                     true
                 }
 
-                GamepadKeys.isY(event.type, event.key) && pkg != null -> {
+                GamepadKeys.isY(event.type, event.key) && dualDisplay && pkg != null -> {
                     WajihaLog.i(
                         WajihaTags.LAUNCH,
                         "appDrawer: Y launches pkg=$pkg on displayId=$bottomDisplayId",
@@ -201,6 +257,7 @@ fun AppDrawerScreen(
                 }
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(WajihaSpacing.touchMin + WajihaSpacing.xl + WajihaSpacing.sm),
+                    state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(WajihaSpacing.sm + WajihaSpacing.xs),
                     horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),

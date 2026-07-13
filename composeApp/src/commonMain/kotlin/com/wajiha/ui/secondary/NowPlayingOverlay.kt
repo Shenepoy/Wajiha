@@ -48,21 +48,28 @@ fun NowPlayingOverlay(
     store: DualScreenStore,
     modifier: Modifier = Modifier,
     hiddenByGameplayDim: Boolean = false,
+    onOpenNowPlaying: (() -> Unit)? = null,
 ) {
     val nowPlaying by store.nowPlayingUiState.collectAsState()
     val mode by store.secondaryMode.collectAsState()
 
     val show =
         nowPlaying != null &&
-            shouldShowNowPlayingOverlay(mode) &&
             store.nowPlayingDisplay.showsFloatingChip &&
-            !hiddenByGameplayDim
+            !hiddenByGameplayDim &&
+            (onOpenNowPlaying != null || shouldShowNowPlayingOverlay(mode))
     if (!show) return
 
     key(nowPlaying!!.packageName) {
         NowPlayingOverlayChip(
             state = nowPlaying!!,
-            onClick = { store.setSecondaryMode(SecondaryMode.NowPlaying) },
+            onClick = {
+                if (onOpenNowPlaying != null) {
+                    onOpenNowPlaying()
+                } else {
+                    store.setSecondaryMode(SecondaryMode.NowPlaying)
+                }
+            },
             modifier = modifier,
         )
     }

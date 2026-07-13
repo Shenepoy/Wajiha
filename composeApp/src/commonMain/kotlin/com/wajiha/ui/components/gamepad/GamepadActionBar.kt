@@ -46,15 +46,19 @@ val GamepadActionBarHeight = 36.dp
 
 private val GlyphSize = 20.dp
 
-fun defaultGamepadHints(): List<GamepadHint> =
-    listOf(
-        GamepadHint(GamepadHintButton.A, "Confirm"),
-        GamepadHint(GamepadHintButton.B, "Back"),
-        GamepadHint(GamepadHintButton.L1R1, "Section"),
-        GamepadHint(GamepadHintButton.L2, "Focus screen"),
-        GamepadHint(GamepadHintButton.R2, "Notifications"),
-        GamepadHint(GamepadHintButton.Select, "Swap screens"),
-    )
+fun defaultGamepadHints(isDual: Boolean = true): List<GamepadHint> =
+    buildList {
+        add(GamepadHint(GamepadHintButton.A, "Confirm"))
+        add(GamepadHint(GamepadHintButton.B, "Back"))
+        add(GamepadHint(GamepadHintButton.L1R1, "Section"))
+        if (isDual) {
+            add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+        }
+        add(GamepadHint(GamepadHintButton.R2, "Notifications"))
+        if (isDual) {
+            add(GamepadHint(GamepadHintButton.Select, "Swap screens"))
+        }
+    }
 
 val quickSettingsGamepadHints: List<GamepadHint> =
     listOf(
@@ -73,23 +77,39 @@ val achievementsGamepadHints: List<GamepadHint> =
         GamepadHint(GamepadHintButton.B, "Back"),
     )
 
-val settingsGamepadHints: List<GamepadHint> =
-    listOf(
-        GamepadHint(GamepadHintButton.A, "Select/Toggle"),
-        GamepadHint(GamepadHintButton.B, "Back"),
-        GamepadHint(GamepadHintButton.Y, "Reset"),
-        GamepadHint(GamepadHintButton.L1R1, "Section"),
-        GamepadHint(GamepadHintButton.L2, "Focus screen"),
-    )
+fun settingsGamepadHints(isDual: Boolean = true): List<GamepadHint> =
+    buildList {
+        add(GamepadHint(GamepadHintButton.A, "Select/Toggle"))
+        add(GamepadHint(GamepadHintButton.B, "Back"))
+        add(GamepadHint(GamepadHintButton.Y, "Reset"))
+        add(GamepadHint(GamepadHintButton.L1R1, "Section"))
+        if (isDual) {
+            add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+        }
+    }
 
-val gameDetailGamepadHints: List<GamepadHint> =
-    listOf(
-        GamepadHint(GamepadHintButton.A, "Select/Launch"),
-        GamepadHint(GamepadHintButton.B, "Back"),
-        GamepadHint(GamepadHintButton.Y, "Reset"),
-        GamepadHint(GamepadHintButton.L1R1, "Tab"),
-        GamepadHint(GamepadHintButton.L2, "Focus screen"),
-    )
+fun gameDetailGamepadHints(isDual: Boolean = true): List<GamepadHint> =
+    buildList {
+        add(GamepadHint(GamepadHintButton.A, "Select/Launch"))
+        add(GamepadHint(GamepadHintButton.B, "Back"))
+        add(GamepadHint(GamepadHintButton.Y, "Reset"))
+        add(GamepadHint(GamepadHintButton.L1R1, "Tab"))
+        if (isDual) {
+            add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+        }
+    }
+
+/** Drop L2 Focus / SELECT Swap hints when not in dual layout. */
+fun List<GamepadHint>.withoutDualScreenChrome(isDual: Boolean): List<GamepadHint> {
+    if (isDual) return this
+    return filterNot { hint ->
+        hint.button == GamepadHintButton.L2 ||
+            (
+                hint.button == GamepadHintButton.Select &&
+                    hint.action.contains("Swap", ignoreCase = true)
+            )
+    }
+}
 
 val secondaryModeTabGamepadHints: List<GamepadHint> =
     listOf(

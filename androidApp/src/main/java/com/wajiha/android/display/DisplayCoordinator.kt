@@ -105,7 +105,9 @@ class DisplayCoordinator(
         )
         // HOME on the bottom display can land CATEGORY_HOME on MainActivity;
         // reclaim SecondaryHome on this display before hopping primary.
-        if (from.intent?.hasCategory(Intent.CATEGORY_HOME) == true) {
+        if (from.intent?.hasCategory(Intent.CATEGORY_HOME) == true &&
+            !store.forceSingleScreen
+        ) {
             launchSecondaryHomeOn(currentDisplayId, reclaim = true)
         }
         launchPrimaryMain(from)
@@ -223,6 +225,10 @@ class DisplayCoordinator(
 
     /** Delay secondary launch until primary has claimed display-0 focus. */
     fun scheduleSecondaryHome(main: MainActivity) {
+        if (store.forceSingleScreen) {
+            WajihaLog.d(WajihaTags.DISPLAY, "scheduleSecondaryHome: skip — forceSingleScreen")
+            return
+        }
         restorePrimaryHero(main)
         mainHandler.postDelayed({
             ensureSecondaryHome()
@@ -239,6 +245,10 @@ class DisplayCoordinator(
         displayId: Int? = null,
         delayMs: Long = 0,
     ) {
+        if (store.forceSingleScreen) {
+            WajihaLog.d(WajihaTags.DISPLAY, "scheduleSecondaryHomeReclaim: skip — forceSingleScreen")
+            return
+        }
         val targetDisplayId = displayId ?: secondaryDisplay()?.displayId ?: return
         if (delayMs <= 0L) {
             reclaimRunnable?.let { mainHandler.removeCallbacks(it) }
@@ -260,6 +270,10 @@ class DisplayCoordinator(
      * [SecondaryHomeActivity] is resumed on the target display again.
      */
     fun beginFastSecondaryReclaim(displayId: Int) {
+        if (store.forceSingleScreen) {
+            WajihaLog.d(WajihaTags.DISPLAY, "beginFastSecondaryReclaim: skip — forceSingleScreen")
+            return
+        }
         if (store.state.value == DualScreenState.AppOnSecondary) return
         if (shouldDeferReclaimForMemoryGuard()) {
             WajihaLog.d(
@@ -383,6 +397,13 @@ class DisplayCoordinator(
         displayId: Int,
         launchIfNeeded: Boolean = true,
     ) {
+        if (store.forceSingleScreen) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "reclaimSecondaryHomeOnDisplay: skip — forceSingleScreen",
+            )
+            return
+        }
         if (shouldDeferReclaimForMemoryGuard()) {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
@@ -458,6 +479,10 @@ class DisplayCoordinator(
                         secondaryWatchdogRunning = false
                         return
                     }
+                    if (store.forceSingleScreen) {
+                        mainHandler.postDelayed(this, WATCHDOG_INTERVAL_MS)
+                        return
+                    }
                     if (store.state.value != DualScreenState.AppOnSecondary) {
                         if (shouldDeferReclaimForMemoryGuard()) {
                             mainHandler.postDelayed(this, WATCHDOG_INTERVAL_MS)
@@ -490,6 +515,10 @@ class DisplayCoordinator(
      * Safe to call from MainActivity / SecondaryHomeActivity onResume.
      */
     fun ensureSecondaryHome() {
+        if (store.forceSingleScreen) {
+            WajihaLog.d(WajihaTags.DISPLAY, "ensureSecondaryHome: skip — forceSingleScreen")
+            return
+        }
         val display = secondaryDisplay()
         if (display == null) {
             WajihaLog.d(WajihaTags.DISPLAY, "ensureSecondaryHome: no secondary display")
@@ -519,6 +548,10 @@ class DisplayCoordinator(
         displayId: Int,
         reclaim: Boolean = false,
     ) {
+        if (store.forceSingleScreen) {
+            WajihaLog.d(WajihaTags.DISPLAY, "launchSecondaryHomeOn: skip — forceSingleScreen")
+            return
+        }
         var flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
         if (reclaim) {
             flags = flags or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
@@ -550,6 +583,30 @@ class DisplayCoordinator(
                 WajihaTags.DISPLAY,
                 "launchSecondaryHomeOn: failed on displayId=$displayId — ${e.message}",
             )
+        }
+    }
+
+    /**
+     * Tear down SecondaryHome when Single screen is enabled. Stops reclaim loops
+     * and finishes any live secondary activity (including system SECONDARY_HOME starts).
+     */
+    fun dismissSecondaryHome() {
+        WajihaLog.i(WajihaTags.DISPLAY, "dismissSecondaryHome")
+        stopFastSecondaryReclaim()
+        reclaimRunnable?.let { mainHandler.removeCallbacks(it) }
+        reclaimRunnable = null
+        SecondaryHomeActivity.finishIfRunning()
+    }
+
+    /** Apply Single screen pref transitions from [WajihaApplication] settings mirror. */
+    fun onForceSingleScreenChanged(enabled: Boolean) {
+        if (enabled) {
+            dismissSecondaryHome()
+        } else if (secondaryDisplay() != null) {
+            refresh()
+            ensureSecondaryHome()
+        } else {
+            refresh()
         }
     }
 
@@ -595,7 +652,9 @@ class DisplayCoordinator(
         val options = ActivityOptions.makeBasic().setLaunchDisplayId(displayId)
         return try {
             context.startActivity(launchIntent, options.toBundle())
-            if (displayId != Display.DEFAULT_DISPLAY) store.onAppSentToSecondary()
+            if (displayId != Display.DEFAULT_DISPLAY && !store.forceSingleScreen) {
+                store.onAppSentToSecondary()
+            }
             true
         } catch (_: Exception) {
             false

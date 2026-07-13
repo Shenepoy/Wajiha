@@ -38,6 +38,7 @@ import com.wajiha.ui.components.gamepad.quickSettingsGamepadHints
 import com.wajiha.ui.components.rememberWajihaSnackbarHostState
 import com.wajiha.ui.gamedetail.GameDetailScreen
 import com.wajiha.ui.home.BottomScreen
+import com.wajiha.ui.home.HomeChromeBar
 import com.wajiha.ui.home.HomeViewModel
 import com.wajiha.ui.home.TopScreen
 import com.wajiha.ui.navigation.LauncherHeroPane
@@ -48,7 +49,9 @@ import com.wajiha.ui.navigation.menuOnPrimary
 import com.wajiha.ui.onboarding.OnboardingScreen
 import com.wajiha.ui.scraper.ScraperScreen
 import com.wajiha.ui.scraper.ScraperViewModel
+import com.wajiha.ui.secondary.NowPlayingOverlay
 import com.wajiha.ui.secondary.NowPlayingPanel
+import com.wajiha.ui.secondary.nowPlayingOverlayPlacement
 import com.wajiha.ui.secondary.rememberOpenSession
 import com.wajiha.ui.settings.PlatformPickerScreen
 import com.wajiha.ui.settings.PlatformSettingsScreen
@@ -260,6 +263,13 @@ fun App() {
                 onRemoveFromLibrary = viewModel::removeFromLibrary,
                 onDeleteGameFile = viewModel::deleteGameFile,
                 secondaryDisplayId = secondaryDisplayId,
+                dualDisplay = isDual,
+                showHeaderChrome = isDual || !settings.showHeroBanner,
+                focusedGameTitle =
+                    focusedTile
+                        ?.game
+                        ?.displayName
+                        ?.takeIf { !isDual && settings.showSelectedGameName },
                 onOpenApps = {
                     viewModel.playOpen()
                     route = Route.Apps
@@ -376,6 +386,7 @@ fun App() {
                                 dualStore.setAppsHeroDetail(apps.size, app?.label)
                             },
                             secondaryDisplayId = secondaryDisplayId,
+                            dualDisplay = isDual,
                             gamepadOwner = GamepadOwner.Primary,
                             onClaimGamepad = dualStore::claimGamepad,
                         )
@@ -495,8 +506,12 @@ fun App() {
                             },
                             showActionBar = true,
                             gamepadHints =
-                                quickSettingsGamepadHints +
-                                    GamepadHint(GamepadHintButton.L2, "Focus screen"),
+                                if (isDual) {
+                                    quickSettingsGamepadHints +
+                                        GamepadHint(GamepadHintButton.L2, "Focus screen")
+                                } else {
+                                    quickSettingsGamepadHints
+                                },
                             gamepadOwner = GamepadOwner.Primary,
                             onClaimGamepad = dualStore::claimGamepad,
                             onOwnerGainedFocus = { systemFocus.requestContentFocus() },
@@ -528,10 +543,12 @@ fun App() {
                             layerId = "now_running",
                             showActionBar = true,
                             gamepadHints =
-                                listOf(
-                                    GamepadHint(GamepadHintButton.B, "Back"),
-                                    GamepadHint(GamepadHintButton.L2, "Focus screen"),
-                                ),
+                                buildList {
+                                    add(GamepadHint(GamepadHintButton.B, "Back"))
+                                    if (isDual) {
+                                        add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+                                    }
+                                },
                             gamepadOwner = GamepadOwner.Primary,
                             onClaimGamepad = dualStore::claimGamepad,
                             onOwnerGainedFocus = { nowRunningFocus.requestContentFocus() },
@@ -560,16 +577,38 @@ fun App() {
                     Route.Home -> {
                         if (isDual) {
                             sessionGridParams(Modifier.fillMaxSize())
-                        } else {
+                        } else if (settings.showHeroBanner) {
                             Column(modifier = Modifier.fillMaxSize()) {
-                                TopScreen(
-                                    focused = focusedTile,
-                                    platformName = platformName,
-                                    heroContext = heroContext,
-                                    modifier = Modifier.fillMaxWidth().weight(0.42f),
-                                )
+                                Box(modifier = Modifier.fillMaxWidth().weight(0.42f)) {
+                                    TopScreen(
+                                        focused = focusedTile,
+                                        platformName = platformName,
+                                        heroContext = heroContext,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                    HomeChromeBar(
+                                        state = state,
+                                        onSelectPlatform = viewModel::selectPlatform,
+                                        onOpenApps = {
+                                            viewModel.playOpen()
+                                            route = Route.Apps
+                                        },
+                                        onOpenSettings = {
+                                            viewModel.playOpen()
+                                            route = Route.Settings
+                                        },
+                                        onOpenSystem = {
+                                            viewModel.playOpen()
+                                            route = Route.System
+                                        },
+                                        overlayOnHero = true,
+                                        modifier = Modifier.align(Alignment.BottomCenter),
+                                    )
+                                }
                                 sessionGridParams(Modifier.fillMaxWidth().weight(0.58f))
                             }
+                        } else {
+                            sessionGridParams(Modifier.fillMaxSize())
                         }
                     }
                 }
@@ -588,6 +627,16 @@ fun App() {
                 hostState = snackbarHostState,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
+            if (!isDual && route == Route.Home && primaryShowsMenu) {
+                NowPlayingOverlay(
+                    store = dualStore,
+                    modifier = nowPlayingOverlayPlacement(),
+                    onOpenNowPlaying = {
+                        viewModel.playOpen()
+                        route = Route.NowRunning
+                    },
+                )
+            }
         }
     }
 }

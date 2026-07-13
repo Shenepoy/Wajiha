@@ -62,7 +62,7 @@ flowchart LR
 - **Floating chip** — `NowPlayingOverlay` when `nowPlayingDisplay` includes chip mode
 - **Now Running** — full panel (`NowPlayingPanel`) on single-display or via navigation request
 
-Settings → Dual screen controls chip vs grid vs both (`NowPlayingDisplayMode`).
+Settings → Screens controls chip vs grid vs both (`NowPlayingDisplayMode`).
 
 ## Playtime persistence
 

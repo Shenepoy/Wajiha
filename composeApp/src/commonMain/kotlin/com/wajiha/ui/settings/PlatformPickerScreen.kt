@@ -23,12 +23,16 @@ import com.wajiha.input.GamepadNavHost
 import com.wajiha.input.GamepadNavItem
 import com.wajiha.input.GamepadNavMode
 import com.wajiha.input.rememberGamepadNavController
+import com.wajiha.state.DualScreenState
+import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadList
 import com.wajiha.ui.components.gamepad.GamepadSearchField
+import com.wajiha.ui.components.gamepad.withoutDualScreenChrome
 import com.wajiha.ui.theme.WajihaSpacing
+import org.koin.compose.koinInject
 
 /**
  * Searchable catalog of all known platforms (Daijishō / iiSU index style).
@@ -44,6 +48,9 @@ fun PlatformPickerScreen(
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
 ) {
+    val dualStore = koinInject<DualScreenStore>()
+    val screenState by dualStore.state.collectAsState()
+    val isDual = screenState != DualScreenState.SingleDisplay
     val allPlatforms by settingsViewModel.allPlatforms.collectAsState()
     val folders by settingsViewModel.folders.collectAsState()
     val inUseIds =
@@ -90,7 +97,7 @@ fun PlatformPickerScreen(
                 GamepadHint(GamepadHintButton.B, "Back"),
                 GamepadHint(GamepadHintButton.L2, "Focus screen"),
                 GamepadHint(GamepadHintButton.A, "Edit search"),
-            ),
+            ).withoutDualScreenChrome(isDual),
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onOwnerGainedFocus = {

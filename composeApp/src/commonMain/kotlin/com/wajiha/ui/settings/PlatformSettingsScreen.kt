@@ -106,6 +106,9 @@ fun PlatformSettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val platform = state.platform
     val systemControls = koinInject<SystemControls>()
+    val dualStore = koinInject<DualScreenStore>()
+    val screenState by dualStore.state.collectAsState()
+    val dualDisplay = screenState != DualScreenState.SingleDisplay
     val feedback = LocalUiFeedback.current
 
     val tabs = PlatformSettingsTab.entries
@@ -131,7 +134,7 @@ fun PlatformSettingsScreen(
         modifier = modifier,
         onBack = onBack,
         showActionBar = true,
-        gamepadHints = gameDetailGamepadHints,
+        gamepadHints = gameDetailGamepadHints(isDual = dualDisplay),
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onOwnerGainedFocus = { sectionFocus.requestContentFocus() },

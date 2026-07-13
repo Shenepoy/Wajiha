@@ -71,6 +71,7 @@ class SettingsViewModel(
                 dualScreenStore.gameDimOnlyOnNowPlaying = s.gameDimOnlyOnNowPlaying
                 dualScreenStore.gameDimPercent = s.gameDimPercent
                 dualScreenStore.gameplayDimTimeoutSeconds = s.gameplayDimTimeoutSeconds
+                dualScreenStore.setForceSingleScreen(s.singleScreen)
             }.launchIn(viewModelScope)
     }
 
@@ -126,8 +127,24 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.setGridRows(rows) }
     }
 
+    fun setSingleScreen(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setSingleScreen(value) }
+    }
+
+    fun setShowHeroBanner(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setShowHeroBanner(value) }
+    }
+
+    fun setShowSelectedGameName(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setShowSelectedGameName(value) }
+    }
+
     fun setSwapScreenRoles(value: Boolean) {
         viewModelScope.launch { settingsRepository.setSwapScreenRoles(value) }
+    }
+
+    fun setSwapGamepadHints(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setSwapGamepadHints(value) }
     }
 
     fun setTheme(theme: String) {

@@ -1,0 +1,14 @@
+---
+description: Always install and launch Wajiha on Thor after Android/UI changes
+alwaysApply: true
+---
+
+# Install on Thor after changes
+
+After any change that affects the Android app or shared Compose UI (not docs-only / read-only answers):
+
+1. `./gradlew :androidApp:assembleDebug`
+2. Install on Thor: `adb -s 10.0.0.174:5555 install -r -d androidApp/build/outputs/apk/debug/androidApp-debug.apk`
+3. Force-stop and launch: `adb -s 10.0.0.174:5555 shell am force-stop com.wajiha` then `am start -n com.wajiha/.android.MainActivity`
+
+Do this every time without waiting to be asked. Do not treat “never run project” as blocking install/launch on device.

@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -60,6 +61,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -80,6 +82,8 @@ import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadLayers
 import com.wajiha.input.GamepadTextEditRegistry
 import com.wajiha.input.wajihaGamepadFocus
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaTags
 import com.wajiha.ui.components.WajihaDialog
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
 import com.wajiha.ui.theme.GamepadFocusChromeScope
@@ -114,6 +118,50 @@ private enum class ContextMenuFocusZone {
     OpenNested,
     DeleteNested,
 }
+
+/** Logical menu rows for focus-independent (bridge) navigation. */
+private enum class MenuNavId {
+    Open,
+    TopLaunch,
+    BottomLaunch,
+    Info,
+    Delete,
+    RemoveLib,
+    DeleteFile,
+}
+
+private fun menuNavItems(
+    openExpanded: Boolean,
+    deleteExpanded: Boolean,
+    dualDisplay: Boolean,
+): List<MenuNavId> =
+    buildList {
+        add(MenuNavId.Open)
+        if (openExpanded) {
+            add(MenuNavId.TopLaunch)
+            if (dualDisplay) add(MenuNavId.BottomLaunch)
+        }
+        add(MenuNavId.Info)
+        add(MenuNavId.Delete)
+        if (deleteExpanded) {
+            add(MenuNavId.RemoveLib)
+            add(MenuNavId.DeleteFile)
+        }
+    }
+
+private fun MenuNavId.toFocusZone(): ContextMenuFocusZone =
+    when (this) {
+        MenuNavId.Open -> ContextMenuFocusZone.Open
+        MenuNavId.TopLaunch,
+        MenuNavId.BottomLaunch,
+        -> ContextMenuFocusZone.OpenNested
+
+        MenuNavId.Info -> ContextMenuFocusZone.Info
+        MenuNavId.Delete -> ContextMenuFocusZone.Delete
+        MenuNavId.RemoveLib,
+        MenuNavId.DeleteFile,
+        -> ContextMenuFocusZone.DeleteNested
+    }
 
 /**
  * Picks a popover side from tile bounds and screen size.
@@ -298,9 +346,12 @@ private fun ContextMenuRow(
     expanded: Boolean = false,
     shortcutHint: String? = null,
     focusRequester: FocusRequester? = null,
+    /** Bridge/nav highlight when Compose focus cannot attach (secondary display). */
+    forceHighlight: Boolean = false,
     onFocusGained: () -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
+    val highlighted = focused || forceHighlight
     val rowHeight = if (nested) ContextMenuNestedRowHeight else ContextMenuRowHeight
     val startPad =
         when {
@@ -326,7 +377,7 @@ private fun ContextMenuRow(
                 .fillMaxWidth()
                 .defaultMinSize(minHeight = rowHeight)
                 .clip(WajihaShapes.focus)
-                .wajihaFocusIndicator(highlighted = focused, shape = WajihaShapes.focus)
+                .wajihaFocusIndicator(highlighted = highlighted, shape = WajihaShapes.focus)
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .onFocusChanged { state ->
                     focused = state.isFocused
@@ -404,7 +455,7 @@ private fun ContextMenuRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        if (shortcutHint != null && focused) {
+        if (shortcutHint != null && highlighted) {
             Text(
                 text = shortcutHint,
                 style = MaterialTheme.typography.labelSmall,
@@ -584,6 +635,7 @@ fun GameContextMenu(
     target: GameContextTarget?,
     anchorBounds: Rect?,
     secondaryDisplayId: Int?,
+    dualDisplay: Boolean = false,
     onDismiss: () -> Unit,
     onOpenOnDisplay: (gameId: Long, displayId: Int) -> Unit,
     onOpenInfo: (gameId: Long) -> Unit,
@@ -596,35 +648,267 @@ fun GameContextMenu(
     var openExpanded by remember(target.gameId) { mutableStateOf(false) }
     var deleteExpanded by remember(target.gameId) { mutableStateOf(false) }
     var pendingConfirm by remember(target.gameId) { mutableStateOf(PendingConfirm.None) }
+    var navIndex by remember(target.gameId) { mutableStateOf(0) }
     val openRowFocus = remember(target.gameId) { FocusRequester() }
     val topScreenFocus = remember(target.gameId) { FocusRequester() }
+    val bottomScreenFocus = remember(target.gameId) { FocusRequester() }
+    val infoRowFocus = remember(target.gameId) { FocusRequester() }
     val deleteRowFocus = remember(target.gameId) { FocusRequester() }
     val removeFocus = remember(target.gameId) { FocusRequester() }
+    val deleteFileFocus = remember(target.gameId) { FocusRequester() }
 
-    val layerId = "game_context_${target.gameId}"
-    DisposableEffect(layerId) {
-        GamepadLayers.stack.push(layerId)
-        onDispose { GamepadLayers.stack.pop(layerId) }
-    }
+    val topDisplayId = 0
+    val bottomDisplayId = secondaryDisplayId ?: 4
+    val navItems =
+        menuNavItems(
+            openExpanded = openExpanded,
+            deleteExpanded = deleteExpanded,
+            dualDisplay = dualDisplay,
+        )
+    val selectedNav = navItems.getOrElse(navIndex.coerceIn(0, navItems.lastIndex)) { MenuNavId.Open }
 
-    LaunchedEffect(target.gameId) {
-        delay(40)
-        try {
-            openRowFocus.requestFocus()
-        } catch (_: Exception) {
-        }
-    }
-
-    var openWasExpanded by remember(target.gameId) { mutableStateOf(false) }
-    var deleteWasExpanded by remember(target.gameId) { mutableStateOf(false) }
-
-    var focusedZone by remember(target.gameId) { mutableStateOf(ContextMenuFocusZone.None) }
+    var focusedZone by remember(target.gameId) { mutableStateOf(ContextMenuFocusZone.Open) }
     var wasTouchMode by remember(target.gameId) { mutableStateOf(false) }
     val inputMode = LocalInputMode.current
 
     fun onMenuZoneFocused(zone: ContextMenuFocusZone) {
         focusedZone = zone
     }
+
+    fun selectNav(id: MenuNavId) {
+        val idx = navItems.indexOf(id)
+        if (idx >= 0) {
+            navIndex = idx
+        } else {
+            // Row list may not have recomposed yet after expand; keep a stable index.
+            navIndex =
+                when (id) {
+                    MenuNavId.TopLaunch -> 1
+                    MenuNavId.RemoveLib ->
+                        menuNavItems(
+                            openExpanded = false,
+                            deleteExpanded = true,
+                            dualDisplay = dualDisplay,
+                        ).indexOf(MenuNavId.RemoveLib)
+                            .coerceAtLeast(0)
+
+                    else -> navIndex
+                }
+        }
+        focusedZone = id.toFocusZone()
+        // Best-effort Compose focus — secondary display often lacks window focus,
+        // so [forceHighlight] + navIndex are the source of truth.
+        val requester =
+            when (id) {
+                MenuNavId.Open -> openRowFocus
+                MenuNavId.TopLaunch -> topScreenFocus
+                MenuNavId.BottomLaunch -> bottomScreenFocus
+                MenuNavId.Info -> infoRowFocus
+                MenuNavId.Delete -> deleteRowFocus
+                MenuNavId.RemoveLib -> removeFocus
+                MenuNavId.DeleteFile -> deleteFileFocus
+            }
+        try {
+            requester.requestFocus()
+        } catch (_: Exception) {
+        }
+    }
+
+    fun activateNav(id: MenuNavId): Boolean {
+        when (id) {
+            MenuNavId.Open -> {
+                deleteExpanded = false
+                openExpanded = !openExpanded
+                if (openExpanded) {
+                    // Expansion inserts nested rows; land on the first launch target.
+                    navIndex = 1
+                    focusedZone = ContextMenuFocusZone.OpenNested
+                }
+            }
+
+            MenuNavId.TopLaunch -> {
+                onOpenOnDisplay(target.gameId, topDisplayId)
+                onDismiss()
+            }
+
+            MenuNavId.BottomLaunch -> {
+                onOpenOnDisplay(target.gameId, bottomDisplayId)
+                onDismiss()
+            }
+
+            MenuNavId.Info -> {
+                onOpenInfo(target.gameId)
+                onDismiss()
+            }
+
+            MenuNavId.Delete -> {
+                openExpanded = false
+                deleteExpanded = !deleteExpanded
+                if (deleteExpanded) {
+                    navIndex = navItems.indexOf(MenuNavId.Delete).coerceAtLeast(0) + 1
+                    focusedZone = ContextMenuFocusZone.DeleteNested
+                }
+            }
+
+            MenuNavId.RemoveLib -> pendingConfirm = PendingConfirm.RemoveFromLibrary
+            MenuNavId.DeleteFile -> pendingConfirm = PendingConfirm.DeleteFile
+        }
+        return true
+    }
+
+    fun handleBack(): Boolean {
+        if (GamepadTextEditRegistry.dismissIfEditing()) return true
+        when {
+            openExpanded -> {
+                openExpanded = false
+                navIndex = 0
+                focusedZone = ContextMenuFocusZone.Open
+                return true
+            }
+
+            deleteExpanded -> {
+                deleteExpanded = false
+                focusedZone = ContextMenuFocusZone.Delete
+                navIndex =
+                    menuNavItems(
+                        openExpanded = false,
+                        deleteExpanded = false,
+                        dualDisplay = dualDisplay,
+                    ).indexOf(MenuNavId.Delete)
+                        .coerceAtLeast(0)
+                return true
+            }
+
+            else -> {
+                onDismiss()
+                return true
+            }
+        }
+    }
+
+    fun onPreviewKey(event: KeyEvent): Boolean {
+        if (event.type != KeyEventType.KeyDown) return false
+        if (pendingConfirm != PendingConfirm.None) return false
+        val items =
+            menuNavItems(
+                openExpanded = openExpanded,
+                deleteExpanded = deleteExpanded,
+                dualDisplay = dualDisplay,
+            )
+        val index = navIndex.coerceIn(0, items.lastIndex)
+        val current = items[index]
+        when {
+            GamepadKeys.isBack(event.type, event.key) -> return handleBack()
+            GamepadKeys.isUp(event.type, event.key) -> {
+                if (index > 0) {
+                    selectNav(items[index - 1])
+                    WajihaLog.i(
+                        WajihaTags.LAUNCH,
+                        "contextMenu: nav → ${items[index - 1]}",
+                    )
+                }
+                return true
+            }
+
+            GamepadKeys.isDown(event.type, event.key) -> {
+                if (index < items.lastIndex) {
+                    selectNav(items[index + 1])
+                    WajihaLog.i(
+                        WajihaTags.LAUNCH,
+                        "contextMenu: nav → ${items[index + 1]}",
+                    )
+                }
+                return true
+            }
+
+            GamepadKeys.isLeft(event.type, event.key) -> {
+                return when (current) {
+                    MenuNavId.TopLaunch,
+                    MenuNavId.BottomLaunch,
+                    -> {
+                        openExpanded = false
+                        selectNav(MenuNavId.Open)
+                        true
+                    }
+
+                    MenuNavId.RemoveLib,
+                    MenuNavId.DeleteFile,
+                    -> {
+                        deleteExpanded = false
+                        selectNav(MenuNavId.Delete)
+                        true
+                    }
+
+                    MenuNavId.Open -> {
+                        if (openExpanded) {
+                            openExpanded = false
+                            true
+                        } else {
+                            true
+                        }
+                    }
+
+                    MenuNavId.Delete -> {
+                        if (deleteExpanded) {
+                            deleteExpanded = false
+                            true
+                        } else {
+                            true
+                        }
+                    }
+
+                    else -> true
+                }
+            }
+
+            GamepadKeys.isRight(event.type, event.key) -> {
+                return when (current) {
+                    MenuNavId.Open -> {
+                        if (!openExpanded) activateNav(MenuNavId.Open) else true
+                    }
+
+                    MenuNavId.Delete -> {
+                        if (!deleteExpanded) activateNav(MenuNavId.Delete) else true
+                    }
+
+                    else -> activateNav(current)
+                }
+            }
+
+            GamepadKeys.isConfirm(event.type, event.key) -> {
+                WajihaLog.i(WajihaTags.LAUNCH, "contextMenu: confirm $current")
+                return activateNav(current)
+            }
+
+            else -> return false
+        }
+    }
+
+    val latestPreviewKey =
+        rememberUpdatedState<(KeyEvent) -> Boolean>(
+            newValue = { event -> onPreviewKey(event) },
+        )
+    val layerId = "game_context_${target.gameId}"
+    DisposableEffect(layerId) {
+        val handler: (KeyEvent) -> Boolean = { event -> latestPreviewKey.value(event) }
+        GamepadLayers.stack.push(layerId)
+        GamepadLayers.stack.setPreviewHandler(layerId, handler)
+        onDispose {
+            GamepadLayers.stack.setPreviewHandler(layerId, null)
+            GamepadLayers.stack.pop(layerId)
+        }
+    }
+
+    LaunchedEffect(target.gameId) {
+        navIndex = 0
+        focusedZone = ContextMenuFocusZone.Open
+        delay(16)
+        selectNav(MenuNavId.Open)
+        WajihaLog.i(WajihaTags.LAUNCH, "contextMenu: ready gameId=${target.gameId}")
+    }
+
+    var openWasExpanded by remember(target.gameId) { mutableStateOf(false) }
+    var deleteWasExpanded by remember(target.gameId) { mutableStateOf(false) }
 
     LaunchedEffect(inputMode, focusedZone) {
         val touchJustActivated = inputMode == InputMode.Touch && !wasTouchMode
@@ -643,17 +927,11 @@ fun GameContextMenu(
         if (openExpanded) {
             openWasExpanded = true
             delay(ContextMenuAnimMs.toLong() + 20)
-            try {
-                topScreenFocus.requestFocus()
-            } catch (_: Exception) {
-            }
+            selectNav(MenuNavId.TopLaunch)
         } else if (openWasExpanded) {
             openWasExpanded = false
             delay(ContextMenuAnimMs.toLong() + 20)
-            try {
-                openRowFocus.requestFocus()
-            } catch (_: Exception) {
-            }
+            selectNav(MenuNavId.Open)
         }
     }
 
@@ -661,17 +939,11 @@ fun GameContextMenu(
         if (deleteExpanded) {
             deleteWasExpanded = true
             delay(ContextMenuAnimMs.toLong() + 20)
-            try {
-                removeFocus.requestFocus()
-            } catch (_: Exception) {
-            }
+            selectNav(MenuNavId.RemoveLib)
         } else if (deleteWasExpanded) {
             deleteWasExpanded = false
             delay(ContextMenuAnimMs.toLong() + 20)
-            try {
-                deleteRowFocus.requestFocus()
-            } catch (_: Exception) {
-            }
+            selectNav(MenuNavId.Delete)
         }
     }
 
@@ -682,16 +954,11 @@ fun GameContextMenu(
         }
     }
 
-    val topDisplayId = 0
-    val bottomDisplayId = secondaryDisplayId ?: 4
-
-    fun handleBack(): Boolean {
-        if (GamepadTextEditRegistry.dismissIfEditing()) return true
-        if (collapseSubmenus(openExpanded, deleteExpanded, { openExpanded = it }, { deleteExpanded = it })) {
-            return true
+    // Keep navIndex valid when the visible row list shrinks (collapse).
+    LaunchedEffect(navItems, navIndex) {
+        if (navIndex > navItems.lastIndex) {
+            navIndex = navItems.lastIndex.coerceAtLeast(0)
         }
-        onDismiss()
-        return true
     }
 
     val density = LocalDensity.current
@@ -706,9 +973,8 @@ fun GameContextMenu(
             modifier
                 .fillMaxSize()
                 .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     if (pendingConfirm != PendingConfirm.None) return@onPreviewKeyEvent false
-                    if (GamepadKeys.isBack(event.type, event.key)) handleBack() else false
+                    onPreviewKey(event)
                 },
     ) {
         ContextMenuDimScrim(
@@ -845,6 +1111,7 @@ fun GameContextMenu(
                                 expandable = true,
                                 expanded = openExpanded,
                                 focusRequester = openRowFocus,
+                                forceHighlight = selectedNav == MenuNavId.Open,
                                 onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.Open) },
                                 onClick = {
                                     deleteExpanded = false
@@ -854,24 +1121,29 @@ fun GameContextMenu(
 
                             ContextMenuInlineExpansion(visible = openExpanded) {
                                 ContextMenuRow(
-                                    label = "Top screen",
+                                    label = if (dualDisplay) "Top screen" else "Launch",
                                     nested = true,
                                     onClick = {
                                         onOpenOnDisplay(target.gameId, topDisplayId)
                                         onDismiss()
                                     },
                                     focusRequester = topScreenFocus,
+                                    forceHighlight = selectedNav == MenuNavId.TopLaunch,
                                     onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.OpenNested) },
                                 )
-                                ContextMenuRow(
-                                    label = "Bottom screen",
-                                    nested = true,
-                                    onClick = {
-                                        onOpenOnDisplay(target.gameId, bottomDisplayId)
-                                        onDismiss()
-                                    },
-                                    onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.OpenNested) },
-                                )
+                                if (dualDisplay) {
+                                    ContextMenuRow(
+                                        label = "Bottom screen",
+                                        nested = true,
+                                        onClick = {
+                                            onOpenOnDisplay(target.gameId, bottomDisplayId)
+                                            onDismiss()
+                                        },
+                                        focusRequester = bottomScreenFocus,
+                                        forceHighlight = selectedNav == MenuNavId.BottomLaunch,
+                                        onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.OpenNested) },
+                                    )
+                                }
                             }
 
                             ContextMenuDivider()
@@ -879,6 +1151,8 @@ fun GameContextMenu(
                             ContextMenuRow(
                                 label = "Info",
                                 icon = Icons.Filled.Info,
+                                focusRequester = infoRowFocus,
+                                forceHighlight = selectedNav == MenuNavId.Info,
                                 onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.Info) },
                                 onClick = {
                                     onOpenInfo(target.gameId)
@@ -894,6 +1168,7 @@ fun GameContextMenu(
                                 expandable = true,
                                 expanded = deleteExpanded,
                                 focusRequester = deleteRowFocus,
+                                forceHighlight = selectedNav == MenuNavId.Delete,
                                 onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.Delete) },
                                 onClick = {
                                     openExpanded = false
@@ -908,6 +1183,7 @@ fun GameContextMenu(
                                     nested = true,
                                     onClick = { pendingConfirm = PendingConfirm.RemoveFromLibrary },
                                     focusRequester = removeFocus,
+                                    forceHighlight = selectedNav == MenuNavId.RemoveLib,
                                     onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.DeleteNested) },
                                 )
                                 ContextMenuRow(
@@ -916,6 +1192,8 @@ fun GameContextMenu(
                                     nested = true,
                                     destructive = true,
                                     onClick = { pendingConfirm = PendingConfirm.DeleteFile },
+                                    focusRequester = deleteFileFocus,
+                                    forceHighlight = selectedNav == MenuNavId.DeleteFile,
                                     onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.DeleteNested) },
                                 )
                             }

@@ -1,10 +1,13 @@
 package com.wajiha.ui.navigation
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import com.wajiha.input.GamepadScreen
+import com.wajiha.input.MirroredGamepadHintsHost
 import com.wajiha.input.requestContentFocus
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.HeroContext
@@ -58,12 +61,17 @@ fun LauncherHeroPane(
         onClaimGamepad = onClaimGamepad,
         onOwnerGainedFocus = { contentFocus.requestContentFocus() },
     ) {
-        TopScreen(
-            focused = hero.focusedTile,
-            platformName = hero.platformName,
-            heroContext = heroContext,
-            contentFocusRequester = contentFocus,
-            modifier = Modifier,
-        )
+        Column(modifier = Modifier.fillMaxSize()) {
+            TopScreen(
+                focused = hero.focusedTile,
+                platformName = hero.platformName,
+                heroContext = heroContext,
+                contentFocusRequester = contentFocus,
+                modifier = Modifier.weight(1f),
+            )
+            // When Settings → Screens → Swap gamepad hints is on, menu hints
+            // publish here so the hero display shows the controller bar.
+            MirroredGamepadHintsHost()
+        }
     }
 }

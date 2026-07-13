@@ -122,6 +122,13 @@ class GamepadKeyRouter(
             }
         }
         if (isSwapScreenKey(event.keyCode) && event.action == KeyEvent.ACTION_UP) {
+            if (store.state.value == DualScreenState.SingleDisplay || store.forceSingleScreen) {
+                WajihaLog.d(
+                    WajihaTags.GAMEPAD,
+                    "map: SELECT → swap skipped (singleScreen)",
+                )
+                return true
+            }
             scope.launch {
                 val swapped = settingsRepository.toggleSwapScreenRoles()
                 WajihaLog.i(

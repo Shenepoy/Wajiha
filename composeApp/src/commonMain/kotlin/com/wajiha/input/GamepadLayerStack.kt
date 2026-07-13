@@ -40,10 +40,18 @@ class GamepadLayerStack {
         }
     }
 
-    /** Invokes the top layer's preview handler when registered. */
+    /**
+     * Invokes preview handlers from the top of the stack downward until one
+     * consumes the event. Layers without a handler (e.g. dual-display
+     * `launcher_hero`, context-menu shells) are skipped so the menu grid under
+     * them still receives X / D-pad.
+     */
     fun dispatchTopPreviewKey(event: KeyEvent): Boolean {
-        val layer = topLayer ?: return false
-        return previewHandlers[layer]?.invoke(event) == true
+        for (layer in _layers.value.asReversed()) {
+            val handler = previewHandlers[layer] ?: continue
+            if (handler(event)) return true
+        }
+        return false
     }
 
     fun deactivateAll() {

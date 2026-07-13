@@ -43,6 +43,8 @@ fun GamepadButton(
     val useCustomNav = LocalGamepadNavController.current != null
     val feedback = LocalUiFeedback.current
     val interactionSource = rememberPressInteractionSource()
+    val localFocusRequester = remember { FocusRequester() }
+    val resolvedFocusRequester = focusRequester ?: localFocusRequester
 
     fun performClick() {
         if (!enabled) return
@@ -64,7 +66,8 @@ fun GamepadButton(
                 highlighted = !useCustomNav && focused,
                 shape = WajihaShapes.button,
             ).defaultMinSize(minHeight = WajihaSpacing.touchMin)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusRequester(resolvedFocusRequester)
+            .reportSectionVisibleFocus(resolvedFocusRequester)
             .then(
                 if (!useCustomNav) {
                     Modifier

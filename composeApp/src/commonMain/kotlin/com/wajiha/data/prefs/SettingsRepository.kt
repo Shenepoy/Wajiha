@@ -39,7 +39,24 @@ data class AppSettings(
     val gridRows: Int = 2,
     val soundsEnabled: Boolean = true,
     val onboardingDone: Boolean = false,
+    /**
+     * Primary-only launcher: combined layout on the main display, no
+     * SecondaryHome. Escape hatch for phones / non-Thor / single-panel use.
+     */
+    val singleScreen: Boolean = false,
+    /**
+     * When [singleScreen] is on: show the hero preview above the library.
+     * Off = library fills the screen; filter/settings sit in the grid header.
+     */
+    val showHeroBanner: Boolean = true,
+    /** When [singleScreen] is on: show the focused game's name above the library. */
+    val showSelectedGameName: Boolean = false,
     val swapScreenRoles: Boolean = false,
+    /**
+     * Dual browsing only: show the menu screen's gamepad hint bar on the hero
+     * display instead of under the grid / settings.
+     */
+    val swapGamepadHints: Boolean = false,
     val theme: String = "dark",
     /** FocusBorderStyle name (Solid, Dotted, …, Neon). */
     val focusBorderStyle: String = "Solid",
@@ -98,7 +115,11 @@ class SettingsRepository(
                 gridRows = prefs[GRID_ROWS] ?: 2,
                 soundsEnabled = prefs[SOUNDS_ENABLED] ?: true,
                 onboardingDone = prefs[ONBOARDING_DONE] ?: false,
+                singleScreen = prefs[SINGLE_SCREEN] ?: false,
+                showHeroBanner = prefs[SHOW_HERO_BANNER] ?: true,
+                showSelectedGameName = prefs[SHOW_SELECTED_GAME_NAME] ?: false,
                 swapScreenRoles = prefs[SWAP_SCREEN_ROLES] ?: false,
+                swapGamepadHints = prefs[SWAP_GAMEPAD_HINTS] ?: false,
                 theme = prefs[THEME] ?: "dark",
                 focusBorderStyle = normalizeFocusBorderStyle(prefs[FOCUS_BORDER_STYLE]),
                 focusColor = normalizeFocusColor(prefs[FOCUS_COLOR]),
@@ -159,7 +180,16 @@ class SettingsRepository(
 
     suspend fun setOnboardingDone(value: Boolean) = setPref(ONBOARDING_DONE, value, "onboardingDone")
 
+    suspend fun setSingleScreen(value: Boolean) = setPref(SINGLE_SCREEN, value, "singleScreen")
+
+    suspend fun setShowHeroBanner(value: Boolean) = setPref(SHOW_HERO_BANNER, value, "showHeroBanner")
+
+    suspend fun setShowSelectedGameName(value: Boolean) =
+        setPref(SHOW_SELECTED_GAME_NAME, value, "showSelectedGameName")
+
     suspend fun setSwapScreenRoles(value: Boolean) = setPref(SWAP_SCREEN_ROLES, value, "swapScreenRoles")
+
+    suspend fun setSwapGamepadHints(value: Boolean) = setPref(SWAP_GAMEPAD_HINTS, value, "swapGamepadHints")
 
     suspend fun toggleSwapScreenRoles(): Boolean {
         var next = false
@@ -369,7 +399,11 @@ class SettingsRepository(
         val GRID_ROWS = intPreferencesKey("grid_rows")
         val SOUNDS_ENABLED = booleanPreferencesKey("sounds_enabled")
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
+        val SINGLE_SCREEN = booleanPreferencesKey("single_screen")
+        val SHOW_HERO_BANNER = booleanPreferencesKey("show_hero_banner")
+        val SHOW_SELECTED_GAME_NAME = booleanPreferencesKey("show_selected_game_name")
         val SWAP_SCREEN_ROLES = booleanPreferencesKey("swap_screen_roles")
+        val SWAP_GAMEPAD_HINTS = booleanPreferencesKey("swap_gamepad_hints")
         val THEME = stringPreferencesKey("theme")
         private val FOCUS_BORDER_STYLE = stringPreferencesKey("focus_border_style")
         private val FOCUS_COLOR = stringPreferencesKey("focus_color")

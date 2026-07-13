@@ -23,15 +23,15 @@ When `GamepadNavHost` is active (`LocalGamepadNavController` set), controls defe
 - **B / Escape** — back; dismisses text edit, then top gamepad layer, then in-screen back
 - **Y** — context actions (e.g. close session tile on grid)
 - **L1/R1** — section/tab switching in settings and scraper
-- **L2** — switch gamepad focus between top and bottom screens (dual display); sticky until toggled again or single-display. Works while a game is running with the bottom grid visible; disabled during secondary blackout. Accepts digital `BUTTON_L2` and analog `AXIS_LTRIGGER` (Xbox / Thor).
+- **L2** — switch gamepad focus between top and bottom screens (dual display); sticky until toggled again or single-display. Works while a game is running with the bottom grid visible; disabled during secondary blackout and when Settings → Screens → Single screen is on. Accepts digital `BUTTON_L2` and analog `AXIS_LTRIGGER` (Xbox / Thor).
 - **R2** — toggle the top-screen system notification panel (open and close)
-- **SELECT** — swap screen roles (dual display)
+- **SELECT** — swap screen roles (dual display); no-op in single-screen mode
 
 Keycode semantics stay Xbox/Thor everywhere. Switch glyph labels swap face-button **display** only (B shown for confirm); they do not remap physical keycodes.
 
 ## Action bar hints + glyphs
 
-`GamepadActionBar` sits inset under `WajihaScreen` / `SecondaryPanelScaffold` content. Height is fixed (`GamepadActionBarHeight` = 36dp); each hint uses `maxLines = 1` + ellipsis so a long hint list never pushes the content area.
+`GamepadActionBar` sits inset under `WajihaScreen` / `SecondaryPanelScaffold` content (or on the **hero** display when Settings → Screens → **Swap gamepad hints** is on). Height is fixed (`GamepadActionBarHeight` = 36dp); each hint uses `maxLines = 1` + ellipsis so a long hint list never pushes the content area.
 
 Hints are semantic (`GamepadHint` / `GamepadHintButton`), not raw `"A"` strings. When controller glyphs are enabled, button icons come from **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** (CC0) under `composeResources/drawable/kenney_*`. Text scheme / glyphs-off falls back to plain labels.
 
@@ -90,6 +90,30 @@ Reusable primitives in `ui/components/gamepad/`:
 - `GamepadSlider` — brightness/volume in Quick Settings
 - `GamepadNavHost` — full-screen gamepad routing (scraper, platform picker)
 - `GamepadActionBar` — fixed-height bottom hint chrome with scheme-aware glyphs
+
+## Touch scroll → D-pad snap
+
+Mixing finger scroll with D-pad on lazy grids/lists needs an explicit handoff: the old selection is often off-screen, and Compose focus alone will happily highlight a peek tile.
+
+### Home library (`BottomScreen`)
+
+1. Finger-down captures whether the current selection sits on the **left or right half** of the viewport.
+2. Touch-driven scroll (while the finger is down) arms a **pending viewport snap**. Extra swipes keep that side until the snap is consumed or a tile is tapped.
+3. The **first** D-pad press after that snap lands on a top-row game:
+   - Left-half origin → **leading** (≥50% visible; prefer fully on-screen)
+   - Right-half origin → **trailing** (same visibility rules)
+   - D-pad **direction is ignored** for choosing the edge
+4. Later presses move with column-major `selectedGameId` math and bring-into-view by at most one column (no whole-page `animateScrollToItem` teleport).
+5. Library tiles use `selectOnFocus = false` and only the **selected** tile is Compose-focusable, so scroll cannot light up a stray peek while selection stays elsewhere.
+6. After scroll, the selected item may leave composition; D-pad / X / Y still reach the screen via the Android preview-key bridge (`GamepadPreviewKeyBridge`), walking the shared [GamepadLayers] stack past layers with no handler (e.g. dual-display `launcher_hero`) so the bottom `home_grid` still opens the context menu.
+
+### Lists / settings / app drawer
+
+Simpler rule: after touch scroll, the next D-pad press lands on the **topmost (or first) ≥50%-visible** row/tile, then normal stepping resumes. Settings sections snap to the top visible row in view.
+
+### Retouch notes
+
+Behavior is easy to regress (focus steal, pending-side overwrite on a second swipe, sub-50% peeks, keys dropped when the selected tile is disposed). Prefer re-testing on Thor: right-side select → multi-swipe → D-pad (expect trailing full tile); left-side select → swipe → D-pad (expect leading full tile). Debug tags: `Wajiha/Debug` `gridFocus:`.
 
 ## Android host
 

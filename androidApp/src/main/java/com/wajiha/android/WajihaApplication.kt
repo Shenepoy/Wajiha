@@ -219,10 +219,18 @@ class WajihaApplication :
             val koin = GlobalContext.get()
             val appActions = koin.get<AndroidAppActions>()
             val monitor = koin.get<ForegroundAppMonitor>()
+            val dualStore = koin.get<com.wajiha.state.DualScreenStore>()
+            val displayCoordinator = koin.get<com.wajiha.android.display.DisplayCoordinator>()
+            var lastForceSingle: Boolean? = null
             koin.get<SettingsRepository>().settings.collect { settings ->
                 appActions.soundsEnabled = settings.soundsEnabled
                 monitor.detectionEnabled = settings.detectManualLaunches
                 monitor.memoryGuardEnabled = settings.memoryGuardEnabled
+                dualStore.setForceSingleScreen(settings.singleScreen)
+                if (lastForceSingle != settings.singleScreen) {
+                    displayCoordinator.onForceSingleScreenChanged(settings.singleScreen)
+                    lastForceSingle = settings.singleScreen
+                }
                 // Force the same night mode on both Thor displays so Compose
                 // "system" and any residual platform chrome stay in lockstep.
                 val nightMode =

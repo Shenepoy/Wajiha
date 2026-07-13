@@ -125,7 +125,7 @@ fun GameDetailScreen(
         modifier = Modifier,
         onBack = onBack,
         showActionBar = true,
-        gamepadHints = gameDetailGamepadHints,
+        gamepadHints = gameDetailGamepadHints(isDual = dualDisplay),
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onOwnerGainedFocus = { sectionFocus.requestContentFocus() },
@@ -283,6 +283,7 @@ private fun GameDetailTabsPane(
                     LaunchSectionContent(
                         game = game,
                         secondaryDisplayId = secondaryDisplayId,
+                        dualDisplay = dualDisplay,
                         onSetLaunchDisplay = viewModel::setLaunchOnDisplay,
                         onSetFavorite = viewModel::setFavorite,
                         onLaunchTop = { viewModel.launchOnDisplay(0) },
@@ -715,6 +716,7 @@ private fun formatScrapeStatus(scrapedAt: Long?): String {
 private fun LaunchSectionContent(
     game: GameEntity,
     secondaryDisplayId: Int?,
+    dualDisplay: Boolean,
     onSetLaunchDisplay: (Int?) -> Unit,
     onSetFavorite: (Boolean) -> Unit,
     onLaunchTop: () -> Unit,
@@ -722,7 +724,13 @@ private fun LaunchSectionContent(
     showFavoriteRow: Boolean,
     firstFocusRequester: FocusRequester? = null,
 ) {
-    SectionBlurb("Default display and quick launch options.")
+    SectionBlurb(
+        if (dualDisplay) {
+            "Default display and quick launch options."
+        } else {
+            "Quick launch options."
+        },
+    )
 
     if (showFavoriteRow) {
         DetailToggleRow(
@@ -737,32 +745,34 @@ private fun LaunchSectionContent(
         GroupDivider()
     }
 
-    val topId = "0"
-    val bottomId = (secondaryDisplayId ?: 4).toString()
-    val selectedDisplay =
-        when (game.launchOnDisplay) {
-            0, null -> topId
-            else -> bottomId
-        }
-    GamepadSettingRow(
-        label = "Default display",
-        description = "Which screen to use when launching from the grid.",
-        type = SettingType.BinaryChoice,
-        options =
-            listOf(
-                topId to "Top ($topId)",
-                bottomId to "Bottom ($bottomId)",
-            ),
-        selected = selectedDisplay,
-        onSelect = { value ->
-            onSetLaunchDisplay(if (value == topId) 0 else (secondaryDisplayId ?: 4))
-        },
-        focusRequester = if (showFavoriteRow) null else firstFocusRequester,
-        onReset = { onSetLaunchDisplay(null) },
-        isAtDefault = game.launchOnDisplay == null,
-    )
+    if (dualDisplay) {
+        val topId = "0"
+        val bottomId = (secondaryDisplayId ?: 4).toString()
+        val selectedDisplay =
+            when (game.launchOnDisplay) {
+                0, null -> topId
+                else -> bottomId
+            }
+        GamepadSettingRow(
+            label = "Default display",
+            description = "Which screen to use when launching from the grid.",
+            type = SettingType.BinaryChoice,
+            options =
+                listOf(
+                    topId to "Top ($topId)",
+                    bottomId to "Bottom ($bottomId)",
+                ),
+            selected = selectedDisplay,
+            onSelect = { value ->
+                onSetLaunchDisplay(if (value == topId) 0 else (secondaryDisplayId ?: 4))
+            },
+            focusRequester = if (showFavoriteRow) null else firstFocusRequester,
+            onReset = { onSetLaunchDisplay(null) },
+            isAtDefault = game.launchOnDisplay == null,
+        )
 
-    GroupDivider()
+        GroupDivider()
+    }
 
     Text(
         text = "Launch now",
@@ -771,16 +781,19 @@ private fun LaunchSectionContent(
     )
     Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)) {
         GamepadButton(
-            text = "Launch top",
+            text = if (dualDisplay) "Launch top" else "Launch",
             onClick = onLaunchTop,
             modifier = Modifier.fillMaxWidth(),
+            focusRequester = if (!dualDisplay && !showFavoriteRow) firstFocusRequester else null,
         )
-        GamepadButton(
-            text = "Launch bottom",
-            onClick = onLaunchBottom,
-            outlined = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (dualDisplay) {
+            GamepadButton(
+                text = "Launch bottom",
+                onClick = onLaunchBottom,
+                outlined = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 

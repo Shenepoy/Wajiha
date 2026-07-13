@@ -19,9 +19,11 @@ import com.wajiha.android.ui.hideSystemStatusBar
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaLogKind
 import com.wajiha.log.WajihaTags
+import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.secondary.SecondaryApp
 import org.koin.android.ext.android.inject
+import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -36,6 +38,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class SecondaryHomeActivity : ComponentActivity() {
     private val displayCoordinator: DisplayCoordinator by inject()
+    private val dualScreenStore: DualScreenStore by inject()
     private val gamepadKeyRouter: GamepadKeyRouter by inject()
     private val triggerAxisHandler: TriggerAxisHandler by inject()
     private val gamepadGate: GamepadGate by inject()
@@ -49,6 +52,15 @@ class SecondaryHomeActivity : ComponentActivity() {
             WajihaTags.DISPLAY,
             "onCreate: displayId=$displayId taskId=$taskId",
         )
+        if (dualScreenStore.forceSingleScreen) {
+            WajihaLog.i(
+                WajihaTags.DISPLAY,
+                "onCreate: forceSingleScreen — finishing SecondaryHome",
+            )
+            finish()
+            overridePendingTransition(0, 0)
+            return
+        }
         if (displayId == Display.DEFAULT_DISPLAY) {
             val secondary = displayCoordinator.secondaryDisplay()
             WajihaLog.w(
@@ -66,6 +78,7 @@ class SecondaryHomeActivity : ComponentActivity() {
         if (displayId != null) {
             registerTask(displayId, taskId)
         }
+        instanceRef = WeakReference(this)
         gamepadKeyRouter.attach(GamepadOwner.Secondary, this)
         // Home surface: BACK must never dismiss it (in-app screens register
         // their own Compose BackHandlers on top of this).
@@ -116,6 +129,9 @@ class SecondaryHomeActivity : ComponentActivity() {
     override fun onDestroy() {
         display?.displayId?.let { unregisterTask(it, taskId) }
         gamepadKeyRouter.detach(GamepadOwner.Secondary, this)
+        if (instanceRef?.get() === this) {
+            instanceRef = null
+        }
         super.onDestroy()
     }
 
@@ -209,6 +225,9 @@ class SecondaryHomeActivity : ComponentActivity() {
 
         private val displayTaskIds = ConcurrentHashMap<Int, Int>()
 
+        @Volatile
+        private var instanceRef: WeakReference<SecondaryHomeActivity>? = null
+
         fun taskIdForDisplay(displayId: Int): Int? = displayTaskIds[displayId]
 
         fun registerTask(
@@ -224,6 +243,17 @@ class SecondaryHomeActivity : ComponentActivity() {
         ) {
             if (displayTaskIds[displayId] == taskId) {
                 displayTaskIds.remove(displayId)
+            }
+        }
+
+        /** Finish the live secondary home activity if any (Single screen mode). */
+        fun finishIfRunning() {
+            val activity = instanceRef?.get() ?: return
+            activity.runOnUiThread {
+                if (!activity.isFinishing && !activity.isDestroyed) {
+                    activity.finish()
+                    activity.overridePendingTransition(0, 0)
+                }
             }
         }
     }
