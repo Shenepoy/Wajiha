@@ -2,15 +2,21 @@ package com.wajiha.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.wajiha.state.DualScreenState
+import com.wajiha.state.DualScreenStore
 import com.wajiha.ui.theme.WajihaSpacing
+import org.koin.compose.koinInject
 
 @Composable
 fun WajihaSection(
@@ -44,12 +50,18 @@ fun WajihaSectionDivider(modifier: Modifier = Modifier) {
 
 @Composable
 fun WajihaToolbar(
-    title: String,
+    title: String = "",
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     backFocusable: Boolean = true,
     actions: @Composable () -> Unit = {},
 ) {
+    // Dual-screen: title lives on the other display / chrome — reclaim the row for tabs.
+    val dualStore = koinInject<DualScreenStore>()
+    val screenState by dualStore.state.collectAsState()
+    val showTitle =
+        title.isNotBlank() && screenState == DualScreenState.SingleDisplay
+
     Row(
         modifier =
             modifier
@@ -65,11 +77,15 @@ fun WajihaToolbar(
             gamepadFocusable = backFocusable,
             sound = null,
         )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.weight(1f),
-        )
+        if (showTitle) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
+        }
         actions()
     }
 }

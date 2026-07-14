@@ -14,4 +14,7 @@ object WajihaSpacing {
 
     /** Settings left navigation column width. */
     val navWidth = 196.dp
+
+    /** Folder tab + panel outline stroke (matches classic card chrome). */
+    val folderEdge = 1.dp
 }

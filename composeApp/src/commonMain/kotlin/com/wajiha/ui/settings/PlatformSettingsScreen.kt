@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -28,6 +27,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.db.RomFolderEntity
 import com.wajiha.data.prefs.AppSettings
@@ -167,13 +167,22 @@ fun PlatformSettingsScreen(
             },
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                WajihaToolbar(
-                    title = platform?.name ?: "Platform",
-                    onBack = onBack,
-                    backFocusable = false,
-                )
+                if (!dualDisplay) {
+                    WajihaToolbar(
+                        title = platform?.name ?: "Platform",
+                        onBack = onBack,
+                        backFocusable = false,
+                    )
+                }
 
                 if (platform == null) {
+                    if (dualDisplay) {
+                        WajihaToolbar(
+                            title = "",
+                            onBack = onBack,
+                            backFocusable = false,
+                        )
+                    }
                     Text(
                         text = "Platform not found",
                         modifier = Modifier.padding(WajihaSpacing.md),
@@ -187,17 +196,48 @@ fun PlatformSettingsScreen(
                                 .fillMaxWidth()
                                 .padding(horizontal = WajihaSpacing.md),
                     ) {
-                        FolderTabRow(
-                            tabs = tabs.map { it.label },
-                            selectedIndex = selectedTabIndex,
-                            onSelect = ::selectTab,
-                            minHeight = LocalSettingRowMinHeight.current,
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .focusProperties { canFocus = false }
-                                    .padding(top = WajihaSpacing.sm),
-                        )
+                        if (dualDisplay) {
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .zIndex(1f)
+                                        .padding(top = WajihaSpacing.sm),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+                            ) {
+                                GamepadButton(
+                                    text = "Back",
+                                    onClick = onBack,
+                                    outlined = true,
+                                    gamepadFocusable = false,
+                                    sound = null,
+                                )
+                                FolderTabRow(
+                                    tabs = tabs.map { it.label },
+                                    selectedIndex = selectedTabIndex,
+                                    onSelect = ::selectTab,
+                                    minHeight = LocalSettingRowMinHeight.current,
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .focusProperties { canFocus = false },
+                                )
+                            }
+                        } else {
+                            FolderTabRow(
+                                tabs = tabs.map { it.label },
+                                selectedIndex = selectedTabIndex,
+                                onSelect = ::selectTab,
+                                minHeight = LocalSettingRowMinHeight.current,
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .zIndex(1f)
+                                        .focusProperties { canFocus = false }
+                                        .padding(top = WajihaSpacing.sm),
+                            )
+                        }
 
                         WajihaSettingPanel(
                             folderPanel = true,
@@ -205,7 +245,6 @@ fun PlatformSettingsScreen(
                                 Modifier
                                     .weight(1f)
                                     .fillMaxWidth()
-                                    .offset(y = (-1).dp)
                                     .padding(bottom = WajihaSpacing.md),
                         ) {
                             when (tabs[selectedTabIndex]) {
@@ -399,6 +438,7 @@ private fun PlatformFoldersTabContent(
     settingsHeroActions: Boolean,
     firstFocusRequester: FocusRequester,
 ) {
+    val platform = state.platform ?: return
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
@@ -406,6 +446,22 @@ private fun PlatformFoldersTabContent(
         WajihaSettingBlurb(
             "Folders scanned for games on this system. " +
                 "Add at least one to include it in Settings → Library.",
+        )
+        WajihaToggleSetting(
+            label = "Deep scan",
+            description = "Walk nested subfolders more thoroughly when scanning (depth 15 vs 3).",
+            checked = platform.deepScan,
+            onCheckedChange = viewModel::setDeepScan,
+            defaultChecked = false,
+            onReset = { viewModel.setDeepScan(false) },
+            focusRequester = firstFocusRequester,
+            onFocusedChanged =
+                settingsToggleHeroFocus(
+                    store = dualStore,
+                    title = "Deep scan",
+                    subtitle = "Walk nested subfolders more thoroughly when scanning (depth 15 vs 3).",
+                    checked = platform.deepScan,
+                ),
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -415,7 +471,6 @@ private fun PlatformFoldersTabContent(
                 text = "Rescan",
                 onClick = viewModel::rescanPlatform,
                 outlined = true,
-                focusRequester = firstFocusRequester,
                 onFocusedChanged = { focused ->
                     if (focused) {
                         publishSettingsHero(

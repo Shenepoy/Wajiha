@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
@@ -45,6 +44,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import com.wajiha.data.db.EmulatorEntity
 import com.wajiha.data.db.GameEntity
@@ -179,13 +179,22 @@ fun GameDetailScreen(
             },
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                WajihaToolbar(
-                    title = game?.displayName ?: "Game",
-                    onBack = onBack,
-                    backFocusable = false,
-                )
+                if (!dualDisplay) {
+                    WajihaToolbar(
+                        title = game?.displayName ?: "Game",
+                        onBack = onBack,
+                        backFocusable = false,
+                    )
+                }
 
                 if (game == null) {
+                    if (dualDisplay) {
+                        WajihaToolbar(
+                            title = "",
+                            onBack = onBack,
+                            backFocusable = false,
+                        )
+                    }
                     Text(
                         text = "Game not found",
                         modifier = Modifier.padding(WajihaSpacing.md),
@@ -203,6 +212,7 @@ fun GameDetailScreen(
                         viewModel = viewModel,
                         showFavoriteRow = true,
                         dualDisplay = true,
+                        onBack = onBack,
                         gamepadOwner = gamepadOwner,
                         dualStore = dualStore,
                         settingsHeroActions = settings.settingsHeroActions,
@@ -284,31 +294,62 @@ private fun GameDetailTabsPane(
     viewModel: GameDetailViewModel,
     showFavoriteRow: Boolean,
     dualDisplay: Boolean = false,
+    onBack: (() -> Unit)? = null,
     gamepadOwner: GamepadOwner? = null,
     dualStore: DualScreenStore,
     settingsHeroActions: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        FolderTabRow(
-            tabs = sections.map { it.label },
-            selectedIndex = selectedSectionIndex,
-            onSelect = onSelectSection,
-            minHeight = LocalSettingRowMinHeight.current,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .focusProperties { canFocus = false }
-                    .padding(top = WajihaSpacing.sm),
-        )
+        if (dualDisplay && onBack != null) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .zIndex(1f)
+                        .padding(top = WajihaSpacing.sm),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+            ) {
+                GamepadButton(
+                    text = "Back",
+                    onClick = onBack,
+                    outlined = true,
+                    gamepadFocusable = false,
+                    sound = null,
+                )
+                FolderTabRow(
+                    tabs = sections.map { it.label },
+                    selectedIndex = selectedSectionIndex,
+                    onSelect = onSelectSection,
+                    minHeight = LocalSettingRowMinHeight.current,
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .focusProperties { canFocus = false },
+                )
+            }
+        } else {
+            FolderTabRow(
+                tabs = sections.map { it.label },
+                selectedIndex = selectedSectionIndex,
+                onSelect = onSelectSection,
+                minHeight = LocalSettingRowMinHeight.current,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .zIndex(1f)
+                        .focusProperties { canFocus = false }
+                        .padding(top = WajihaSpacing.sm),
+            )
+        }
 
         WajihaSettingPanel(
             folderPanel = true,
             modifier =
                 Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .offset(y = (-1).dp),
+                    .fillMaxWidth(),
         ) {
             when (sections[selectedSectionIndex]) {
                 ActionPaneSection.Launch -> {

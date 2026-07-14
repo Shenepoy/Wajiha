@@ -16,6 +16,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.unit.dp
+import com.wajiha.ui.components.folderChromeBorder
+import com.wajiha.ui.components.folderChromeOutlineColor
+import com.wajiha.ui.components.folderPanelOpenTopBorder
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 
@@ -44,7 +47,8 @@ fun WajihaSettingPanel(
     sectionContent: @Composable () -> Unit,
 ) {
     val shape = if (folderPanel) WajihaShapes.folderPanel else WajihaShapes.card
-    val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+    val chromeBorder = folderChromeBorder()
+    val outlineColor = folderChromeOutlineColor()
 
     Surface(
         modifier =
@@ -52,13 +56,10 @@ fun WajihaSettingPanel(
                 .fillMaxWidth()
                 .then(
                     if (folderPanel) {
-                        Modifier.border(
-                            width = 1.dp,
-                            color = outlineColor,
-                            shape = shape,
-                        )
+                        // Top open so the selected folder tab can join the card.
+                        Modifier.folderPanelOpenTopBorder(outlineColor, chromeBorder.width)
                     } else {
-                        Modifier
+                        Modifier.border(border = chromeBorder, shape = shape)
                     },
                 ),
         shape = shape,
@@ -68,7 +69,13 @@ fun WajihaSettingPanel(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(WajihaSpacing.sm),
+                    .padding(
+                        start = WajihaSpacing.sm,
+                        end = WajihaSpacing.sm,
+                        bottom = WajihaSpacing.sm,
+                        // Extra air under the folder tab join.
+                        top = if (folderPanel) WajihaSpacing.md else WajihaSpacing.sm,
+                    ),
         ) {
             SettingSectionScrollColumn(
                 modifier = Modifier.fillMaxSize(),

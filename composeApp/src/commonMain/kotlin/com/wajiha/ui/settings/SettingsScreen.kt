@@ -14,11 +14,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -40,19 +38,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import com.wajiha.ui.components.FolderTabRow
+import com.wajiha.ui.components.drawFolderTopEdge
+import com.wajiha.ui.components.folderChromeBorder
+import com.wajiha.ui.components.folderChromeOutlineColor
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.db.RomFolderEntity
 import com.wajiha.data.prefs.AppSettings
@@ -68,11 +75,9 @@ import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.SettingsHeroKind
 import com.wajiha.state.SettingsHeroOption
-import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.WajihaEmptyState
 import com.wajiha.ui.components.WajihaScreen
-import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadSafeTextField
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
@@ -240,29 +245,70 @@ fun SettingsScreen(
             },
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                WajihaToolbar(title = "Wajiha Settings", onBack = onBack, backFocusable = false)
-
                 Column(
                     modifier =
                         Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .padding(horizontal = WajihaSpacing.md),
+                            .padding(horizontal = WajihaSpacing.sm),
                 ) {
-                    FolderTabRow(
-                        tabs = sections.map { it.label },
-                        selectedIndex = selectedSectionIndex,
-                        onSelect = ::selectSection,
-                        minHeight = LocalSettingRowMinHeight.current,
+                    val folderOutline = folderChromeOutlineColor()
+                    val folderEdge = folderChromeBorder().width
+                    var chromeCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+                    var selectedTabCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+                    Row(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .focusProperties { canFocus = false }
-                                .padding(
-                                    top = WajihaSpacing.sm,
-                                    bottom = 0.dp,
-                                ),
-                    )
+                                .zIndex(1f)
+                                .padding(top = WajihaSpacing.sm)
+                                .onGloballyPositioned { chromeCoords = it }
+                                .drawWithContent {
+                                    drawContent()
+                                    val chrome = chromeCoords
+                                    val tabCoords = selectedTabCoords
+                                    val tab =
+                                        if (chrome != null &&
+                                            tabCoords != null &&
+                                            chrome.isAttached &&
+                                            tabCoords.isAttached
+                                        ) {
+                                            chrome.localBoundingBoxOf(tabCoords, clipBounds = false)
+                                        } else {
+                                            null
+                                        }
+                                    val stroke = folderEdge.toPx()
+                                    drawFolderTopEdge(
+                                        color = folderOutline,
+                                        seamY = size.height - stroke / 2f,
+                                        width = size.width,
+                                        selectedTab = tab,
+                                        strokeWidth = stroke,
+                                    )
+                                },
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+                    ) {
+                        GamepadButton(
+                            text = "Back",
+                            onClick = onBack,
+                            outlined = true,
+                            gamepadFocusable = false,
+                            sound = null,
+                        )
+                        FolderTabRow(
+                            tabs = sections.map { it.label },
+                            selectedIndex = selectedSectionIndex,
+                            onSelect = ::selectSection,
+                            minHeight = LocalSettingRowMinHeight.current,
+                            showTopEdge = false,
+                            onSelectedTabCoordinates = { selectedTabCoords = it },
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .focusProperties { canFocus = false },
+                        )
+                    }
 
                     val selectedSection = sections[selectedSectionIndex]
                     WajihaSettingPanel(
@@ -271,7 +317,6 @@ fun SettingsScreen(
                             Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
-                                .offset(y = (-1).dp)
                                 .padding(bottom = WajihaSpacing.md),
                     ) {
                         when (selectedSection) {
@@ -704,6 +749,41 @@ private fun ScreensSectionContent(
         onSelect = settingsViewModel::setNowPlayingDisplay,
         defaultValue = "Both",
         onReset = { settingsViewModel.setNowPlayingDisplay("Both") },
+    )
+    WajihaSettingDivider()
+    WajihaToggleSetting(
+        label = "Focused game hero background",
+        description =
+            "Use the focused game's hero art as a full-screen background behind the game grid.",
+        checked = settings.gameGridHeroBackground,
+        onCheckedChange = settingsViewModel::setGameGridHeroBackground,
+        defaultChecked = false,
+        onReset = { settingsViewModel.setGameGridHeroBackground(false) },
+    )
+    WajihaSettingDivider()
+    WajihaSettingBlurb(
+        "Now Running page layout: hero backdrop and logo in place of the game title.",
+    )
+    WajihaToggleSetting(
+        label = "Hero as background",
+        description =
+            "Full-bleed hero art (or box art) behind the Now Running panel. " +
+                "Off keeps the solid background with a small box-art thumbnail.",
+        checked = settings.nowPlayingHeroBackground,
+        onCheckedChange = settingsViewModel::setNowPlayingHeroBackground,
+        defaultChecked = true,
+        onReset = { settingsViewModel.setNowPlayingHeroBackground(true) },
+    )
+    WajihaSettingDivider()
+    WajihaToggleSetting(
+        label = "Use logo for name",
+        description =
+            "Show the game logo instead of the title when scraped logo art is available. " +
+                "Falls back to the game title when there is no logo.",
+        checked = settings.nowPlayingLogo,
+        onCheckedChange = settingsViewModel::setNowPlayingLogo,
+        defaultChecked = true,
+        onReset = { settingsViewModel.setNowPlayingLogo(true) },
     )
     if (!single) {
         WajihaSettingDivider()
