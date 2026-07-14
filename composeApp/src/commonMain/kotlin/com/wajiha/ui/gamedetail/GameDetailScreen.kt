@@ -129,7 +129,7 @@ fun GameDetailScreen(
     }
 
     LaunchedEffect(selectedSectionIndex) {
-        clearSettingsHero(dualStore)
+        // Keep previous hero until the new section's focus publishes (avoids double flash).
         try {
             sectionFocus.requestFocus()
         } catch (_: Exception) {

@@ -175,7 +175,8 @@ fun SettingsScreen(
         if (sections[selectedSectionIndex] != SettingsSection.Library) {
             libraryFocusKind = LibraryFocusKind.Chrome
         }
-        clearSettingsHero(dualScreenStore)
+        // Don't clear the hero here — that blanks the top screen before the new
+        // section's focused row republishes (double flash). Focus swap overwrites.
         try {
             sectionFocus.requestFocus()
         } catch (_: Exception) {

@@ -1,7 +1,6 @@
 package com.wajiha.ui.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -10,13 +9,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -82,8 +82,20 @@ fun FolderTabRow(
 ) {
     val chromeBorder = folderChromeBorder()
     val outlineColor = folderChromeOutlineColor()
-    var selectedBounds by remember { mutableStateOf<Rect?>(null) }
+    // Cache every tab's bounds so the seam gap can jump immediately on switch
+    // instead of briefly using the previous tab (visible flash).
+    val tabBounds = remember { mutableStateMapOf<Int, Rect>() }
+    val tabCoords = remember { mutableStateMapOf<Int, LayoutCoordinates>() }
+    val selectedBounds = tabBounds[selectedIndex]
     val stroke = chromeBorder.width
+
+    // Push cached coordinates to parents that draw the seam (Settings + Back row).
+    val selectedCoords = tabCoords[selectedIndex]
+    SideEffect {
+        if (selectedCoords != null && selectedCoords.isAttached) {
+            onSelectedTabCoordinates?.invoke(selectedCoords)
+        }
+    }
 
     Row(
         modifier =
@@ -115,22 +127,21 @@ fun FolderTabRow(
                 minHeight = minHeight,
                 outlineColor = outlineColor,
                 modifier =
-                    if (selected) {
-                        Modifier.onGloballyPositioned { coords ->
-                            val parent = coords.positionInParent()
-                            val w = coords.size.width.toFloat()
-                            val h = coords.size.height.toFloat()
-                            selectedBounds =
-                                Rect(
-                                    left = parent.x,
-                                    top = parent.y,
-                                    right = parent.x + w,
-                                    bottom = parent.y + h,
-                                )
+                    Modifier.onGloballyPositioned { coords ->
+                        tabCoords[index] = coords
+                        val parent = coords.positionInParent()
+                        val w = coords.size.width.toFloat()
+                        val h = coords.size.height.toFloat()
+                        tabBounds[index] =
+                            Rect(
+                                left = parent.x,
+                                top = parent.y,
+                                right = parent.x + w,
+                                bottom = parent.y + h,
+                            )
+                        if (selected) {
                             onSelectedTabCoordinates?.invoke(coords)
                         }
-                    } else {
-                        Modifier
                     },
             )
         }
@@ -175,27 +186,20 @@ private fun FolderTab(
     val chromeBorder = folderChromeBorder()
     val corner = WajihaShapes.focusCornerRadius
     val outlinedColors = ButtonDefaults.outlinedButtonColors()
-    // Match OutlinedButton chrome; selected fills like the panel so it can join.
-    val containerColor by animateColorAsState(
-        targetValue =
-            when {
-                selected -> MaterialTheme.colorScheme.surfaceContainerLow
-                else -> outlinedColors.containerColor
-            },
-        label = "folder_tab_color",
-    )
-    val labelColor by animateColorAsState(
-        targetValue =
-            when {
-                selected -> MaterialTheme.colorScheme.onSurface
-                else -> outlinedColors.contentColor
-            },
-        label = "folder_tab_label",
-    )
-    val topPadding by animateDpAsState(
-        targetValue = if (selected) 0.dp else WajihaSpacing.xs,
-        label = "folder_tab_elevation",
-    )
+    // Instant swap — animated mid-states flash against the panel join.
+    val containerColor =
+        if (selected) {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        } else {
+            outlinedColors.containerColor
+        }
+    val labelColor =
+        if (selected) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            outlinedColors.contentColor
+        }
+    val topPadding = if (selected) 0.dp else WajihaSpacing.xs
 
     Box(
         modifier = modifier.padding(top = topPadding),

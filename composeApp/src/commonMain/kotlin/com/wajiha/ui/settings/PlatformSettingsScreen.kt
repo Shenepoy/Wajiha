@@ -118,7 +118,7 @@ fun PlatformSettingsScreen(
     }
 
     LaunchedEffect(selectedTabIndex) {
-        clearSettingsHero(dualStore)
+        // Keep previous hero until the new tab's focus publishes (avoids double flash).
         try {
             sectionFocus.requestFocus()
         } catch (_: Exception) {
