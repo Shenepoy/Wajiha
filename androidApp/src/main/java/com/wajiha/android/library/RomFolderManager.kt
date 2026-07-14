@@ -6,6 +6,8 @@ import android.net.Uri
 import com.wajiha.android.work.LibraryScanWorker
 import com.wajiha.data.db.RomFolderEntity
 import com.wajiha.domain.repository.GameRepository
+import com.wajiha.domain.repository.PlatformRepository
+import com.wajiha.domain.scan.ScanDepth
 
 /**
  * Persists SAF tree picks as ROM folders. Use with
@@ -20,22 +22,26 @@ import com.wajiha.domain.repository.GameRepository
 class RomFolderManager(
     private val context: Context,
     private val gameRepository: GameRepository,
+    private val platformRepository: PlatformRepository,
 ) {
     suspend fun addFolder(
         treeUri: Uri,
         platformId: String,
-        scanDepth: Int = 3,
+        scanDepth: Int? = null,
     ): Long {
         context.contentResolver.takePersistableUriPermission(
             treeUri,
             Intent.FLAG_GRANT_READ_URI_PERMISSION,
         )
+        val depth =
+            scanDepth
+                ?: ScanDepth.forDeepScan(platformRepository.byId(platformId)?.deepScan == true)
         val id =
             gameRepository.addRomFolder(
                 RomFolderEntity(
                     platformId = platformId,
                     treeUri = treeUri.toString(),
-                    scanDepth = scanDepth,
+                    scanDepth = depth,
                 ),
             )
         LibraryScanWorker.enqueue(context, platformId = platformId)

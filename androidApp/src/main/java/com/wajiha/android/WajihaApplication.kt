@@ -128,7 +128,7 @@ class WajihaApplication :
                 }
                 single<RomScanner> { SafRomScanner(this@WajihaApplication) }
                 single<RomHasher> { ContentRomHasher(this@WajihaApplication) }
-                single { RomFolderManager(this@WajihaApplication, get()) }
+                single { RomFolderManager(this@WajihaApplication, get(), get()) }
                 single { PlaySessionTracker(get(), get()) }
                 single { GameLauncher(this@WajihaApplication, get(), get(), get(), get(), get(), get()) }
                 single { DisplayCoordinator(this@WajihaApplication, get()) }

@@ -88,6 +88,7 @@ class ConfigInstaller(
                     defaultEmulatorId =
                         existing?.defaultEmulatorId
                             ?: config.emulators.firstOrNull { it.isDefault }?.id,
+                    deepScan = existing?.deepScan ?: false,
                 )
             }
         val emulatorEntities =

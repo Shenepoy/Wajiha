@@ -530,8 +530,19 @@ fun SecondaryApp() {
                                     current = animatedMode,
                                     store = store,
                                     sessionActive = sessionActive,
+                                    backgroundContent =
+                                        if (settings.nowPlayingHeroBackground) {
+                                            { NowPlayingBackdrop(state = nowPlaying) }
+                                        } else {
+                                            null
+                                        },
                                 ) {
-                                    NowPlayingPanel(state = nowPlaying)
+                                    NowPlayingPanel(
+                                        state = nowPlaying,
+                                        heroBackground = settings.nowPlayingHeroBackground,
+                                        useLogo = settings.nowPlayingLogo,
+                                        backgroundInParent = true,
+                                    )
                                 }
                             }
 
@@ -552,6 +563,7 @@ fun SecondaryApp() {
                                     onDeleteGameFile = viewModel::deleteGameFile,
                                     secondaryDisplayId = secondaryDisplayId,
                                     dualDisplay = true,
+                                    focusedGameHeroBackground = settings.gameGridHeroBackground,
                                     onOpenApps = { store.setSecondaryMode(SecondaryMode.AppDock) },
                                     onOpenSettings = {
                                         viewModel.playOpen()
@@ -669,6 +681,7 @@ private fun SecondaryModeFrame(
     current: SecondaryMode,
     store: DualScreenStore,
     sessionActive: Boolean,
+    backgroundContent: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val tabs =
@@ -728,6 +741,7 @@ private fun SecondaryModeFrame(
         gamepadOwner = GamepadOwner.Secondary,
         onClaimGamepad = store::claimGamepad,
         onOwnerGainedFocus = { contentFocus.requestContentFocus() },
+        backgroundContent = backgroundContent,
         onPreviewKey = { event ->
             when {
                 GamepadKeys.isL1(event.type, event.key) && currentIndex > 0 -> {
@@ -746,7 +760,18 @@ private fun SecondaryModeFrame(
             }
         },
     ) {
-        Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (backgroundContent == null) {
+                            Modifier.background(MaterialTheme.colorScheme.background)
+                        } else {
+                            Modifier
+                        },
+                    ),
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = WajihaSpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,

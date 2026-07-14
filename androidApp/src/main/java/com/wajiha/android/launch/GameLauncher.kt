@@ -98,12 +98,16 @@ class GameLauncher(
         // onUserLeaveHint/onPause fire synchronously and used to reclaim the
         // bottom task before hasActiveSessions(), starving the top-display launch.
         val now = System.currentTimeMillis()
+        val media = gameRepository.media(game.id)
         val session =
             NowPlayingState(
                 packageName = packageName,
                 gameId = game.id,
                 gameName = game.displayName,
                 platformId = game.platformId,
+                boxartPath = media.firstOrNull { it.type == "boxart" }?.localPath,
+                heroPath = media.firstOrNull { it.type == "hero" }?.localPath,
+                logoPath = media.firstOrNull { it.type == "logo" }?.localPath,
                 sessionStartedAt = now,
                 sessionResumedAt = now,
                 launchedByWajiha = true,

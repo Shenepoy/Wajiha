@@ -34,6 +34,11 @@ class PlatformRepository(
         emulatorId: String?,
     ) = platformDao.setDefaultEmulator(id, emulatorId)
 
+    suspend fun setDeepScan(
+        id: String,
+        deepScan: Boolean,
+    ) = platformDao.setDeepScan(id, deepScan)
+
     fun observeEmulators(platformId: String): Flow<List<EmulatorEntity>> = emulatorDao.observeForPlatform(platformId)
 
     fun observeAllEmulators(): Flow<List<EmulatorEntity>> = emulatorDao.observeAll()

@@ -9,6 +9,6 @@ fun buildWajihaDatabase(builder: RoomDatabase.Builder<WajihaDatabase>): WajihaDa
     builder
         .setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.IO)
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
         .build()

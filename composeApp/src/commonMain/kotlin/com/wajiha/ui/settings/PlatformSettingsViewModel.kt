@@ -7,6 +7,7 @@ import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.db.RomFolderEntity
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.PlatformRepository
+import com.wajiha.domain.scan.ScanDepth
 import com.wajiha.platform.LibraryActions
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -134,6 +135,17 @@ class PlatformSettingsViewModel(
 
     fun removeFolder(folderId: Long) {
         viewModelScope.launch { gameRepository.removeRomFolder(folderId) }
+    }
+
+    fun setDeepScan(enabled: Boolean) {
+        val id = platformId.value ?: return
+        viewModelScope.launch {
+            platformRepository.setDeepScan(id, enabled)
+            gameRepository.setScanDepthForPlatform(
+                id,
+                ScanDepth.forDeepScan(enabled),
+            )
+        }
     }
 
     fun rescanPlatform() {

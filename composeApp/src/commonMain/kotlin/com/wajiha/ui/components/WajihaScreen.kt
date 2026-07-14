@@ -33,6 +33,7 @@ fun WajihaScreen(
     onPreviewKey: ((KeyEvent) -> Boolean)? = null,
     onOwnerGainedFocus: (suspend () -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
+    backgroundContent: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     if (onBack != null) {
@@ -50,33 +51,42 @@ fun WajihaScreen(
         WajihaSnackbarScaffold(
             snackbarHostState = snackbarHostState ?: rememberWajihaSnackbarHostState(),
         ) {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background),
-            ) {
-                if (title != null) {
-                    androidx.compose.material3.Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(WajihaSpacing.md),
-                    )
-                }
-                Box(
+            Box(modifier = Modifier.fillMaxSize()) {
+                backgroundContent?.invoke()
+                Column(
                     modifier =
                         Modifier
-                            .weight(1f)
-                            .fillMaxSize(),
+                            .fillMaxSize()
+                            .then(
+                                if (backgroundContent == null) {
+                                    Modifier.background(MaterialTheme.colorScheme.background)
+                                } else {
+                                    Modifier
+                                },
+                            ),
                 ) {
-                    content()
-                }
-                if (showActionBar) {
-                    MirroredOrLocalGamepadActionBar(
-                        publisherId = layerId,
-                        hints = gamepadHints ?: defaultGamepadHints(),
-                        hostOwner = gamepadOwner,
-                    )
+                    if (title != null) {
+                        androidx.compose.material3.Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(WajihaSpacing.md),
+                        )
+                    }
+                    Box(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxSize(),
+                    ) {
+                        content()
+                    }
+                    if (showActionBar) {
+                        MirroredOrLocalGamepadActionBar(
+                            publisherId = layerId,
+                            hints = gamepadHints ?: defaultGamepadHints(),
+                            hostOwner = gamepadOwner,
+                        )
+                    }
                 }
             }
         }

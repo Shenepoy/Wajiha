@@ -160,4 +160,9 @@ class GameRepository(
         id: Long,
         at: Long,
     ) = romFolderDao.markScanned(id, at)
+
+    suspend fun setScanDepthForPlatform(
+        platformId: String,
+        depth: Int,
+    ) = romFolderDao.setScanDepthForPlatform(platformId, depth)
 }

@@ -133,6 +133,8 @@ fun BottomScreen(
     showHeaderChrome: Boolean = dualDisplay,
     /** Focused game title for single-screen name strip; null hides it. */
     focusedGameTitle: String? = null,
+    /** Show the focused game's hero art behind the entire grid screen. */
+    focusedGameHeroBackground: Boolean = false,
     onOpenApps: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSystem: (() -> Unit)? = null,
@@ -515,6 +517,12 @@ fun BottomScreen(
                 }
             }
         }
+    val focusedHeroPath =
+        if (focusedGameHeroBackground) {
+            state.tiles.firstOrNull { it.game.id == selectedGameId }?.heroPath
+        } else {
+            null
+        }
 
     WajihaScreen(
         modifier = modifier.fillMaxSize(),
@@ -523,6 +531,12 @@ fun BottomScreen(
         gamepadHints = gamepadHints,
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
+        backgroundContent =
+            if (focusedHeroPath != null) {
+                { GameGridHeroBackdrop(path = focusedHeroPath) }
+            } else {
+                null
+            },
         onOwnerGainedFocus = {
             if (!menuOpen) {
                 val sessionPkg = selectedSessionPackage
@@ -985,6 +999,39 @@ fun BottomScreen(
                 modifier = Modifier.zIndex(2f),
             )
         }
+    }
+}
+
+@Composable
+private fun GameGridHeroBackdrop(path: String) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(scheme.background),
+    ) {
+        AsyncImage(
+            model = path,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors =
+                                listOf(
+                                    scheme.background.copy(alpha = 0.72f),
+                                    scheme.background.copy(alpha = 0.82f),
+                                    scheme.background.copy(alpha = 0.92f),
+                                ),
+                        ),
+                    ),
+        )
     }
 }
 

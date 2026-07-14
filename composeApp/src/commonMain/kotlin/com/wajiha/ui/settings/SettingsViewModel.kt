@@ -127,6 +127,18 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.setNowPlayingDisplay(mode) }
     }
 
+    fun setNowPlayingHeroBackground(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setNowPlayingHeroBackground(value) }
+    }
+
+    fun setNowPlayingLogo(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setNowPlayingLogo(value) }
+    }
+
+    fun setGameGridHeroBackground(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setGameGridHeroBackground(value) }
+    }
+
     fun setGameDimEnabled(value: Boolean) {
         viewModelScope.launch { settingsRepository.setGameDimEnabled(value) }
     }

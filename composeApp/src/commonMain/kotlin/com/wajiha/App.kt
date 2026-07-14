@@ -49,6 +49,7 @@ import com.wajiha.ui.navigation.menuOnPrimary
 import com.wajiha.ui.onboarding.OnboardingScreen
 import com.wajiha.ui.scraper.ScraperScreen
 import com.wajiha.ui.scraper.ScraperViewModel
+import com.wajiha.ui.secondary.NowPlayingBackdrop
 import com.wajiha.ui.secondary.NowPlayingOverlay
 import com.wajiha.ui.secondary.NowPlayingPanel
 import com.wajiha.ui.secondary.nowPlayingOverlayPlacement
@@ -273,6 +274,7 @@ fun App() {
                         ?.game
                         ?.displayName
                         ?.takeIf { !isDual && settings.showSelectedGameName },
+                focusedGameHeroBackground = settings.gameGridHeroBackground,
                 onOpenApps = {
                     viewModel.playOpen()
                     route = Route.Apps
@@ -574,6 +576,12 @@ fun App() {
                             gamepadOwner = GamepadOwner.Primary,
                             onClaimGamepad = dualStore::claimGamepad,
                             onOwnerGainedFocus = { nowRunningFocus.requestContentFocus() },
+                            backgroundContent =
+                                if (settings.nowPlayingHeroBackground) {
+                                    { NowPlayingBackdrop(state = nowPlaying) }
+                                } else {
+                                    null
+                                },
                         ) {
                             Column(modifier = Modifier.fillMaxSize()) {
                                 WajihaToolbar(
@@ -585,6 +593,9 @@ fun App() {
                                 )
                                 NowPlayingPanel(
                                     state = nowPlaying,
+                                    heroBackground = settings.nowPlayingHeroBackground,
+                                    useLogo = settings.nowPlayingLogo,
+                                    backgroundInParent = true,
                                     modifier =
                                         Modifier
                                             .fillMaxWidth()

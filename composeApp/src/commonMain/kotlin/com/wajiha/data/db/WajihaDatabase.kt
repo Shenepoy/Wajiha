@@ -16,7 +16,7 @@ import androidx.room3.RoomDatabaseConstructor
         CollectionEntity::class,
         CollectionGameCrossRef::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @ConstructedBy(WajihaDatabaseConstructor::class)

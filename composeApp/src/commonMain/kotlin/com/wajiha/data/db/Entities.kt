@@ -27,6 +27,8 @@ data class PlatformEntity(
     val enabled: Boolean = true,
     /** Default emulator id for this platform (FK into emulators, loose) */
     val defaultEmulatorId: String? = null,
+    /** When true, ROM folders for this platform use a deeper scan walk. */
+    val deepScan: Boolean = false,
 )
 
 /**

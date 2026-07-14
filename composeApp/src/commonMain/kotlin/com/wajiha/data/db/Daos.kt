@@ -43,6 +43,12 @@ interface PlatformDao {
         emulatorId: String?,
     )
 
+    @Query("UPDATE platforms SET deepScan = :deepScan WHERE id = :id")
+    suspend fun setDeepScan(
+        id: String,
+        deepScan: Boolean,
+    )
+
     @Query("DELETE FROM platforms WHERE id = :id")
     suspend fun delete(id: String)
 }
@@ -212,6 +218,12 @@ interface RomFolderDao {
     suspend fun markScanned(
         id: Long,
         at: Long,
+    )
+
+    @Query("UPDATE rom_folders SET scanDepth = :depth WHERE platformId = :platformId")
+    suspend fun setScanDepthForPlatform(
+        platformId: String,
+        depth: Int,
     )
 
     @Query("DELETE FROM rom_folders WHERE id = :id")

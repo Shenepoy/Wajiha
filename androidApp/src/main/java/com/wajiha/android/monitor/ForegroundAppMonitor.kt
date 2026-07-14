@@ -717,6 +717,7 @@ class ForegroundAppMonitor(
                 platformId = preserve?.platformId,
                 boxartPath = preserve?.boxartPath,
                 heroPath = preserve?.heroPath,
+                logoPath = preserve?.logoPath,
                 sessionStartedAt = preserve?.sessionStartedAt ?: System.currentTimeMillis(),
                 sessionElapsedMs = preserve?.sessionElapsedMs ?: 0L,
                 sessionResumedAt = preserve?.sessionResumedAt ?: 0L,
@@ -765,6 +766,7 @@ class ForegroundAppMonitor(
                 platformId = resolved.platformId ?: cached.platformId,
                 boxartPath = resolved.boxartPath ?: cached.boxartPath,
                 heroPath = resolved.heroPath ?: cached.heroPath,
+                logoPath = resolved.logoPath ?: cached.logoPath,
             )
         if (enriched == cached) return
         store.updateGameSession(enriched)

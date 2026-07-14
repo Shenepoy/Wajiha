@@ -141,6 +141,7 @@ class RomPathMatcher(
             platformId = game.platformId,
             boxartPath = media.firstOrNull { it.type == "boxart" }?.localPath,
             heroPath = media.firstOrNull { it.type == "hero" }?.localPath,
+            logoPath = media.firstOrNull { it.type == "logo" }?.localPath,
             confidence = confidence,
             source = source,
         )

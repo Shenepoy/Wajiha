@@ -28,6 +28,12 @@ data class AppSettings(
     val gameSecondaryMode: String = "NowPlaying",
     /** How active sessions appear on the bottom screen grid and/or floating chip. */
     val nowPlayingDisplay: String = NowPlayingDisplayMode.Both.name,
+    /** Now Running panel: full-bleed hero (or boxart) behind the content. */
+    val nowPlayingHeroBackground: Boolean = true,
+    /** Now Running panel: show logo in place of the game title when available. */
+    val nowPlayingLogo: Boolean = true,
+    /** Game grid: use the focused game's hero art as a full-screen backdrop. */
+    val gameGridHeroBackground: Boolean = false,
     /** Overlay dim on the bottom screen while a game runs on the top display. */
     val gameDimEnabled: Boolean = false,
     /** When true, dim applies only on the Now Playing secondary screen; when false, any mode except Off. */
@@ -118,6 +124,9 @@ class SettingsRepository(
                     prefs[ROM_RECONCILIATION_FILENAME_FALLBACK] ?: true,
                 gameSecondaryMode = prefs[GAME_SECONDARY_MODE] ?: "NowPlaying",
                 nowPlayingDisplay = normalizeNowPlayingDisplay(prefs[NOW_PLAYING_DISPLAY]),
+                nowPlayingHeroBackground = prefs[NOW_PLAYING_HERO_BACKGROUND] ?: true,
+                nowPlayingLogo = prefs[NOW_PLAYING_LOGO] ?: true,
+                gameGridHeroBackground = prefs[GAME_GRID_HERO_BACKGROUND] ?: false,
                 gameDimEnabled = prefs[GAME_DIM_ENABLED] ?: false,
                 gameDimOnlyOnNowPlaying = prefs[GAME_DIM_ONLY_ON_NOW_PLAYING] ?: true,
                 gameDimPercent = normalizeGameDimPercent(prefs[GAME_DIM_PERCENT]),
@@ -172,6 +181,14 @@ class SettingsRepository(
     suspend fun setGameSecondaryMode(value: String) = setPref(GAME_SECONDARY_MODE, value, "gameSecondaryMode")
 
     suspend fun setNowPlayingDisplay(value: String) = setPref(NOW_PLAYING_DISPLAY, normalizeNowPlayingDisplay(value), "nowPlayingDisplay")
+
+    suspend fun setNowPlayingHeroBackground(value: Boolean) =
+        setPref(NOW_PLAYING_HERO_BACKGROUND, value, "nowPlayingHeroBackground")
+
+    suspend fun setNowPlayingLogo(value: Boolean) = setPref(NOW_PLAYING_LOGO, value, "nowPlayingLogo")
+
+    suspend fun setGameGridHeroBackground(value: Boolean) =
+        setPref(GAME_GRID_HERO_BACKGROUND, value, "gameGridHeroBackground")
 
     suspend fun setGameDimEnabled(value: Boolean) = setPref(GAME_DIM_ENABLED, value, "gameDimEnabled")
 
@@ -405,6 +422,9 @@ class SettingsRepository(
             booleanPreferencesKey("rom_reconciliation_filename_fallback")
         val GAME_SECONDARY_MODE = stringPreferencesKey("game_secondary_mode")
         private val NOW_PLAYING_DISPLAY = stringPreferencesKey("now_playing_display")
+        private val NOW_PLAYING_HERO_BACKGROUND = booleanPreferencesKey("now_playing_hero_background")
+        private val NOW_PLAYING_LOGO = booleanPreferencesKey("now_playing_logo")
+        private val GAME_GRID_HERO_BACKGROUND = booleanPreferencesKey("game_grid_hero_background")
         val GAME_DIM_ENABLED = booleanPreferencesKey("game_dim_enabled")
         val GAME_DIM_ONLY_ON_NOW_PLAYING = booleanPreferencesKey("game_dim_only_on_now_playing")
         val GAME_DIM_PERCENT = intPreferencesKey("game_dim_percent")
