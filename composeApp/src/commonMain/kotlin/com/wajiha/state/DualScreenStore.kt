@@ -691,6 +691,7 @@ class DualScreenStore {
     }
 
     fun setSettingsHeroDetail(detail: SettingsHeroDetail?) {
+        if (_settingsHeroDetail.value == detail) return
         _settingsHeroDetail.value = detail
         if (detail == null) {
             SettingsHeroActionBridge.clear()

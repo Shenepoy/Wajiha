@@ -251,19 +251,6 @@ interface GameMediaDao {
         limit: Int,
     ): Flow<List<GameMediaEntity>>
 
-    @Query(
-        """
-        SELECT game_media.* FROM game_media
-        INNER JOIN games ON games.id = game_media.gameId
-        WHERE games.platformId = :platformId AND game_media.type = 'boxart'
-        LIMIT :limit
-        """,
-    )
-    suspend fun boxartSample(
-        platformId: String,
-        limit: Int,
-    ): List<GameMediaEntity>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(media: GameMediaEntity): Long
 

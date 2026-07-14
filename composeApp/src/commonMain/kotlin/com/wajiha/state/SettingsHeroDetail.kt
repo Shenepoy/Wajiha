@@ -6,14 +6,8 @@ enum class SettingsHeroKind {
     PlatformRow,
     LibraryChrome,
     ScreensChrome,
-    SectionOverview,
     PickerRow,
 }
-
-data class SettingsHeroHint(
-    val button: String,
-    val label: String,
-)
 
 data class SettingsHeroAction(
     /** Stable id: "edit", "rescan", "configure", "open", "select". */
@@ -51,12 +45,7 @@ data class SettingsHeroDetail(
     val kind: SettingsHeroKind,
     val title: String,
     val subtitle: String? = null,
-    /** Omit when identical to [subtitle] at publish time. */
-    val whyItMatters: String? = null,
     val valueText: String? = null,
-    /** e.g. "Default: … · Y resets" */
-    val defaultLine: String? = null,
-    val controlHints: List<SettingsHeroHint> = emptyList(),
     /** "focusColor", "theme", "glyphs", or null. */
     val previewKind: String? = null,
     /** Hex / theme name / glyph scheme payload for [previewKind]. */
@@ -66,12 +55,13 @@ data class SettingsHeroDetail(
     /** Option chips when settings-hero actions are enabled. */
     val options: List<SettingsHeroOption> = emptyList(),
     val platform: SettingsHeroPlatformExtras? = null,
-    /** Platforms to games totals for library chrome. */
-    val libraryTotals: Pair<Int, Int>? = null,
     val sectionOverview: String? = null,
     val showRoleDiagram: Boolean = false,
     val actions: List<SettingsHeroAction> = emptyList(),
 )
+
+fun SettingsHeroDetail?.isSettingsHeroInteractive(showActions: Boolean): Boolean =
+    showActions && this != null && (options.isNotEmpty() || actions.isNotEmpty())
 
 /**
  * Process-wide callbacks for settings-hero mutations. Menu screens register
@@ -80,9 +70,6 @@ data class SettingsHeroDetail(
 object SettingsHeroActionBridge {
     @Volatile
     var onSelectOption: ((String) -> Unit)? = null
-
-    @Volatile
-    var onSetEmulator: ((String) -> Unit)? = null
 
     /** Primary hero action (rescan / configure). */
     @Volatile
@@ -94,7 +81,6 @@ object SettingsHeroActionBridge {
 
     fun clear() {
         onSelectOption = null
-        onSetEmulator = null
         onPrimaryAction = null
         onSecondaryAction = null
     }

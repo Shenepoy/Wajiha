@@ -323,10 +323,4 @@ class SettingsViewModel(
     fun rescanLibrary() = libraryActions.rescanLibrary()
 
     fun rescanPlatform(platformId: String) = libraryActions.rescanPlatform(platformId)
-
-    /** Platforms that belong on the Settings Library list. */
-    fun inUsePlatformIds(
-        platforms: List<PlatformEntity>,
-        folderList: List<RomFolderEntity>,
-    ): Set<String> = folderList.map { it.platformId }.toSet()
 }

@@ -40,7 +40,6 @@ import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.SettingsHeroAction
-import com.wajiha.state.SettingsHeroHint
 import com.wajiha.state.SettingsHeroOption
 import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.LocalUiFeedback
@@ -58,6 +57,7 @@ import com.wajiha.ui.components.gamepad.SettingType
 import com.wajiha.ui.components.gamepad.WajihaSettingBlurb
 import com.wajiha.ui.components.gamepad.WajihaSettingDivider
 import com.wajiha.ui.components.gamepad.WajihaSettingPanel
+import com.wajiha.ui.components.gamepad.WajihaToggleSetting
 import com.wajiha.ui.components.gamepad.gameDetailGamepadHints
 import com.wajiha.ui.scraper.PlatformScraperSettingsSection
 import com.wajiha.ui.scraper.ScrapeModeSelector
@@ -280,36 +280,21 @@ private fun PlatformGeneralTabContent(
             "Show this system in the home filter when it has games. " +
                 "Turning off does not remove ROM folders.",
         )
-        GamepadSettingRow(
+        WajihaToggleSetting(
             label = "In library",
             description = "When off, this system is hidden from the home platform filter.",
-            type = SettingType.Toggle,
             checked = platform.enabled,
             onCheckedChange = viewModel::setEnabled,
-            focusRequester = firstFocusRequester,
+            defaultChecked = true,
             onReset = { viewModel.setEnabled(true) },
-            isAtDefault = platform.enabled,
-            onFocusedChanged = { focused ->
-                if (focused) {
-                    publishSettingsHero(
-                        dualStore,
-                        genericSettingHeroDetail(
-                            title = "In library",
-                            subtitle = "When off, this system is hidden from the home platform filter.",
-                            whyItMatters = "Hiding a system does not remove ROM folders or games.",
-                            valueText = if (platform.enabled) "On" else "Off",
-                            defaultLine = "Default: On · Y resets",
-                            controlHints =
-                                listOf(
-                                    SettingsHeroHint("A", "Toggle"),
-                                    SettingsHeroHint("Y", "Reset"),
-                                ),
-                        ),
-                    )
-                } else {
-                    clearSettingsHero(dualStore)
-                }
-            },
+            focusRequester = firstFocusRequester,
+            onFocusedChanged =
+                settingsToggleHeroFocus(
+                    store = dualStore,
+                    title = "In library",
+                    subtitle = "When off, this system is hidden from the home platform filter.",
+                    checked = platform.enabled,
+                ),
         )
         WajihaSettingDivider()
         WajihaSettingBlurb("Display name and short label shown in the library grid.")
@@ -387,10 +372,7 @@ private fun PlatformEmulatorTabContent(
                                     title = "Default emulator",
                                     subtitle =
                                         "Installed apps are selectable. Missing emulators stay visible but greyed out.",
-                                    whyItMatters =
-                                        "Games for this system launch with this player unless a game override is set.",
                                     valueText = selectedLabel,
-                                    controlHints = listOf(SettingsHeroHint("A", "Select")),
                                     options = heroOptions,
                                 ),
                             onSelectOption =
@@ -442,8 +424,6 @@ private fun PlatformFoldersTabContent(
                                 genericSettingHeroDetail(
                                     title = "Rescan",
                                     subtitle = "Scan ROM folders for this system and refresh the library.",
-                                    whyItMatters = "Picks up new files and removes entries for deleted ROMs.",
-                                    controlHints = listOf(SettingsHeroHint("A", "Rescan")),
                                 ).copy(
                                     actions =
                                         if (settingsHeroActions) {
@@ -470,9 +450,6 @@ private fun PlatformFoldersTabContent(
                             genericSettingHeroDetail(
                                 title = "Add folder",
                                 subtitle = "Pick a ROM folder on this device for this system.",
-                                whyItMatters =
-                                    "At least one folder is required to list this system under Settings → Library.",
-                                controlHints = listOf(SettingsHeroHint("A", "Add folder")),
                             ),
                             onPrimaryAction = viewModel::pickRomFolder,
                         )
@@ -932,8 +909,6 @@ private fun FolderRow(
                     genericSettingHeroDetail(
                         title = path,
                         subtitle = "ROM folder on this device.",
-                        whyItMatters = "A removes this folder from the platform (games stay until the next rescan).",
-                        controlHints = listOf(SettingsHeroHint("A", "Remove")),
                     ),
                     onPrimaryAction = onRemove,
                 )

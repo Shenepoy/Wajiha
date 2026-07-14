@@ -58,7 +58,7 @@ data class AppSettings(
      */
     val swapGamepadHints: Boolean = false,
     /**
-     * Settings hero (top screen): show contextual help / why-it-matters copy
+     * Settings hero (top screen): mirror title, value, preview, and actions
      * for the focused settings row.
      */
     val settingsHeroHelp: Boolean = true,

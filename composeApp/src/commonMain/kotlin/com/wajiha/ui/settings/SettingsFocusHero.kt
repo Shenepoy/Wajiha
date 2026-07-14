@@ -50,8 +50,10 @@ import com.wajiha.state.SettingsHeroActionBridge
 import com.wajiha.state.SettingsHeroDetail
 import com.wajiha.state.SettingsHeroKind
 import com.wajiha.state.SettingsHeroPlatformExtras
+import com.wajiha.state.isSettingsHeroInteractive
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadChip
+import com.wajiha.ui.components.gamepad.WajihaSettingDivider
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import com.wajiha.ui.theme.focusColorPreview
@@ -71,7 +73,6 @@ fun SettingsFocusHero(
     val settingsRepository = koinInject<SettingsRepository>()
     val settings by settingsRepository.settings.collectAsState(initial = AppSettings())
     val detail by store.settingsHeroDetail.collectAsState()
-    val scheme = MaterialTheme.colorScheme
 
     if (!settings.settingsHeroHelp) {
         SettingsHeroStage(modifier = modifier) {
@@ -91,12 +92,9 @@ fun SettingsFocusHero(
     }
 
     val showActions = settings.settingsHeroActions
-    val interactive =
-        showActions &&
-            detail != null &&
-            (detail!!.options.isNotEmpty() || detail!!.actions.isNotEmpty())
+    val interactive = detail.isSettingsHeroInteractive(showActions)
 
-    LaunchedEffect(interactive, detail?.title) {
+    LaunchedEffect(interactive) {
         store.setSettingsHeroPicking(interactive)
     }
     DisposableEffect(Unit) {
@@ -105,6 +103,7 @@ fun SettingsFocusHero(
 
     val firstFocus = remember { FocusRequester() }
     val resolvedFocus = contentFocusRequester ?: firstFocus
+    val focusedDetail = detail
 
     SettingsHeroStage(modifier = modifier) {
         SettingsHeroCard(
@@ -112,14 +111,14 @@ fun SettingsFocusHero(
             interactive = interactive,
             fillHeight = true,
         ) {
-            if (detail == null) {
+            if (focusedDetail == null) {
                 SettingsHeroChrome(
                     sectionLabel = sectionLabel,
                     swapRoles = settings.swapScreenRoles,
                 )
             } else {
                 SettingsHeroDetailBody(
-                    detail = detail!!,
+                    detail = focusedDetail,
                     showActions = showActions,
                     swapRoles = settings.swapScreenRoles,
                     firstFocusRequester = if (interactive) resolvedFocus else null,
@@ -147,9 +146,7 @@ private fun SettingsHeroStage(
                                 scheme.background,
                             ),
                     ),
-                )
-                // Tight inset so the card uses most of the secondary display.
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                ).padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         content()
     }
@@ -237,18 +234,16 @@ fun ColumnScope.SettingsHeroDetailBody(
     val scheme = MaterialTheme.colorScheme
     val titleStyle =
         if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium
-    val hasPlatformArts = detail.platform?.boxartPaths?.isNotEmpty() == true
+    val platformArts = detail.platform?.takeIf { it.boxartPaths.isNotEmpty() }
     val showOverview =
         detail.sectionOverview
-            ?.takeIf {
-                detail.kind == SettingsHeroKind.LibraryChrome ||
-                    detail.kind == SettingsHeroKind.SectionOverview
-            }?.takeIf { it != detail.subtitle }
+            ?.takeIf { detail.kind == SettingsHeroKind.LibraryChrome }
+            ?.takeIf { it != detail.subtitle }
 
-    if (hasPlatformArts && !compact) {
+    if (platformArts != null && !compact) {
         HeroHeader(detail = detail, titleStyle = titleStyle, compact = compact)
         PreviewChip(kind = detail.previewKind, payload = detail.previewPayload)
-        PlatformMetaBlock(platform = detail.platform!!)
+        PlatformMetaBlock(platform = platformArts)
         HeroActions(
             detail = detail,
             showActions = showActions,
@@ -256,7 +251,7 @@ fun ColumnScope.SettingsHeroDetailBody(
         )
         Box(modifier = Modifier.weight(1f))
         PlatformBoxartRow(
-            paths = detail.platform!!.boxartPaths,
+            paths = platformArts.boxartPaths,
             modifier = Modifier.fillMaxWidth(),
         )
         return
@@ -271,21 +266,6 @@ fun ColumnScope.SettingsHeroDetailBody(
 
     detail.platform?.let { PlatformMetaBlock(platform = it) }
 
-    detail.libraryTotals?.let { (platforms, games) ->
-        Surface(
-            shape = HeroInnerShape,
-            color = scheme.surfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                text = "$platforms platform(s) · $games game(s) in library",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            )
-        }
-    }
-
     showOverview?.let {
         Text(
             text = it,
@@ -294,7 +274,7 @@ fun ColumnScope.SettingsHeroDetailBody(
         )
     }
 
-    if (detail.showRoleDiagram || detail.kind == SettingsHeroKind.ScreensChrome) {
+    if (detail.showRoleDiagram) {
         RoleDiagram(swapRoles = swapRoles)
     }
 
@@ -401,8 +381,13 @@ private fun HeroValueBlock(detail: SettingsHeroDetail) {
                 }
             }
 
-            !detail.valueText.isNullOrBlank() -> detail.valueText
-            else -> null
+            !detail.valueText.isNullOrBlank() -> {
+                detail.valueText
+            }
+
+            else -> {
+                null
+            }
         } ?: return
 
     Surface(
@@ -429,12 +414,8 @@ private fun HeroActions(
     showActions: Boolean,
     firstFocusRequester: FocusRequester?,
 ) {
-    val scheme = MaterialTheme.colorScheme
     if (showActions && detail.options.isNotEmpty()) {
-        HorizontalDivider(
-            color = scheme.outline.copy(alpha = 0.16f),
-            modifier = Modifier.padding(vertical = 2.dp),
-        )
+        WajihaSettingDivider()
         Text(
             text = "Options",
             style = MaterialTheme.typography.titleSmall,
@@ -456,10 +437,7 @@ private fun HeroActions(
     }
 
     if (showActions && detail.actions.isNotEmpty()) {
-        HorizontalDivider(
-            color = scheme.outline.copy(alpha = 0.16f),
-            modifier = Modifier.padding(vertical = 2.dp),
-        )
+        WajihaSettingDivider()
         Row(horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
             detail.actions.forEachIndexed { index, action ->
                 val isPrimary =
@@ -480,7 +458,9 @@ private fun HeroActions(
                                 }
                             }
 
-                            else -> SettingsHeroActionBridge.onPrimaryAction?.invoke()
+                            else -> {
+                                SettingsHeroActionBridge.onPrimaryAction?.invoke()
+                            }
                         }
                     },
                     outlined = !isPrimary || action.id == "edit",
@@ -572,8 +552,9 @@ private fun PlatformMetaBlock(platform: SettingsHeroPlatformExtras) {
             if (extensionList.isNotEmpty()) {
                 MetaLine(
                     label = "Files",
-                    value = extensionList.take(8).joinToString(", ") { ".$it" } +
-                        if (extensionList.size > 8) " +" else "",
+                    value =
+                        extensionList.take(8).joinToString(", ") { ".$it" } +
+                            if (extensionList.size > 8) " +" else "",
                 )
             }
             platform.emulatorLabel?.let { MetaLine(label = "Emulator", value = it) }

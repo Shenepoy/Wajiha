@@ -50,6 +50,7 @@ import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.HeroContext
 import com.wajiha.state.claimsStatusCorner
+import com.wajiha.state.isSettingsHeroInteractive
 import com.wajiha.ui.gamedetail.GameDetailMetadataPanel
 import com.wajiha.ui.gamedetail.GameDetailViewModel
 import com.wajiha.ui.gamedetail.MetadataPanelStyle
@@ -297,13 +298,11 @@ private fun GameDetailHero(
     val heroPath = state.media.firstOrNull { it.type == "hero" }?.localPath
     val showFocusedHelp = settings.settingsHeroHelp && heroDetail != null
     val showActions = settings.settingsHeroActions
+    val focusedHero = heroDetail
     val interactive =
-        showFocusedHelp &&
-            showActions &&
-            heroDetail != null &&
-            (heroDetail!!.options.isNotEmpty() || heroDetail!!.actions.isNotEmpty())
+        showFocusedHelp && focusedHero.isSettingsHeroInteractive(showActions)
 
-    LaunchedEffect(interactive, heroDetail?.title) {
+    LaunchedEffect(interactive) {
         dualStore.setSettingsHeroPicking(interactive)
     }
     DisposableEffect(Unit) {
@@ -464,7 +463,7 @@ private fun GameDetailHero(
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
-                if (showFocusedHelp) {
+                if (showFocusedHelp && focusedHero != null) {
                     Surface(
                         shape = WajihaShapes.dialog,
                         color = scheme.surfaceContainerLow.copy(alpha = 0.92f),
@@ -477,7 +476,7 @@ private fun GameDetailHero(
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             SettingsHeroDetailBody(
-                                detail = heroDetail!!,
+                                detail = focusedHero,
                                 showActions = showActions,
                                 firstFocusRequester = if (interactive) resolvedFocus else null,
                                 compact = true,

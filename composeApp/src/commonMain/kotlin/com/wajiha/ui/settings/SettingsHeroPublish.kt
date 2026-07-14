@@ -4,7 +4,6 @@ import com.wajiha.state.DualScreenStore
 import com.wajiha.state.SettingsHeroAction
 import com.wajiha.state.SettingsHeroActionBridge
 import com.wajiha.state.SettingsHeroDetail
-import com.wajiha.state.SettingsHeroHint
 import com.wajiha.state.SettingsHeroKind
 import com.wajiha.state.SettingsHeroOption
 import com.wajiha.state.SettingsHeroPlatformExtras
@@ -19,7 +18,6 @@ fun publishSettingsHero(
     store: DualScreenStore,
     detail: SettingsHeroDetail?,
     onSelectOption: ((String) -> Unit)? = null,
-    onSetEmulator: ((String) -> Unit)? = null,
     onPrimaryAction: (() -> Unit)? = null,
     onSecondaryAction: (() -> Unit)? = null,
 ) {
@@ -29,7 +27,6 @@ fun publishSettingsHero(
     }
     SettingsHeroActionBridge.clear()
     SettingsHeroActionBridge.onSelectOption = onSelectOption
-    SettingsHeroActionBridge.onSetEmulator = onSetEmulator
     SettingsHeroActionBridge.onPrimaryAction = onPrimaryAction
     SettingsHeroActionBridge.onSecondaryAction = onSecondaryAction
     store.setSettingsHeroDetail(detail)
@@ -38,10 +35,7 @@ fun publishSettingsHero(
 fun genericSettingHeroDetail(
     title: String,
     subtitle: String? = null,
-    whyItMatters: String? = null,
     valueText: String? = null,
-    defaultLine: String? = null,
-    controlHints: List<SettingsHeroHint> = emptyList(),
     options: List<SettingsHeroOption> = emptyList(),
     previewKind: String? = null,
     previewPayload: String? = null,
@@ -50,17 +44,12 @@ fun genericSettingHeroDetail(
     showRoleDiagram: Boolean = false,
     sectionOverview: String? = null,
     kind: SettingsHeroKind = SettingsHeroKind.Generic,
-): SettingsHeroDetail {
-    val why =
-        whyItMatters?.takeIf { it.isNotBlank() && it != subtitle }
-    return SettingsHeroDetail(
+): SettingsHeroDetail =
+    SettingsHeroDetail(
         kind = kind,
         title = title,
         subtitle = subtitle,
-        whyItMatters = why,
         valueText = valueText,
-        defaultLine = defaultLine,
-        controlHints = controlHints,
         previewKind = previewKind,
         previewPayload = previewPayload,
         numberValue = numberValue,
@@ -69,7 +58,6 @@ fun genericSettingHeroDetail(
         showRoleDiagram = showRoleDiagram,
         sectionOverview = sectionOverview,
     )
-}
 
 fun platformRowHeroDetail(
     name: String,
@@ -123,8 +111,7 @@ fun settingsToggleHeroFocus(
     title: String,
     subtitle: String?,
     checked: Boolean,
-    whyItMatters: String? = null,
-    defaultLine: String = "Default applies · Y resets",
+    valueText: String? = null,
     showRoleDiagram: Boolean = false,
     kind: SettingsHeroKind = SettingsHeroKind.Generic,
     previewKind: String? = null,
@@ -137,14 +124,7 @@ fun settingsToggleHeroFocus(
                 genericSettingHeroDetail(
                     title = title,
                     subtitle = subtitle,
-                    whyItMatters = whyItMatters,
-                    valueText = if (checked) "On" else "Off",
-                    defaultLine = defaultLine,
-                    controlHints =
-                        listOf(
-                            SettingsHeroHint("A", "Toggle"),
-                            SettingsHeroHint("Y", "Reset"),
-                        ),
+                    valueText = valueText ?: if (checked) "On" else "Off",
                     showRoleDiagram = showRoleDiagram,
                     kind = kind,
                     previewKind = previewKind,
@@ -164,10 +144,8 @@ fun libraryChromeHeroDetail(
     SettingsHeroDetail(
         kind = SettingsHeroKind.LibraryChrome,
         title = "Library",
-        subtitle = "$platformCount platform(s) · $gameCount game(s)",
-        libraryTotals = platformCount to gameCount,
+        subtitle = "$platformCount platform(s) · $gameCount game(s) in library",
         sectionOverview = sectionOverview,
-        controlHints = listOf(SettingsHeroHint("A", "Select")),
     )
 
 fun pickerRowHeroDetail(
@@ -180,10 +158,6 @@ fun pickerRowHeroDetail(
         title = name,
         subtitle = if (alreadyInUse) "Already in library" else "Not configured yet",
         valueText = if (alreadyInUse) "Open" else "Configure",
-        controlHints =
-            listOf(
-                SettingsHeroHint("A", if (alreadyInUse) "Open" else "Configure"),
-            ),
         actions =
             if (actionsEnabled) {
                 listOf(

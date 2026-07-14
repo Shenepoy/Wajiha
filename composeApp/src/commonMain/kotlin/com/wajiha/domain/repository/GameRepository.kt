@@ -114,11 +114,6 @@ class GameRepository(
             list.mapNotNull { it.localPath }
         }
 
-    suspend fun boxartSample(
-        platformId: String,
-        limit: Int = 8,
-    ): List<String> = mediaDao.boxartSample(platformId, limit).mapNotNull { it.localPath }
-
     fun observeAllVideos(): Flow<List<GameMediaEntity>> = mediaDao.observeAllOfType("video")
 
     fun observeAllHeroes(): Flow<List<GameMediaEntity>> = mediaDao.observeAllOfType("hero")

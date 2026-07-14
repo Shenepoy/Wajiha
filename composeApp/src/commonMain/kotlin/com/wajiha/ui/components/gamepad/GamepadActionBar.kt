@@ -14,20 +14,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.SettingsRepository
-import com.wajiha.input.ControllerGlyphAssets
-import com.wajiha.input.ControllerGlyphFaceStyle
 import com.wajiha.input.ControllerGlyphLabels
-import com.wajiha.input.ControllerGlyphOtherStyle
-import com.wajiha.input.ControllerGlyphScheme
 import com.wajiha.input.ControllerGlyphStore
 import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
-import com.wajiha.input.isFaceGlyphButton
 import com.wajiha.ui.theme.WajihaSpacing
 import org.koin.compose.koinInject
 
@@ -140,7 +134,6 @@ fun GamepadActionBar(
         initial = AppSettings(),
     )
     val devices by glyphStore.devices.collectAsState()
-    val lastInputType by glyphStore.lastInputType.collectAsState()
     val showHints =
         remember(settings.controllerGlyphScheme, devices.size) {
             ControllerGlyphLabels.shouldShowActionBarHints(
@@ -149,28 +142,6 @@ fun GamepadActionBar(
             )
         }
     if (!showHints) return
-
-    val darkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val faceStyle =
-        remember(settings.controllerGlyphFaceStyle) {
-            ControllerGlyphFaceStyle.fromName(settings.controllerGlyphFaceStyle)
-        }
-    val otherStyle =
-        remember(settings.controllerGlyphOtherStyle) {
-            ControllerGlyphOtherStyle.fromName(settings.controllerGlyphOtherStyle)
-        }
-    val scheme =
-        remember(
-            settings.controllerGlyphsEnabled,
-            settings.controllerGlyphScheme,
-            lastInputType,
-        ) {
-            ControllerGlyphLabels.resolveEffectiveScheme(
-                glyphsEnabled = settings.controllerGlyphsEnabled,
-                schemePref = settings.controllerGlyphScheme,
-                lastInputType = lastInputType,
-            )
-        }
 
     Row(
         modifier =
@@ -185,10 +156,6 @@ fun GamepadActionBar(
         hints.forEach { hint ->
             GamepadHintChip(
                 hint = hint,
-                scheme = scheme,
-                faceStyle = faceStyle,
-                otherStyle = otherStyle,
-                darkTheme = darkTheme,
                 // fill=true so many hints share width evenly and truncate instead of overflowing.
                 modifier = Modifier.weight(1f, fill = true),
             )
@@ -199,46 +166,17 @@ fun GamepadActionBar(
 @Composable
 private fun GamepadHintChip(
     hint: GamepadHint,
-    scheme: ControllerGlyphScheme,
-    faceStyle: ControllerGlyphFaceStyle,
-    otherStyle: ControllerGlyphOtherStyle,
-    darkTheme: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val icons =
-        remember(hint.button, scheme, faceStyle, otherStyle) {
-            ControllerGlyphAssets.drawables(hint.button, scheme, faceStyle, otherStyle)
-        }
-    val boostLightNonFace = !darkTheme && !hint.button.isFaceGlyphButton()
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        if (icons.isNotEmpty()) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                icons.forEach { drawable ->
-                    KenneyGlyphImage(
-                        drawable = drawable,
-                        size = GlyphSize,
-                        lightModeNonFace = boostLightNonFace,
-                        otherStyle = otherStyle,
-                    )
-                }
-            }
-        } else {
-            Text(
-                text = ControllerGlyphLabels.label(hint.button, scheme),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        GamepadHintGlyph(
+            button = hint.button,
+            size = GlyphSize,
+        )
         Text(
             text = hint.action,
             style = MaterialTheme.typography.labelMedium,

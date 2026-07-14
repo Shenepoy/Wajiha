@@ -66,7 +66,6 @@ import com.wajiha.platform.PermissionStates
 import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
-import com.wajiha.state.SettingsHeroHint
 import com.wajiha.state.SettingsHeroKind
 import com.wajiha.state.SettingsHeroOption
 import com.wajiha.ui.components.FolderTabRow
@@ -328,14 +327,14 @@ fun SettingsScreen(
                                 )
                             }
 
-                        SettingsSection.Appearance -> {
-                            AppearanceSectionContent(
-                                settings = settings,
-                                settingsViewModel = settingsViewModel,
-                                dualScreenStore = dualScreenStore,
-                                firstFocusRequester = sectionFocus,
-                            )
-                        }
+                            SettingsSection.Appearance -> {
+                                AppearanceSectionContent(
+                                    settings = settings,
+                                    settingsViewModel = settingsViewModel,
+                                    dualScreenStore = dualScreenStore,
+                                    firstFocusRequester = sectionFocus,
+                                )
+                            }
 
                             SettingsSection.System -> {
                                 SystemSectionContent(
@@ -475,8 +474,6 @@ private fun ScreensSectionContent(
                 subtitle =
                     "Use only the main display. Stops the bottom/secondary Wajiha launcher.",
                 checked = single,
-                whyItMatters = "Dual-screen help and role toggles only appear when this is off.",
-                defaultLine = "Default: Off · Y resets",
                 showRoleDiagram = !single,
                 kind = SettingsHeroKind.ScreensChrome,
             ),
@@ -579,8 +576,6 @@ private fun ScreensSectionContent(
                     title = "Swap screen roles",
                     subtitle = "Flip which display shows the game grid versus hero artwork.",
                     checked = settings.swapScreenRoles,
-                    whyItMatters = "Matches how you hold the device when the clamshell is open.",
-                    defaultLine = "Default: Off · Y resets",
                     showRoleDiagram = true,
                     kind = SettingsHeroKind.ScreensChrome,
                 ),
@@ -595,31 +590,16 @@ private fun ScreensSectionContent(
             onCheckedChange = settingsViewModel::setSwapGamepadHints,
             defaultChecked = false,
             onReset = { settingsViewModel.setSwapGamepadHints(false) },
-            onFocusedChanged = { focused ->
-                if (focused) {
-                    publishSettingsHero(
-                        dualScreenStore,
-                        genericSettingHeroDetail(
-                            title = "Swap gamepad hints",
-                            subtitle =
-                                "Show the controller hint bar on the hero display instead of under " +
-                                    "the game grid and menus.",
-                            whyItMatters = "Keeps hints visible while you look at artwork on the other screen.",
-                            valueText = if (settings.swapGamepadHints) "On" else "Off",
-                            defaultLine = "Default: Off · Y resets",
-                            controlHints =
-                                listOf(
-                                    SettingsHeroHint("A", "Toggle"),
-                                    SettingsHeroHint("Y", "Reset"),
-                                ),
-                            showRoleDiagram = false,
-                            kind = SettingsHeroKind.ScreensChrome,
-                        ),
-                    )
-                } else {
-                    clearSettingsHero(dualScreenStore)
-                }
-            },
+            onFocusedChanged =
+                settingsToggleHeroFocus(
+                    store = dualScreenStore,
+                    title = "Swap gamepad hints",
+                    subtitle =
+                        "Show the controller hint bar on the hero display instead of under " +
+                            "the game grid and menus.",
+                    checked = settings.swapGamepadHints,
+                    kind = SettingsHeroKind.ScreensChrome,
+                ),
         )
         WajihaSettingDivider()
         WajihaToggleSetting(
@@ -636,30 +616,16 @@ private fun ScreensSectionContent(
             onReset = {
                 settingsViewModel.setSettingsHeroHelp(true)
             },
-            onFocusedChanged = { focused ->
-                if (focused) {
-                    publishSettingsHero(
-                        dualScreenStore,
-                        genericSettingHeroDetail(
-                            title = "Show focused setting on other display",
-                            subtitle =
-                                "While Settings is open, the hero display explains the focused row.",
-                            whyItMatters = "Use the second screen as a help pane without crowding the menu.",
-                            valueText = if (settings.settingsHeroHelp) "On" else "Off",
-                            defaultLine = "Default: On · Y resets",
-                            controlHints =
-                                listOf(
-                                    SettingsHeroHint("A", "Toggle"),
-                                    SettingsHeroHint("Y", "Reset"),
-                                ),
-                            showRoleDiagram = true,
-                            kind = SettingsHeroKind.ScreensChrome,
-                        ),
-                    )
-                } else {
-                    clearSettingsHero(dualScreenStore)
-                }
-            },
+            onFocusedChanged =
+                settingsToggleHeroFocus(
+                    store = dualScreenStore,
+                    title = "Show focused setting on other display",
+                    subtitle =
+                        "While Settings is open, the hero display explains the focused row.",
+                    checked = settings.settingsHeroHelp,
+                    showRoleDiagram = true,
+                    kind = SettingsHeroKind.ScreensChrome,
+                ),
         )
         WajihaSettingDivider()
         WajihaToggleSetting(
@@ -672,34 +638,21 @@ private fun ScreensSectionContent(
             defaultChecked = false,
             onReset = { settingsViewModel.setSettingsHeroActions(false) },
             enabled = settings.settingsHeroHelp,
-            onFocusedChanged = { focused ->
-                if (focused) {
-                    publishSettingsHero(
-                        dualScreenStore,
-                        genericSettingHeroDetail(
-                            title = "Show actions on other display",
-                            subtitle =
-                                "Allow changing the focused setting from the hero display.",
-                            whyItMatters = "Turn off to keep the hero read-only while still showing help.",
-                            valueText =
-                                when {
-                                    !settings.settingsHeroHelp -> "Requires help on"
-                                    settings.settingsHeroActions -> "On"
-                                    else -> "Off"
-                                },
-                            defaultLine = "Default: Off · Y resets",
-                            controlHints =
-                                listOf(
-                                    SettingsHeroHint("A", "Toggle"),
-                                    SettingsHeroHint("Y", "Reset"),
-                                ),
-                            kind = SettingsHeroKind.ScreensChrome,
-                        ),
-                    )
-                } else {
-                    clearSettingsHero(dualScreenStore)
-                }
-            },
+            onFocusedChanged =
+                settingsToggleHeroFocus(
+                    store = dualScreenStore,
+                    title = "Show actions on other display",
+                    subtitle =
+                        "Allow changing the focused setting from the hero display.",
+                    checked = settings.settingsHeroActions,
+                    valueText =
+                        when {
+                            !settings.settingsHeroHelp -> "Requires help on"
+                            settings.settingsHeroActions -> "On"
+                            else -> "Off"
+                        },
+                    kind = SettingsHeroKind.ScreensChrome,
+                ),
         )
         WajihaSettingDivider()
         WajihaMultiChoiceSetting(
@@ -962,12 +915,6 @@ private fun AppearanceSectionContent(
                         title = "Theme",
                         subtitle = "Follow the system setting or lock dark or light mode.",
                         valueText = label,
-                        defaultLine = "Default: Dark · Y resets",
-                        controlHints =
-                            listOf(
-                                SettingsHeroHint("A", "Cycle"),
-                                SettingsHeroHint("Y", "Reset"),
-                            ),
                         previewKind = "theme",
                         previewPayload = label,
                         options =
@@ -1012,12 +959,6 @@ private fun AppearanceSectionContent(
                         title = "Grid rows",
                         subtitle = "How many rows of games appear on the home grid.",
                         valueText = "${settings.gridRows} rows",
-                        defaultLine = "Default: 2 · Y resets",
-                        controlHints =
-                            listOf(
-                                SettingsHeroHint("←→", "Adjust"),
-                                SettingsHeroHint("Y", "Reset"),
-                            ),
                         numberValue = settings.gridRows,
                         numberUnit = "rows",
                     ),
@@ -1056,12 +997,6 @@ private fun AppearanceSectionContent(
                         title = "Focus ring style",
                         subtitle = "How the gamepad focus outline is drawn around tiles and settings rows.",
                         valueText = settings.focusBorderStyle,
-                        defaultLine = "Default: ${FocusIndicatorDefaults.BORDER_STYLE} · Y resets",
-                        controlHints =
-                            listOf(
-                                SettingsHeroHint("A", "Open"),
-                                SettingsHeroHint("Y", "Reset"),
-                            ),
                         options =
                             if (settings.settingsHeroActions) {
                                 listOf(
@@ -1122,12 +1057,6 @@ private fun AppearanceSectionContent(
                         title = "Focus ring thickness",
                         subtitle = "Border width in density-independent pixels.",
                         valueText = "${settings.focusThickness} dp",
-                        defaultLine = "Default: ${FocusIndicatorDefaults.THICKNESS} · Y resets",
-                        controlHints =
-                            listOf(
-                                SettingsHeroHint("←→", "Adjust"),
-                                SettingsHeroHint("Y", "Reset"),
-                            ),
                         numberValue = settings.focusThickness,
                         numberUnit = "dp",
                     ),
@@ -1154,12 +1083,6 @@ private fun AppearanceSectionContent(
                         title = "Focus ring placement",
                         subtitle = "Inside item bounds or expand outward beyond the edge.",
                         valueText = settings.focusPlacement,
-                        defaultLine = "Default: ${FocusIndicatorDefaults.PLACEMENT} · Y resets",
-                        controlHints =
-                            listOf(
-                                SettingsHeroHint("A", "Cycle"),
-                                SettingsHeroHint("Y", "Reset"),
-                            ),
                         options =
                             if (settings.settingsHeroActions) {
                                 listOf(
@@ -1211,7 +1134,6 @@ private fun ControllerGlyphSettings(
                 title = "Controller glyphs",
                 subtitle = "Show Kenney Input Prompts icons in the bottom hint bar.",
                 checked = settings.controllerGlyphsEnabled,
-                defaultLine = "Default: On · Y resets",
                 previewKind = "glyphs",
                 previewPayload = if (settings.controllerGlyphsEnabled) "On" else "Off",
             ),
@@ -1273,12 +1195,6 @@ private fun ControllerGlyphSettings(
                         title = "Glyph style",
                         subtitle = "Which controller icon scheme the hint bar uses.",
                         valueText = settings.controllerGlyphScheme,
-                        defaultLine = "Default: Auto · Y resets",
-                        controlHints =
-                            listOf(
-                                SettingsHeroHint("A", "Open"),
-                                SettingsHeroHint("Y", "Reset"),
-                            ),
                         previewKind = "glyphs",
                         previewPayload = settings.controllerGlyphScheme,
                         options =
@@ -1335,12 +1251,6 @@ private fun ControllerGlyphSettings(
                         title = "Face button glyphs",
                         subtitle = "Kenney look for A/B/X/Y (and PlayStation shapes).",
                         valueText = settings.controllerGlyphFaceStyle,
-                        defaultLine = "Default: Color · Y resets",
-                        controlHints =
-                            listOf(
-                                SettingsHeroHint("A", "Open"),
-                                SettingsHeroHint("Y", "Reset"),
-                            ),
                         previewKind = "glyphs",
                         previewPayload = settings.controllerGlyphFaceStyle,
                         options =
@@ -1385,12 +1295,6 @@ private fun ControllerGlyphSettings(
                         title = "Other button glyphs",
                         subtitle = "Kenney look for shoulders, triggers, d-pad, and system buttons.",
                         valueText = settings.controllerGlyphOtherStyle,
-                        defaultLine = "Default: Filled · Y resets",
-                        controlHints =
-                            listOf(
-                                SettingsHeroHint("A", "Open"),
-                                SettingsHeroHint("Y", "Reset"),
-                            ),
                         previewKind = "glyphs",
                         previewPayload = settings.controllerGlyphOtherStyle,
                         options =
@@ -1685,12 +1589,6 @@ private fun SettingsFocusColorRow(
                                                 title = "Focus color",
                                                 subtitle = "Color of the gamepad focus ring.",
                                                 valueText = selectedLabel,
-                                                defaultLine = "Default: $defaultValue · Y resets",
-                                                controlHints =
-                                                    listOf(
-                                                        SettingsHeroHint("A", "Open"),
-                                                        SettingsHeroHint("Y", "Reset"),
-                                                    ),
                                                 previewKind = "focusColor",
                                                 previewPayload = selected,
                                                 options =
@@ -1711,8 +1609,7 @@ private fun SettingsFocusColorRow(
                                     } else {
                                         clearSettingsHero(dualScreenStore)
                                     }
-                                }
-                                .wajihaGamepadFocus()
+                                }.wajihaGamepadFocus()
                                 .onPreviewKeyEvent { event ->
                                     when {
                                         GamepadKeys.isConfirm(event.type, event.key) -> {

@@ -59,8 +59,8 @@ fun PlatformPickerScreen(
     val allPlatforms by settingsViewModel.allPlatforms.collectAsState()
     val folders by settingsViewModel.folders.collectAsState()
     val inUseIds =
-        remember(folders, allPlatforms) {
-            settingsViewModel.inUsePlatformIds(allPlatforms, folders)
+        remember(folders) {
+            folders.map { it.platformId }.toSet()
         }
     var query by remember { mutableStateOf("") }
     val navController =
@@ -163,8 +163,6 @@ fun PlatformPickerScreen(
                                             ),
                                         onPrimaryAction = { onPick(platform.id) },
                                     )
-                                } else {
-                                    clearSettingsHero(dualStore)
                                 }
                             }
                             PlatformPickRow(

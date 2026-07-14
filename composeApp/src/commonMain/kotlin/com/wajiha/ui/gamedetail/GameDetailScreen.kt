@@ -59,7 +59,6 @@ import com.wajiha.input.requestContentFocus
 import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
-import com.wajiha.state.SettingsHeroHint
 import com.wajiha.state.SettingsHeroOption
 import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.LocalUiFeedback
@@ -85,6 +84,7 @@ import com.wajiha.ui.scraper.toPolicy
 import com.wajiha.ui.settings.clearSettingsHero
 import com.wajiha.ui.settings.genericSettingHeroDetail
 import com.wajiha.ui.settings.publishSettingsHero
+import com.wajiha.ui.settings.settingsToggleHeroFocus
 import com.wajiha.ui.settings.toEmulatorChoiceOptions
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
@@ -637,25 +637,12 @@ private fun publishFavoriteHero(
     focused: Boolean,
     favorite: Boolean,
 ) {
-    if (focused) {
-        publishSettingsHero(
-            dualStore,
-            genericSettingHeroDetail(
-                title = "Favorite",
-                subtitle = "Pin this game in your library.",
-                whyItMatters = "Favorites stay easy to find in the home library.",
-                valueText = if (favorite) "On" else "Off",
-                defaultLine = "Default: Off · Y resets",
-                controlHints =
-                    listOf(
-                        SettingsHeroHint("A", "Toggle"),
-                        SettingsHeroHint("Y", "Reset"),
-                    ),
-            ),
-        )
-    } else {
-        clearSettingsHero(dualStore)
-    }
+    settingsToggleHeroFocus(
+        store = dualStore,
+        title = "Favorite",
+        subtitle = "Pin this game in your library.",
+        checked = favorite,
+    )(focused)
 }
 
 @Composable
@@ -743,14 +730,7 @@ private fun LaunchSectionContent(
                             genericSettingHeroDetail(
                                 title = "Default display",
                                 subtitle = "Which screen to use when launching from the grid.",
-                                whyItMatters = "Pick top or bottom so launches land on the screen you want.",
                                 valueText = selectedLabel,
-                                defaultLine = "Default: Top · Y resets",
-                                controlHints =
-                                    listOf(
-                                        SettingsHeroHint("A", "Select"),
-                                        SettingsHeroHint("Y", "Reset"),
-                                    ),
                                 options = heroOptions,
                             ),
                         onSelectOption =
@@ -854,14 +834,7 @@ private fun EmulatorSectionContent(
                                 subtitle =
                                     "Override which emulator launches this game. " +
                                         "Platform default is used when none is selected.",
-                                whyItMatters = "Per-game override when a title needs a different player.",
                                 valueText = selectedLabel,
-                                defaultLine = "Default: Platform default · Y resets",
-                                controlHints =
-                                    listOf(
-                                        SettingsHeroHint("A", "Select"),
-                                        SettingsHeroHint("Y", "Reset"),
-                                    ),
                                 options = heroOptions,
                             ),
                         onSelectOption =
