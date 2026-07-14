@@ -1,0 +1,13 @@
+---
+description: Prefer shared Wajiha Compose UI / gamepad library; X is contextual
+alwaysApply: true
+---
+
+# Wajiha UI library
+
+- Prefer `com.wajiha.ui.components` and `com.wajiha.ui.components.gamepad` for screens and settings chrome.
+- Prefer `GamepadSettingRow` + `SettingType` (including `Action`), public `Wajiha*Setting` wrappers, `GamepadSettingTrailingActions`, gamepad buttons/chips/fields/slider/list, folder tabs, screen/toolbar/panel, and shared hint helpers.
+- When a pattern repeats across screens, extend the library instead of one-off Material preference chrome or custom focus rings.
+- Material `Switch` / `Slider` only inside library wrappers (e.g. toggle/number rows).
+- **X is contextual**: home/session grid → Menu; settings `Action` rows → secondary (e.g. Edit); never assume one global X meaning.
+- Exceptions: `GamepadTile`, system overlays, and anything under `Study/`.

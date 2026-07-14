@@ -1,22 +1,16 @@
 package com.wajiha.ui.settings
 
-import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -27,44 +21,44 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.db.RomFolderEntity
+import com.wajiha.data.prefs.AppSettings
+import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadLayers
-import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.requestContentFocus
-import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
+import com.wajiha.state.SettingsHeroAction
+import com.wajiha.state.SettingsHeroHint
+import com.wajiha.state.SettingsHeroOption
 import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.LocalUiFeedback
+import com.wajiha.ui.components.WajihaEmptyState
 import com.wajiha.ui.components.WajihaScreen
-import com.wajiha.ui.components.WajihaSection
-import com.wajiha.ui.components.WajihaSectionDivider
+import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.GamepadFormField
 import com.wajiha.ui.components.gamepad.GamepadSafeTextField
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
-import com.wajiha.ui.components.gamepad.SettingSectionScrollColumn
+import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
+import com.wajiha.ui.components.gamepad.ProvideSettingsDensity
 import com.wajiha.ui.components.gamepad.SettingType
+import com.wajiha.ui.components.gamepad.WajihaSettingBlurb
+import com.wajiha.ui.components.gamepad.WajihaSettingDivider
+import com.wajiha.ui.components.gamepad.WajihaSettingPanel
 import com.wajiha.ui.components.gamepad.gameDetailGamepadHints
-import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
 import com.wajiha.ui.scraper.PlatformScraperSettingsSection
 import com.wajiha.ui.scraper.ScrapeModeSelector
 import com.wajiha.ui.scraper.ScrapeUiMode
@@ -73,7 +67,6 @@ import com.wajiha.ui.scraper.batchPolicyOrNull
 import com.wajiha.ui.scraper.review.ScrapeReviewPicker
 import com.wajiha.ui.scraper.review.ScrapeReviewViewModel
 import com.wajiha.ui.scraper.toPolicy
-import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -107,6 +100,8 @@ fun PlatformSettingsScreen(
     val platform = state.platform
     val systemControls = koinInject<SystemControls>()
     val dualStore = koinInject<DualScreenStore>()
+    val settingsRepository = koinInject<SettingsRepository>()
+    val settings by settingsRepository.settings.collectAsState(initial = AppSettings())
     val screenState by dualStore.state.collectAsState()
     val dualDisplay = screenState != DualScreenState.SingleDisplay
     val feedback = LocalUiFeedback.current
@@ -123,131 +118,144 @@ fun PlatformSettingsScreen(
     }
 
     LaunchedEffect(selectedTabIndex) {
+        clearSettingsHero(dualStore)
         try {
             sectionFocus.requestFocus()
         } catch (_: Exception) {
         }
     }
 
-    WajihaScreen(
-        layerId = screenLayer,
-        modifier = modifier,
-        onBack = onBack,
-        showActionBar = true,
-        gamepadHints = gameDetailGamepadHints(isDual = dualDisplay),
-        gamepadOwner = gamepadOwner,
-        onClaimGamepad = onClaimGamepad,
-        onOwnerGainedFocus = { sectionFocus.requestContentFocus() },
-        onPreviewKey = { event ->
-            if (GamepadLayers.stack.topLayer != screenLayer) return@WajihaScreen false
-            when {
-                GamepadKeys.isL1(event.type, event.key) -> {
-                    if (selectedTabIndex > 0) {
-                        selectTab(selectedTabIndex - 1)
-                        true
-                    } else {
+    DisposableEffect(Unit) {
+        onDispose { clearSettingsHero(dualStore) }
+    }
+
+    ProvideSettingsDensity {
+        WajihaScreen(
+            layerId = screenLayer,
+            modifier = modifier,
+            onBack = onBack,
+            showActionBar = true,
+            gamepadHints = gameDetailGamepadHints(isDual = dualDisplay),
+            gamepadOwner = gamepadOwner,
+            onClaimGamepad = onClaimGamepad,
+            onOwnerGainedFocus = { sectionFocus.requestContentFocus() },
+            onPreviewKey = { event ->
+                if (GamepadLayers.stack.topLayer != screenLayer) return@WajihaScreen false
+                when {
+                    GamepadKeys.isL1(event.type, event.key) -> {
+                        if (selectedTabIndex > 0) {
+                            selectTab(selectedTabIndex - 1)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+
+                    GamepadKeys.isR1(event.type, event.key) -> {
+                        if (selectedTabIndex < tabs.lastIndex) {
+                            selectTab(selectedTabIndex + 1)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+
+                    else -> {
                         false
                     }
                 }
-
-                GamepadKeys.isR1(event.type, event.key) -> {
-                    if (selectedTabIndex < tabs.lastIndex) {
-                        selectTab(selectedTabIndex + 1)
-                        true
-                    } else {
-                        false
-                    }
-                }
-
-                else -> {
-                    false
-                }
-            }
-        },
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            PlatformSettingsToolbar(
-                title = platform?.name ?: "Platform",
-                enabled = platform?.enabled ?: true,
-                onEnabledChange = viewModel::setEnabled,
-                onBack = onBack,
-                showLibraryToggle = platform != null,
-            )
-
-            if (platform == null) {
-                Text(
-                    text = "Platform not found",
-                    modifier = Modifier.padding(WajihaSpacing.md),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            },
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                WajihaToolbar(
+                    title = platform?.name ?: "Platform",
+                    onBack = onBack,
+                    backFocusable = false,
                 )
-            } else {
-                Column(
-                    modifier =
-                        Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .padding(horizontal = WajihaSpacing.md),
-                ) {
-                    FolderTabRow(
-                        tabs = tabs.map { it.label },
-                        selectedIndex = selectedTabIndex,
-                        onSelect = ::selectTab,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .focusProperties { canFocus = false }
-                                .padding(top = WajihaSpacing.sm),
-                    )
 
-                    PlatformSettingsSectionCard(
+                if (platform == null) {
+                    Text(
+                        text = "Platform not found",
+                        modifier = Modifier.padding(WajihaSpacing.md),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Column(
                         modifier =
                             Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
-                                .offset(y = (-1).dp)
-                                .padding(bottom = WajihaSpacing.md),
+                                .padding(horizontal = WajihaSpacing.md),
                     ) {
-                        when (tabs[selectedTabIndex]) {
-                            PlatformSettingsTab.General -> {
-                                PlatformGeneralTabContent(
-                                    platform = platform,
-                                    viewModel = viewModel,
-                                    firstFocusRequester = sectionFocus,
-                                )
-                            }
+                        FolderTabRow(
+                            tabs = tabs.map { it.label },
+                            selectedIndex = selectedTabIndex,
+                            onSelect = ::selectTab,
+                            minHeight = LocalSettingRowMinHeight.current,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusProperties { canFocus = false }
+                                    .padding(top = WajihaSpacing.sm),
+                        )
 
-                            PlatformSettingsTab.Emulator -> {
-                                PlatformEmulatorTabContent(
-                                    platform = platform,
-                                    state = state,
-                                    systemControls = systemControls,
-                                    viewModel = viewModel,
-                                    firstFocusRequester = sectionFocus,
-                                )
-                            }
+                        WajihaSettingPanel(
+                            folderPanel = true,
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .offset(y = (-1).dp)
+                                    .padding(bottom = WajihaSpacing.md),
+                        ) {
+                            when (tabs[selectedTabIndex]) {
+                                PlatformSettingsTab.General -> {
+                                    PlatformGeneralTabContent(
+                                        platform = platform,
+                                        viewModel = viewModel,
+                                        dualStore = dualStore,
+                                        firstFocusRequester = sectionFocus,
+                                    )
+                                }
 
-                            PlatformSettingsTab.Folders -> {
-                                PlatformFoldersTabContent(
-                                    state = state,
-                                    viewModel = viewModel,
-                                    firstFocusRequester = sectionFocus,
-                                )
-                            }
+                                PlatformSettingsTab.Emulator -> {
+                                    PlatformEmulatorTabContent(
+                                        platform = platform,
+                                        state = state,
+                                        systemControls = systemControls,
+                                        viewModel = viewModel,
+                                        dualStore = dualStore,
+                                        settingsHeroActions = settings.settingsHeroActions,
+                                        firstFocusRequester = sectionFocus,
+                                    )
+                                }
 
-                            PlatformSettingsTab.Scraper -> {
-                                PlatformScraperTabContent(
-                                    platform = platform,
-                                    viewModel = viewModel,
-                                    scraperViewModel = scraperViewModel,
-                                    firstFocusRequester = sectionFocus,
-                                )
-                            }
+                                PlatformSettingsTab.Folders -> {
+                                    PlatformFoldersTabContent(
+                                        state = state,
+                                        viewModel = viewModel,
+                                        dualStore = dualStore,
+                                        settingsHeroActions = settings.settingsHeroActions,
+                                        firstFocusRequester = sectionFocus,
+                                    )
+                                }
 
-                            PlatformSettingsTab.Info -> {
-                                PlatformInfoTabContent(
-                                    platform = platform,
-                                    state = state,
-                                )
+                                PlatformSettingsTab.Scraper -> {
+                                    PlatformScraperTabContent(
+                                        platform = platform,
+                                        viewModel = viewModel,
+                                        scraperViewModel = scraperViewModel,
+                                        firstFocusRequester = sectionFocus,
+                                    )
+                                }
+
+                                PlatformSettingsTab.Info -> {
+                                    PlatformInfoTabContent(
+                                        platform = platform,
+                                        state = state,
+                                        firstFocusRequester = sectionFocus,
+                                    )
+                                }
                             }
                         }
                     }
@@ -258,147 +266,57 @@ fun PlatformSettingsScreen(
 }
 
 @Composable
-private fun PlatformSettingsToolbar(
-    title: String,
-    enabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    onBack: () -> Unit,
-    showLibraryToggle: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-    ) {
-        GamepadButton(
-            text = "Back",
-            onClick = onBack,
-            outlined = true,
-        )
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            if (showLibraryToggle) {
-                HeaderLibraryToggle(
-                    checked = enabled,
-                    onCheckedChange = onEnabledChange,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HeaderLibraryToggle(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var focused by remember { mutableStateOf(false) }
-    val useCustomNav = LocalGamepadNavController.current != null
-
-    Row(
-        modifier =
-            modifier
-                .clip(WajihaShapes.focus)
-                .wajihaFocusIndicator(highlighted = !useCustomNav && focused)
-                .then(
-                    if (!useCustomNav) {
-                        Modifier
-                            .onFocusChanged { focused = it.isFocused }
-                            .wajihaGamepadFocus()
-                            .onPreviewKeyEvent { event ->
-                                if (GamepadKeys.isConfirm(event.type, event.key)) {
-                                    onCheckedChange(!checked)
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-                    } else {
-                        Modifier
-                    },
-                ).pointerInput(checked, onCheckedChange) {
-                    detectTapGestures { onCheckedChange(!checked) }
-                }.padding(horizontal = WajihaSpacing.xs, vertical = WajihaSpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
-    ) {
-        Text(
-            text = "Library",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun PlatformSettingsSectionCard(
-    modifier: Modifier = Modifier,
-    sectionContent: @Composable () -> Unit,
-) {
-    val shape = WajihaShapes.folderPanel
-    val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-
-    Surface(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .border(width = 1.dp, color = outlineColor, shape = shape),
-        shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(WajihaSpacing.md),
-        ) {
-            SettingSectionScrollColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-            ) {
-                sectionContent()
-            }
-        }
-    }
-}
-
-@Composable
 private fun PlatformGeneralTabContent(
     platform: PlatformEntity,
     viewModel: PlatformSettingsViewModel,
+    dualStore: DualScreenStore,
     firstFocusRequester: FocusRequester,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
-        Text(
-            text = "Display name and short label shown in the library grid.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = WajihaSpacing.xs),
+        WajihaSettingBlurb(
+            "Show this system in the home filter when it has games. " +
+                "Turning off does not remove ROM folders.",
         )
+        GamepadSettingRow(
+            label = "In library",
+            description = "When off, this system is hidden from the home platform filter.",
+            type = SettingType.Toggle,
+            checked = platform.enabled,
+            onCheckedChange = viewModel::setEnabled,
+            focusRequester = firstFocusRequester,
+            onReset = { viewModel.setEnabled(true) },
+            isAtDefault = platform.enabled,
+            onFocusedChanged = { focused ->
+                if (focused) {
+                    publishSettingsHero(
+                        dualStore,
+                        genericSettingHeroDetail(
+                            title = "In library",
+                            subtitle = "When off, this system is hidden from the home platform filter.",
+                            whyItMatters = "Hiding a system does not remove ROM folders or games.",
+                            valueText = if (platform.enabled) "On" else "Off",
+                            defaultLine = "Default: On · Y resets",
+                            controlHints =
+                                listOf(
+                                    SettingsHeroHint("A", "Toggle"),
+                                    SettingsHeroHint("Y", "Reset"),
+                                ),
+                        ),
+                    )
+                } else {
+                    clearSettingsHero(dualStore)
+                }
+            },
+        )
+        WajihaSettingDivider()
+        WajihaSettingBlurb("Display name and short label shown in the library grid.")
         NameFields(
             platform = platform,
             onNameCommit = viewModel::setDisplayName,
             onShortNameCommit = viewModel::setShortName,
-            firstFocusRequester = firstFocusRequester,
         )
     }
 }
@@ -409,25 +327,22 @@ private fun PlatformEmulatorTabContent(
     state: PlatformSettingsUiState,
     systemControls: SystemControls,
     viewModel: PlatformSettingsViewModel,
+    dualStore: DualScreenStore,
+    settingsHeroActions: Boolean,
     firstFocusRequester: FocusRequester,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
-        Text(
-            text =
-                "Player used when launching games for this system " +
-                    "(same idea as Daijishō / Cocoon players).",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = WajihaSpacing.xs),
+        WajihaSettingBlurb(
+            "Player used when launching games for this system " +
+                "(same idea as Daijishō / Cocoon players).",
         )
         if (state.emulators.isEmpty()) {
-            Text(
-                text = "No emulators configured for this platform.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            WajihaEmptyState(
+                title = "No emulators",
+                subtitle = "No players are configured for this platform yet.",
             )
         } else {
             val selectedEmulatorId =
@@ -440,6 +355,21 @@ private fun PlatformEmulatorTabContent(
                 state.emulators.toEmulatorChoiceOptions(
                     isPackageInstalled = systemControls::isPackageInstalled,
                 )
+            val selectedLabel =
+                emulatorOptions.firstOrNull { it.value == selectedEmulatorId }?.label
+                    ?: "—"
+            val heroOptions =
+                if (settingsHeroActions) {
+                    emulatorOptions.map { opt ->
+                        SettingsHeroOption(
+                            value = opt.value,
+                            label = opt.label,
+                            selected = opt.value == selectedEmulatorId,
+                        )
+                    }
+                } else {
+                    emptyList()
+                }
             GamepadSettingRow(
                 label = "Default emulator",
                 description = "Installed apps are selectable. Missing emulators stay visible but greyed out.",
@@ -448,6 +378,32 @@ private fun PlatformEmulatorTabContent(
                 selected = selectedEmulatorId,
                 onSelect = viewModel::setDefaultEmulator,
                 focusRequester = firstFocusRequester,
+                onFocusedChanged = { focused ->
+                    if (focused) {
+                        publishSettingsHero(
+                            store = dualStore,
+                            detail =
+                                genericSettingHeroDetail(
+                                    title = "Default emulator",
+                                    subtitle =
+                                        "Installed apps are selectable. Missing emulators stay visible but greyed out.",
+                                    whyItMatters =
+                                        "Games for this system launch with this player unless a game override is set.",
+                                    valueText = selectedLabel,
+                                    controlHints = listOf(SettingsHeroHint("A", "Select")),
+                                    options = heroOptions,
+                                ),
+                            onSelectOption =
+                                if (settingsHeroActions) {
+                                    viewModel::setDefaultEmulator
+                                } else {
+                                    null
+                                },
+                        )
+                    } else {
+                        clearSettingsHero(dualStore)
+                    }
+                },
             )
         }
     }
@@ -457,17 +413,17 @@ private fun PlatformEmulatorTabContent(
 private fun PlatformFoldersTabContent(
     state: PlatformSettingsUiState,
     viewModel: PlatformSettingsViewModel,
+    dualStore: DualScreenStore,
+    settingsHeroActions: Boolean,
     firstFocusRequester: FocusRequester,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
-        Text(
-            text = "Folders scanned for games on this system. Add at least one to include it in your library.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = WajihaSpacing.xs),
+        WajihaSettingBlurb(
+            "Folders scanned for games on this system. " +
+                "Add at least one to include it in Settings → Library.",
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -478,23 +434,70 @@ private fun PlatformFoldersTabContent(
                 onClick = viewModel::rescanPlatform,
                 outlined = true,
                 focusRequester = firstFocusRequester,
+                onFocusedChanged = { focused ->
+                    if (focused) {
+                        publishSettingsHero(
+                            store = dualStore,
+                            detail =
+                                genericSettingHeroDetail(
+                                    title = "Rescan",
+                                    subtitle = "Scan ROM folders for this system and refresh the library.",
+                                    whyItMatters = "Picks up new files and removes entries for deleted ROMs.",
+                                    controlHints = listOf(SettingsHeroHint("A", "Rescan")),
+                                ).copy(
+                                    actions =
+                                        if (settingsHeroActions) {
+                                            listOf(SettingsHeroAction("rescan", "Rescan"))
+                                        } else {
+                                            emptyList()
+                                        },
+                                ),
+                            onPrimaryAction = viewModel::rescanPlatform,
+                        )
+                    } else {
+                        clearSettingsHero(dualStore)
+                    }
+                },
             )
             GamepadButton(
                 text = "Add folder",
                 onClick = viewModel::pickRomFolder,
                 modifier = Modifier.padding(start = WajihaSpacing.sm),
+                onFocusedChanged = { focused ->
+                    if (focused) {
+                        publishSettingsHero(
+                            dualStore,
+                            genericSettingHeroDetail(
+                                title = "Add folder",
+                                subtitle = "Pick a ROM folder on this device for this system.",
+                                whyItMatters =
+                                    "At least one folder is required to list this system under Settings → Library.",
+                                controlHints = listOf(SettingsHeroHint("A", "Add folder")),
+                            ),
+                            onPrimaryAction = viewModel::pickRomFolder,
+                        )
+                    } else {
+                        clearSettingsHero(dualStore)
+                    }
+                },
             )
         }
         if (state.folders.isEmpty()) {
-            Text(
-                text = "No folders yet — add a ROM folder to bring this system into your library.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            WajihaEmptyState(
+                title = "No folders yet",
+                subtitle = "Add a ROM folder to bring this system into your library.",
+                action = {
+                    GamepadButton(
+                        text = "Add folder",
+                        onClick = viewModel::pickRomFolder,
+                    )
+                },
             )
         } else {
             state.folders.forEach { folder ->
                 FolderRow(
                     folder = folder,
+                    dualStore = dualStore,
                     onRemove = { viewModel.removeFolder(folder.id) },
                 )
             }
@@ -568,13 +571,9 @@ private fun PlatformScraperTabContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
-        Text(
-            text =
-                "Scrape metadata and media for games on this platform, " +
-                    "or adjust linkage IDs and per-system source overrides.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = WajihaSpacing.xs),
+        WajihaSettingBlurb(
+            "Scrape metadata and media for games on this platform, " +
+                "or adjust linkage IDs and per-system source overrides.",
         )
 
         ScrapeModeSelector(
@@ -739,32 +738,24 @@ private fun PlatformScraperTabContent(
             )
         }
 
-        WajihaSectionDivider()
-        WajihaSection(title = "Scraper linkage") {
-            Text(
-                text =
-                    "IDs used to match games on ScreenScraper, RetroAchievements, and Libretro. " +
-                        "Defaults come from platform packs; tweak here if a match is wrong.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = WajihaSpacing.xs),
-            )
-            ScraperIdFields(
-                platform = platform,
-                onScreenScraperId = viewModel::setScreenScraperId,
-                onRaConsoleId = viewModel::setRaConsoleId,
-                onLibretroName = viewModel::setLibretroName,
-                firstFocusRequester = remember { FocusRequester() },
-            )
-        }
+        WajihaSettingDivider()
+        WajihaSettingBlurb(
+            "IDs used to match games on ScreenScraper, RetroAchievements, and Libretro. " +
+                "Defaults come from platform packs; tweak here if a match is wrong.",
+        )
+        ScraperIdFields(
+            platform = platform,
+            onScreenScraperId = viewModel::setScreenScraperId,
+            onRaConsoleId = viewModel::setRaConsoleId,
+            onLibretroName = viewModel::setLibretroName,
+        )
 
-        WajihaSectionDivider()
-        WajihaSection(title = "Scraper overrides") {
-            PlatformScraperSettingsSection(
-                platformId = platform.id,
-                viewModel = scraperViewModel,
-            )
-        }
+        WajihaSettingDivider()
+        WajihaSettingBlurb("Override global scraper sources and options for this system only.")
+        PlatformScraperSettingsSection(
+            platformId = platform.id,
+            viewModel = scraperViewModel,
+        )
     }
 }
 
@@ -772,9 +763,8 @@ private fun PlatformScraperTabContent(
 private fun PlatformInfoTabContent(
     platform: PlatformEntity,
     state: PlatformSettingsUiState,
+    firstFocusRequester: FocusRequester,
 ) {
-    val labelStyle = MaterialTheme.typography.labelSmall
-    val bodyStyle = MaterialTheme.typography.bodySmall
     val defaultEmulatorName =
         state.emulators
             .firstOrNull { it.id == platform.defaultEmulatorId }
@@ -782,63 +772,41 @@ private fun PlatformInfoTabContent(
             ?: state.emulators.firstOrNull { it.isDefault }?.name
             ?: "—"
 
-    Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs)) {
-        Text(
-            text = "Read-only platform metadata and library stats.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = WajihaSpacing.xs),
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
+        WajihaSettingBlurb("Read-only platform metadata and library stats.")
 
-        PlatformInfoRow("Platform id", platform.id, labelStyle, bodyStyle)
-        PlatformInfoRow("Display name", platform.name, labelStyle, bodyStyle)
-        PlatformInfoRow("Short name", platform.shortName, labelStyle, bodyStyle)
-        PlatformInfoRow(
-            "In library",
-            if (platform.enabled) "Yes" else "No",
-            labelStyle,
-            bodyStyle,
-        )
-        PlatformInfoRow("Games", "${state.gameCount}", labelStyle, bodyStyle)
-        PlatformInfoRow("ROM folders", "${state.folders.size}", labelStyle, bodyStyle)
-        PlatformInfoRow("Default emulator", defaultEmulatorName, labelStyle, bodyStyle)
+        PlatformInfoValueRow("Platform id", platform.id, firstFocusRequester)
+        PlatformInfoValueRow("Display name", platform.name)
+        PlatformInfoValueRow("Short name", platform.shortName)
+        PlatformInfoValueRow("In library", if (platform.enabled) "Yes" else "No")
+        PlatformInfoValueRow("Games", "${state.gameCount}")
+        PlatformInfoValueRow("ROM folders", "${state.folders.size}")
+        PlatformInfoValueRow("Default emulator", defaultEmulatorName)
         platform.boxartAspectRatio?.let {
-            PlatformInfoRow("Boxart aspect", it, labelStyle, bodyStyle)
+            PlatformInfoValueRow("Boxart aspect", it)
         }
-        PlatformInfoRow("Extensions", platform.extensions, labelStyle, bodyStyle)
-        PlatformInfoRow(
+        PlatformInfoValueRow("Extensions", platform.extensions)
+        PlatformInfoValueRow(
             "ScreenScraper id",
             platform.screenScraperId?.toString() ?: "—",
-            labelStyle,
-            bodyStyle,
         )
-        PlatformInfoRow(
+        PlatformInfoValueRow(
             "RetroAchievements id",
             platform.raConsoleId?.toString() ?: "—",
-            labelStyle,
-            bodyStyle,
         )
-        PlatformInfoRow(
+        PlatformInfoValueRow(
             "Libretro name",
             platform.libretroName ?: "—",
-            labelStyle,
-            bodyStyle,
         )
 
         if (state.folders.isNotEmpty()) {
-            InfoGroupDivider()
-            Text(
-                text = "Folder paths",
-                style = labelStyle,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            WajihaSettingDivider()
+            WajihaSettingBlurb("Folder paths")
             state.folders.forEach { folder ->
-                PlatformInfoRow(
+                PlatformInfoValueRow(
                     label = "Folder",
                     value = folderDisplayPath(folder),
-                    labelStyle = labelStyle,
-                    bodyStyle = bodyStyle,
-                    maxValueLines = 4,
+                    maxLines = 4,
                 )
             }
         }
@@ -846,56 +814,70 @@ private fun PlatformInfoTabContent(
 }
 
 @Composable
-private fun PlatformInfoRow(
+private fun PlatformInfoValueRow(
     label: String,
     value: String,
-    labelStyle: TextStyle,
-    bodyStyle: TextStyle,
-    maxValueLines: Int = 3,
+    focusRequester: FocusRequester? = null,
+    maxLines: Int = 2,
 ) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = WajihaSpacing.touchMin / 2),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top,
-    ) {
-        Text(
-            text = label,
-            style = labelStyle,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.widthIn(max = 120.dp),
-        )
-        Text(
-            text = value,
-            style = bodyStyle,
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .padding(start = WajihaSpacing.sm),
-            maxLines = maxValueLines,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun InfoGroupDivider() {
-    HorizontalDivider(
-        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-        modifier = Modifier.padding(vertical = WajihaSpacing.xs),
+    GamepadSettingRow(
+        label = label,
+        type = SettingType.Action,
+        focusRequester = focusRequester,
+        content = {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
     )
 }
 
-private fun folderDisplayPath(folder: RomFolderEntity): String = folder.treeUri.substringAfterLast("%3A").substringAfterLast(':')
+/** Human-readable label for a SAF tree URI (percent-decoded path segment). */
+internal fun folderDisplayPath(folder: RomFolderEntity): String {
+    val raw = folder.treeUri
+    val treeSegment =
+        raw
+            .substringAfter("/tree/", missingDelimiterValue = "")
+            .substringBefore('?')
+            .substringBefore('#')
+            .ifBlank {
+                raw.substringAfterLast('/').substringBefore('?').substringBefore('#')
+            }
+    val decoded = percentDecode(treeSegment).ifBlank { raw }
+    return decoded.ifBlank { raw }
+}
+
+private fun percentDecode(input: String): String {
+    if (input.isEmpty() || '%' !in input) return input
+    val out = StringBuilder(input.length)
+    var i = 0
+    while (i < input.length) {
+        val c = input[i]
+        if (c == '%' && i + 2 < input.length) {
+            val hex = input.substring(i + 1, i + 3)
+            val byte = hex.toIntOrNull(16)
+            if (byte != null) {
+                out.append(byte.toChar())
+                i += 3
+                continue
+            }
+        }
+        out.append(c)
+        i++
+    }
+    return out.toString()
+}
 
 @Composable
 private fun NameFields(
     platform: PlatformEntity,
     onNameCommit: (String) -> Unit,
     onShortNameCommit: (String) -> Unit,
-    firstFocusRequester: FocusRequester,
 ) {
     var name by remember(platform.id, platform.name) { mutableStateOf(platform.name) }
     var shortName by remember(platform.id, platform.shortName) {
@@ -906,10 +888,7 @@ private fun NameFields(
             value = name,
             onValueChange = { name = it },
             label = "Display name",
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .focusRequester(firstFocusRequester),
+            modifier = Modifier.fillMaxWidth(),
         )
     }
     LaunchedEffect(name) {
@@ -937,13 +916,31 @@ private fun NameFields(
 @Composable
 private fun FolderRow(
     folder: RomFolderEntity,
+    dualStore: DualScreenStore,
     onRemove: () -> Unit,
 ) {
+    val path = folderDisplayPath(folder)
     GamepadSettingRow(
-        label = folderDisplayPath(folder),
+        label = path,
         description = "ROM folder on this device.",
-        type = SettingType.WithReset,
+        type = SettingType.Action,
         onActivate = onRemove,
+        onFocusedChanged = { focused ->
+            if (focused) {
+                publishSettingsHero(
+                    dualStore,
+                    genericSettingHeroDetail(
+                        title = path,
+                        subtitle = "ROM folder on this device.",
+                        whyItMatters = "A removes this folder from the platform (games stay until the next rescan).",
+                        controlHints = listOf(SettingsHeroHint("A", "Remove")),
+                    ),
+                    onPrimaryAction = onRemove,
+                )
+            } else {
+                clearSettingsHero(dualStore)
+            }
+        },
         content = {
             Text(
                 text = "Remove",
@@ -961,7 +958,6 @@ private fun ScraperIdFields(
     onScreenScraperId: (String) -> Unit,
     onRaConsoleId: (String) -> Unit,
     onLibretroName: (String) -> Unit,
-    firstFocusRequester: FocusRequester,
 ) {
     var ss by remember(platform.id, platform.screenScraperId) {
         mutableStateOf(platform.screenScraperId?.toString().orEmpty())
@@ -978,10 +974,7 @@ private fun ScraperIdFields(
             value = ss,
             onValueChange = { ss = it },
             label = "ScreenScraper system id",
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .focusRequester(firstFocusRequester),
+            modifier = Modifier.fillMaxWidth(),
         )
     }
     LaunchedEffect(ss) {

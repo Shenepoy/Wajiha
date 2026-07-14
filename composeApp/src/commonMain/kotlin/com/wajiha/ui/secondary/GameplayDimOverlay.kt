@@ -96,9 +96,14 @@ internal fun rememberGameplayDimAlpha(
     val targetAlpha =
         when {
             !shouldDimEventually -> 0f
+
             liftedByInteraction -> 0f
+
             !delayElapsed -> 0f
-            else -> store.gameDimPercent.coerceIn(0, 100) / 100f
+
+            // Keep a whisper of content under 100% so this is never a hard black
+            // cut identical to Blackout (SecondaryMode.Off). OLED still looks off.
+            else -> (store.gameDimPercent.coerceIn(0, 100) / 100f).coerceAtMost(0.97f)
         }
 
     val animatedAlpha by animateFloatAsState(

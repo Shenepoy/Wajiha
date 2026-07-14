@@ -69,6 +69,11 @@ object GamepadKeys {
         type == KeyEventType.KeyDown &&
             (key == Key.ButtonSelect || key == Key.ButtonMode)
 
+    fun isStart(
+        type: KeyEventType,
+        key: Key,
+    ): Boolean = type == KeyEventType.KeyDown && key == Key.ButtonStart
+
     fun isX(
         type: KeyEventType,
         key: Key,
@@ -121,6 +126,7 @@ object GamepadKeys {
             Key.ButtonL2,
             Key.ButtonR2,
             Key.ButtonSelect,
+            Key.ButtonStart,
             Key.ButtonMode,
             Key.PageUp,
             Key.PageDown,

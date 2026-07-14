@@ -182,6 +182,15 @@ class DisplayCoordinator(
                 SessionTaskRegistry.clear(topGame)
             }
         }
+        // Never pull the hero over a normal app that owns the top display.
+        val topPkg = store.topDisplayForegroundPackage.value
+        if (topPkg != null && topPkg != context.packageName) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "restorePrimaryHero: skip — foreign top pkg=$topPkg",
+            )
+            return
+        }
         mainHandler.postDelayed({
             val taskId =
                 main?.taskId
@@ -446,7 +455,7 @@ class DisplayCoordinator(
         }
     }
 
-    /** Keep display 0 on the active game or Wajiha hero — never Recents. */
+    /** Keep display 0 on the active game — never pull the hero over a live app. */
     private fun refreshTopDisplayAfterSecondaryReclaim() {
         val topGame = store.topDisplayForegroundPackage.value
         if (topGame != null && topGame != context.packageName && store.getSession(topGame) != null) {
@@ -456,7 +465,7 @@ class DisplayCoordinator(
                 focusGameOnPrimary(topGame)
             } else {
                 SessionTaskRegistry.clear(topGame)
-                if (!store.hasActiveSessions()) restorePrimaryHero()
+                // Do not restorePrimaryHero here — a non-session app may own display 0.
             }
         } else if (!store.hasActiveSessions()) {
             restorePrimaryHero()

@@ -120,6 +120,13 @@ class DualScreenStore {
     private val _navigateToNowPlaying = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val navigateToNowPlayingRequests = _navigateToNowPlaying.asSharedFlow()
 
+    /** Menu owner (primary or secondary) navigates to Settings when this fires (Start). */
+    private val _openSettings = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val openSettingsRequests = _openSettings.asSharedFlow()
+
+    /** @return true when the request was accepted into the channel. */
+    fun requestOpenSettings(): Boolean = _openSettings.tryEmit(Unit)
+
     /**
      * Now Playing UI state: only non-null when the featured session is foreground on
      * the top display (dual) or any session exists (single display).
@@ -171,6 +178,13 @@ class DualScreenStore {
 
     /** Slot picker visible on hero display — gamepad follows the top grid. */
     private val _scrapeReviewPicking = MutableStateFlow(false)
+
+    /** Focused settings row / section snapshot for the dual-screen hero. */
+    private val _settingsHeroDetail = MutableStateFlow<SettingsHeroDetail?>(null)
+    val settingsHeroDetail: StateFlow<SettingsHeroDetail?> = _settingsHeroDetail.asStateFlow()
+
+    /** Settings hero option/action picking — gamepad follows the hero display. */
+    private val _settingsHeroPicking = MutableStateFlow(false)
 
     /** Resolved hero for whichever display is showing [TopScreen]. */
     val heroContext: StateFlow<HeroContext> =
@@ -385,8 +399,17 @@ class DualScreenStore {
         WajihaLog.i(WajihaTags.NOW_PLAYING, "switchToSession: $packageName")
     }
 
-    /** Launch intent or first external detection — sets session immediately. */
-    fun beginGameSession(nowPlaying: NowPlayingState) {
+    /**
+     * Launch intent or first external detection — sets session immediately.
+     *
+     * @param deferSecondaryUi when true, keep the current bottom UI (usually GameGrid)
+     * through [startActivity]; call [applyDeferredSecondaryModeAfterLaunch] after the
+     * top-display task attaches so the bottom screen does not flash.
+     */
+    fun beginGameSession(
+        nowPlaying: NowPlayingState,
+        deferSecondaryUi: Boolean = false,
+    ) {
         GamepadLayers.stack.deactivateAll()
         val now = nowMs()
         val wasEmpty = sessionCache.isEmpty()
@@ -404,17 +427,75 @@ class DualScreenStore {
         _topDisplayForegroundPackage.value = started.packageName
         publishActiveSessions()
         if (wasEmpty) {
-            enterGameRunningStateIfNeeded()
+            if (deferSecondaryUi && !blackoutOnLaunch) {
+                // Keep GameGrid (or current mode) through startActivity — switching
+                // secondary UI in the same frame as the top-display launch flashes black.
+                if (_state.value != DualScreenState.SingleDisplay) {
+                    _state.value = DualScreenState.GameRunning
+                }
+            } else {
+                enterGameRunningStateIfNeeded()
+            }
         } else if (_state.value == DualScreenState.DualBrowsing) {
             _state.value = DualScreenState.GameRunning
         }
+        if (deferSecondaryUi) {
+            if (_state.value == DualScreenState.SingleDisplay && nowPlaying.launchedByWajiha) {
+                _navigateToNowPlaying.tryEmit(Unit)
+            }
+            return
+        }
+        // Dual: enterGameRunningStateIfNeeded already applied preferredGameMode / blackout.
+        // Do not force NowPlaying over the user's "Bottom screen while a game runs" setting.
+        // Single-display still needs the in-app Now Running route.
         when {
-            nowPlaying.launchedByWajiha && !blackoutOnLaunch -> {
+            _state.value == DualScreenState.SingleDisplay && nowPlaying.launchedByWajiha -> {
+                _navigateToNowPlaying.tryEmit(Unit)
+            }
+
+            !wasEmpty && nowPlaying.launchedByWajiha && !blackoutOnLaunch -> {
+                when (preferredGameMode) {
+                    SecondaryMode.NowPlaying -> requestNavigateToNowPlaying()
+                    SecondaryMode.Off -> setSecondaryMode(SecondaryMode.Off)
+                    else -> setSecondaryMode(preferredGameMode)
+                }
+            }
+
+            !nowPlaying.launchedByWajiha && !blackoutOnLaunch -> {
+                showGridDuringSession()
+            }
+        }
+    }
+
+    /**
+     * Apply [preferredGameMode] / blackout after the top-display task has attached.
+     * Called from [com.wajiha.android.launch.GameLauncher] post-launch.
+     */
+    fun applyDeferredSecondaryModeAfterLaunch() {
+        if (!hasActiveSessions()) return
+        if (_state.value == DualScreenState.SingleDisplay) {
+            _navigateToNowPlaying.tryEmit(Unit)
+            return
+        }
+        if (blackoutOnLaunch) {
+            _secondaryMode.value = SecondaryMode.Off
+            _state.value = DualScreenState.BlackoutSecondary
+            return
+        }
+        _state.value = DualScreenState.GameRunning
+        when (preferredGameMode) {
+            SecondaryMode.NowPlaying -> {
                 requestNavigateToNowPlaying()
             }
 
+            SecondaryMode.GameGrid -> {
+                if (_secondaryMode.value != SecondaryMode.GameGrid) {
+                    _secondaryMode.value = SecondaryMode.GameGrid
+                }
+            }
+
             else -> {
-                showGridDuringSession()
+                setSecondaryMode(preferredGameMode)
             }
         }
     }
@@ -583,6 +664,11 @@ class DualScreenStore {
     /** Top screen shows scrape-review slot grid while Manual review is open. */
     fun setScrapeReviewActive(active: Boolean) {
         _scrapeReviewActive.value = active
+        if (active) {
+            _settingsHeroDetail.value = null
+            _settingsHeroPicking.value = false
+            SettingsHeroActionBridge.clear()
+        }
         if (!active) {
             _scrapeReviewPicking.value = false
         }
@@ -601,6 +687,22 @@ class DualScreenStore {
         if (picking) stickyGamepadOwner = null
         recomputeGamepadOwner()
         // Owner may already match — still bump so hero/overview content refocuses.
+        _gamepadFocusEpoch.value = _gamepadFocusEpoch.value + 1L
+    }
+
+    fun setSettingsHeroDetail(detail: SettingsHeroDetail?) {
+        _settingsHeroDetail.value = detail
+        if (detail == null) {
+            SettingsHeroActionBridge.clear()
+        }
+    }
+
+    /** Hero display owns settings option/action picking (gamepad → primary). */
+    fun setSettingsHeroPicking(picking: Boolean) {
+        if (_settingsHeroPicking.value == picking) return
+        _settingsHeroPicking.value = picking
+        if (picking) stickyGamepadOwner = null
+        recomputeGamepadOwner()
         _gamepadFocusEpoch.value = _gamepadFocusEpoch.value + 1L
     }
 
@@ -740,6 +842,11 @@ class DualScreenStore {
 
                 // Slot grid follows the hero display (primary by default; secondary when swapped).
                 _scrapeReviewPicking.value -> {
+                    if (gamesMenuOnPrimary) GamepadOwner.Secondary else GamepadOwner.Primary
+                }
+
+                // Settings hero option/action picking follows the hero display.
+                _settingsHeroPicking.value -> {
                     if (gamesMenuOnPrimary) GamepadOwner.Secondary else GamepadOwner.Primary
                 }
 

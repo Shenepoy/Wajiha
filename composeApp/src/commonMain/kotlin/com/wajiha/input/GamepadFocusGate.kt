@@ -22,10 +22,16 @@ fun Modifier.wajihaGamepadFocus(
     bringIntoView: Boolean = true,
 ): Modifier =
     when {
-        !enabled -> focusProperties { canFocus = false }
+        !enabled -> {
+            focusProperties { canFocus = false }
+        }
+
         bringIntoView -> {
             val interactionSource = remember { MutableInteractionSource() }
             focusable(interactionSource = interactionSource)
         }
-        else -> focusTarget()
+
+        else -> {
+            focusTarget()
+        }
     }

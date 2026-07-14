@@ -1,59 +1,81 @@
 package com.wajiha.ui.home
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.GamepadLayers
+import com.wajiha.input.GamepadNavHost
+import com.wajiha.input.GamepadNavItem
+import com.wajiha.input.GamepadNavMode
 import com.wajiha.input.GamepadOverlayLayer
+import com.wajiha.input.rememberGamepadNavController
 import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
+import com.wajiha.state.MenuRouteSnapshot
 import com.wajiha.state.SystemNotification
 import com.wajiha.state.SystemNotificationKind
 import com.wajiha.state.SystemNotificationStore
-import com.wajiha.ui.theme.WajihaColors
+import com.wajiha.ui.components.WajihaEmptyState
+import com.wajiha.ui.components.gamepad.GamepadButton
+import com.wajiha.ui.components.gamepad.GamepadHintGlyph
+import com.wajiha.ui.components.gamepad.GamepadList
 import com.wajiha.ui.theme.WajihaMotion
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
@@ -62,20 +84,37 @@ import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 import kotlin.time.ExperimentalTime
 
+private const val NotificationModalLayerId = "modal_system_notifications"
+private const val PeekDurationMs = 4_000L
+private val StatusSliverWidth = 8.dp
+private val StatusChipHeight = 28.dp
+private val NotificationPanelMaxHeight = 220.dp
+
 /**
  * Top-right status chrome on the hero screen: clock, connection, battery,
  * and notification indicator. R2 opens the in-app notification panel.
+ *
+ * When [reserveTopEnd] is true (hero chrome owns the corner), the pill tucks
+ * to a sliver until a notification peeks or the panel opens.
  */
 @Composable
-fun BoxScope.TopStatusBar(modifier: Modifier = Modifier) {
+fun BoxScope.TopStatusBar(
+    reserveTopEnd: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     val controls = koinInject<SystemControls>()
     val notifications = koinInject<SystemNotificationStore>()
     val dualStore = koinInject<DualScreenStore>()
     val status by controls.status.collectAsState()
     val items by notifications.notifications.collectAsState()
     val panelOpen by notifications.panelOpen.collectAsState()
+    val peekRequestId by notifications.peekRequestId.collectAsState()
     val dualState by dualStore.state.collectAsState()
+    val menuRoute by dualStore.menuRoute.collectAsState()
     var clock by remember { mutableStateOf(currentStatusTimeText()) }
+    var peeking by remember { mutableStateOf(false) }
+    var previousMenuRoute by remember { mutableStateOf<MenuRouteSnapshot?>(null) }
+    var wasReservingTopEnd by remember { mutableStateOf(reserveTopEnd) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -86,13 +125,37 @@ fun BoxScope.TopStatusBar(modifier: Modifier = Modifier) {
     }
 
     LaunchedEffect(dualState) {
-        if (dualState == DualScreenState.GameRunning) {
+        if (dualState == DualScreenState.GameRunning ||
+            dualState == DualScreenState.BlackoutSecondary
+        ) {
             notifications.closePanel()
         }
     }
 
+    LaunchedEffect(menuRoute) {
+        val previous = previousMenuRoute
+        previousMenuRoute = menuRoute
+        if (previous != null && previous != menuRoute) {
+            notifications.closePanel()
+        }
+    }
+
+    LaunchedEffect(reserveTopEnd) {
+        if (wasReservingTopEnd && !reserveTopEnd) {
+            notifications.closePanel()
+        }
+        wasReservingTopEnd = reserveTopEnd
+    }
+
+    LaunchedEffect(peekRequestId) {
+        if (peekRequestId == 0L) return@LaunchedEffect
+        peeking = true
+        delay(PeekDurationMs)
+        peeking = false
+    }
+
     val unread = items.count { !it.read }
-    val connectionLabel = buildConnectionLabel(status.wifiEnabled, status.bluetoothEnabled)
+    val showFullPill = !reserveTopEnd || panelOpen || peeking
     val batteryLabel = buildBatteryLabel(status.batteryPercent, status.charging)
 
     Column(
@@ -100,18 +163,32 @@ fun BoxScope.TopStatusBar(modifier: Modifier = Modifier) {
             modifier
                 .align(Alignment.TopEnd)
                 .zIndex(8f)
-                .padding(top = WajihaSpacing.sm, end = WajihaSpacing.md)
+                .padding(top = WajihaSpacing.sm, end = if (showFullPill) WajihaSpacing.md else 0.dp)
                 .widthIn(max = 320.dp),
         horizontalAlignment = Alignment.End,
     ) {
-        StatusBarChip(
-            clock = clock,
-            connection = connectionLabel,
-            battery = batteryLabel,
-            unread = unread,
-            hasNotifications = items.isNotEmpty(),
-            onNotificationsClick = { notifications.togglePanel() },
-        )
+        AnimatedContent(
+            targetState = showFullPill,
+            transitionSpec = {
+                fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
+            },
+            label = "status-pill",
+        ) { full ->
+            if (full) {
+                StatusBarChip(
+                    clock = clock,
+                    wifiEnabled = status.wifiEnabled,
+                    bluetoothEnabled = status.bluetoothEnabled,
+                    battery = batteryLabel,
+                    charging = status.charging,
+                    unread = unread,
+                    hasNotifications = items.isNotEmpty(),
+                    onClick = { notifications.togglePanel() },
+                )
+            } else {
+                StatusBarSliver(onClick = { notifications.openPanel() })
+            }
+        }
 
         AnimatedVisibility(
             visible = panelOpen,
@@ -133,39 +210,75 @@ fun BoxScope.TopStatusBar(modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun StatusBarSliver(onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier =
+            Modifier
+                .width(StatusSliverWidth)
+                .height(StatusChipHeight)
+                .clip(WajihaShapes.chip)
+                .background(scheme.surfaceContainerLow)
+                .border(1.dp, scheme.outline.copy(alpha = 0.35f), WajihaShapes.chip)
+                .pointerInput(onClick) {
+                    detectTapGestures { onClick() }
+                },
+    )
+}
+
+@Composable
 private fun StatusBarChip(
     clock: String,
-    connection: String,
+    wifiEnabled: Boolean,
+    bluetoothEnabled: Boolean,
     battery: String,
+    charging: Boolean,
     unread: Int,
     hasNotifications: Boolean,
-    onNotificationsClick: () -> Unit,
+    onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     Row(
         modifier =
             Modifier
                 .clip(WajihaShapes.chip)
-                .background(WajihaColors.HeroScrim)
+                .background(scheme.surfaceContainerLow)
                 .border(1.dp, scheme.outline.copy(alpha = 0.35f), WajihaShapes.chip)
-                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+                .pointerInput(onClick) {
+                    detectTapGestures { onClick() }
+                }.padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
-        StatusSegment(clock)
-        StatusDivider()
-        StatusSegment(connection)
-        StatusDivider()
-        StatusSegment(battery)
-        StatusDivider()
+        Text(
+            text = clock,
+            style = MaterialTheme.typography.labelSmall,
+            color = scheme.onSurface,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+        Icon(
+            imageVector = StatusWifiIcon,
+            contentDescription = if (wifiEnabled) "Wi‑Fi on" else "Wi‑Fi off",
+            tint = if (wifiEnabled) scheme.primary else scheme.onSurfaceVariant,
+            modifier = Modifier.size(14.dp),
+        )
+        Icon(
+            imageVector = StatusBluetoothIcon,
+            contentDescription = if (bluetoothEnabled) "Bluetooth on" else "Bluetooth off",
+            tint = if (bluetoothEnabled) scheme.onSurface else scheme.onSurfaceVariant,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            text = battery,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (charging) scheme.tertiary else scheme.onSurface,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
         Row(
-            modifier =
-                Modifier
-                    .clip(WajihaShapes.chip)
-                    .clickable(onClick = onNotificationsClick)
-                    .padding(horizontal = 2.dp, vertical = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Icon(
                 imageVector =
@@ -178,35 +291,16 @@ private fun StatusBarChip(
                 tint = if (unread > 0) scheme.tertiary else scheme.onSurface,
                 modifier = Modifier.size(14.dp),
             )
-            Text(
-                text = if (unread > 0) unread.toString() else "0",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (unread > 0) scheme.tertiary else scheme.onSurfaceVariant,
-                fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal,
-            )
+            if (unread > 0) {
+                Text(
+                    text = unread.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.tertiary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
-}
-
-@Composable
-private fun StatusSegment(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurface,
-        maxLines = 1,
-        overflow = TextOverflow.Clip,
-    )
-}
-
-@Composable
-private fun StatusDivider() {
-    Box(
-        modifier =
-            Modifier
-                .size(width = 1.dp, height = 10.dp)
-                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
-    )
 }
 
 @Composable
@@ -217,72 +311,128 @@ private fun NotificationPanel(
     onRemove: (Long) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    GamepadOverlayLayer(
-        layerId = "modal_system_notifications",
-        onDismiss = onDismiss,
-        onToggleKey = { event ->
-            if (GamepadKeys.isR2(event.type, event.key)) {
+    val navController =
+        rememberGamepadNavController(
+            mode = GamepadNavMode.Vertical,
+            onBack = {
                 onDismiss()
                 true
-            } else {
-                false
-            }
-        },
+            },
+        )
+    val latestHandler =
+        rememberUpdatedState<(KeyEvent) -> Boolean>(
+            newValue = { event ->
+                if (navController.handleKeyEvent(event)) return@rememberUpdatedState true
+                // Bridge dispatches D-pad/A/X/Y/L1/R1 down the layer stack when the
+                // top handler returns false — eat those so the grid/settings under
+                // us cannot move (empty list and list edges used to leak).
+                isNotificationStolenPreviewKey(event)
+            },
+        )
+
+    DisposableEffect(Unit) {
+        val handler: (KeyEvent) -> Boolean = { event -> latestHandler.value(event) }
+        GamepadLayers.stack.setPreviewHandler(NotificationModalLayerId, handler)
+        onDispose {
+            GamepadLayers.stack.setPreviewHandler(NotificationModalLayerId, null)
+        }
+    }
+
+    LaunchedEffect(items.size) {
+        navController.focusState.focusedIndex = 0
+    }
+
+    GamepadOverlayLayer(
+        layerId = NotificationModalLayerId,
+        onDismiss = onDismiss,
         modifier =
             Modifier
                 .padding(top = WajihaSpacing.sm)
                 .fillMaxWidth(),
     ) {
-        Column(
+        Surface(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .clip(WajihaShapes.card)
-                    .background(scheme.surface.copy(alpha = 0.96f))
-                    .border(1.dp, scheme.outline.copy(alpha = 0.4f), WajihaShapes.card)
-                    .padding(WajihaSpacing.sm),
+                    .border(
+                        width = 1.dp,
+                        color = scheme.outline.copy(alpha = 0.2f),
+                        shape = WajihaShapes.card,
+                    ),
+            shape = WajihaShapes.card,
+            color = scheme.surfaceContainerLow,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            GamepadNavHost(
+                controller = navController,
+                interceptKeys = false,
             ) {
-                Text(
-                    text = "Notifications",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = scheme.onSurface,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (items.isNotEmpty()) {
-                        TextButton(onClick = onClearAll) {
-                            Text("Clear", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                    Text(
-                        text = "R2 toggle",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = scheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            if (items.isEmpty()) {
-                Text(
-                    text = "No system notifications",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = WajihaSpacing.sm),
-                )
-            } else {
-                LazyColumn(
+                Column(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 220.dp),
-                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
+                            .padding(WajihaSpacing.sm),
                 ) {
-                    items(items, key = { it.id }) { item ->
-                        NotificationRow(item = item, onRemove = { onRemove(item.id) })
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Notifications",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = scheme.onSurface,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
+                        ) {
+                            if (items.isNotEmpty()) {
+                                GamepadButton(
+                                    text = "Clear",
+                                    onClick = onClearAll,
+                                    outlined = true,
+                                    gamepadFocusable = false,
+                                )
+                            }
+                            Text(
+                                text = "To close",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                            GamepadHintGlyph(
+                                button = GamepadHintButton.R2,
+                                size = 18.dp,
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(WajihaSpacing.xs))
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = NotificationPanelMaxHeight),
+                    ) {
+                        GamepadList(
+                            items = items,
+                            key = { it.id },
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(0.dp),
+                            emptyContent = {
+                                WajihaEmptyState(
+                                    title = "No system notifications",
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            },
+                        ) { item ->
+                            GamepadNavItem(
+                                onActivate = { onRemove(item.id) },
+                                itemId = item.id,
+                            ) {
+                                NotificationRow(item = item)
+                            }
+                        }
                     }
                 }
             }
@@ -291,10 +441,7 @@ private fun NotificationPanel(
 }
 
 @Composable
-private fun NotificationRow(
-    item: SystemNotification,
-    onRemove: () -> Unit,
-) {
+private fun NotificationRow(item: SystemNotification) {
     val scheme = MaterialTheme.colorScheme
     val accent =
         when (item.kind) {
@@ -309,7 +456,6 @@ private fun NotificationRow(
                 .fillMaxWidth()
                 .clip(WajihaShapes.chip)
                 .background(scheme.surfaceVariant.copy(alpha = 0.55f))
-                .clickable(onClick = onRemove)
                 .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
         verticalAlignment = Alignment.Top,
     ) {
@@ -341,16 +487,23 @@ private fun NotificationRow(
     }
 }
 
-private fun buildConnectionLabel(
-    wifi: Boolean,
-    bluetooth: Boolean,
-): String =
-    when {
-        wifi && bluetooth -> "Wi‑Fi · BT"
-        wifi -> "Wi‑Fi"
-        bluetooth -> "BT"
-        else -> "Offline"
-    }
+/**
+ * Keys [tryDispatchTopLayerPreviewKey] may forward past us if we return false.
+ * R2 stays with [LauncherTriggerActions]; B/Back is handled by overlay BackHandler.
+ */
+private fun isNotificationStolenPreviewKey(event: KeyEvent): Boolean {
+    val type = event.type
+    val key = event.key
+    return GamepadKeys.isUp(type, key) ||
+        GamepadKeys.isDown(type, key) ||
+        GamepadKeys.isLeft(type, key) ||
+        GamepadKeys.isRight(type, key) ||
+        GamepadKeys.isConfirm(type, key) ||
+        GamepadKeys.isX(type, key) ||
+        GamepadKeys.isY(type, key) ||
+        GamepadKeys.isL1(type, key) ||
+        GamepadKeys.isR1(type, key)
+}
 
 private fun buildBatteryLabel(
     percent: Int,
@@ -373,4 +526,94 @@ private fun currentStatusTimeText(): String {
     val h = dateTime.hour.toString().padStart(2, '0')
     val m = dateTime.minute.toString().padStart(2, '0')
     return "$h:$m"
+}
+
+/** Compact wifi arcs — material-icons-core has no Wifi glyph. */
+private val StatusWifiIcon: ImageVector by lazy {
+    ImageVector
+        .Builder(
+            name = "StatusWifi",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            path(
+                fill = SolidColor(Color.Black),
+                pathFillType = PathFillType.NonZero,
+            ) {
+                moveTo(12f, 18.5f)
+                curveToRelative(-0.83f, 0f, -1.5f, 0.67f, -1.5f, 1.5f)
+                reflectiveCurveToRelative(0.67f, 1.5f, 1.5f, 1.5f)
+                reflectiveCurveToRelative(1.5f, -0.67f, 1.5f, -1.5f)
+                reflectiveCurveToRelative(-0.67f, -1.5f, -1.5f, -1.5f)
+                close()
+                moveTo(12f, 3f)
+                curveTo(7.31f, 3f, 3.07f, 4.9f, 0.68f, 7.89f)
+                lineTo(2.1f, 9.3f)
+                curveTo(4.18f, 6.89f, 7.86f, 5.25f, 12f, 5.25f)
+                reflectiveCurveToRelative(7.82f, 1.64f, 9.9f, 4.05f)
+                lineToRelative(1.42f, -1.41f)
+                curveTo(19.93f, 4.9f, 15.69f, 3f, 12f, 3f)
+                close()
+                moveTo(12f, 8.5f)
+                curveToRelative(-3.03f, 0f, -5.78f, 1.23f, -7.76f, 3.21f)
+                lineToRelative(1.42f, 1.41f)
+                curveTo(7.31f, 11.47f, 9.53f, 10.5f, 12f, 10.5f)
+                reflectiveCurveToRelative(4.69f, 0.97f, 6.34f, 2.62f)
+                lineToRelative(1.42f, -1.41f)
+                curveTo(17.78f, 9.73f, 15.03f, 8.5f, 12f, 8.5f)
+                close()
+                moveTo(12f, 14f)
+                curveToRelative(-1.52f, 0f, -2.89f, 0.62f, -3.88f, 1.61f)
+                lineTo(12f, 19.5f)
+                lineToRelative(3.88f, -3.89f)
+                curveTo(14.89f, 14.62f, 13.52f, 14f, 12f, 14f)
+                close()
+            }
+        }.build()
+}
+
+/** Compact bluetooth rune — material-icons-core has no Bluetooth glyph. */
+private val StatusBluetoothIcon: ImageVector by lazy {
+    ImageVector
+        .Builder(
+            name = "StatusBluetooth",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            path(
+                fill = SolidColor(Color.Black),
+                pathFillType = PathFillType.NonZero,
+            ) {
+                moveTo(17.71f, 7.71f)
+                lineTo(12f, 2f)
+                horizontalLineToRelative(-1f)
+                verticalLineToRelative(7.59f)
+                lineTo(6.41f, 5f)
+                lineTo(5f, 6.41f)
+                lineTo(10.59f, 12f)
+                lineTo(5f, 17.59f)
+                lineTo(6.41f, 19f)
+                lineTo(11f, 14.41f)
+                verticalLineTo(22f)
+                horizontalLineToRelative(1f)
+                lineToRelative(5.71f, -5.71f)
+                lineTo(13.41f, 12f)
+                lineToRelative(4.3f, -4.29f)
+                close()
+                moveTo(13f, 5.83f)
+                lineToRelative(1.88f, 1.88f)
+                lineTo(13f, 9.59f)
+                verticalLineTo(5.83f)
+                close()
+                moveTo(14.88f, 16.29f)
+                lineTo(13f, 18.17f)
+                verticalLineToRelative(-3.76f)
+                lineToRelative(1.88f, 1.88f)
+                close()
+            }
+        }.build()
 }

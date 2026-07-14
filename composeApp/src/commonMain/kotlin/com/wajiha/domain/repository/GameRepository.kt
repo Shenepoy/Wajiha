@@ -7,6 +7,7 @@ import com.wajiha.data.db.GameMediaEntity
 import com.wajiha.data.db.RomFolderDao
 import com.wajiha.data.db.RomFolderEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 class GameRepository(
     private val gameDao: GameDao,
@@ -103,6 +104,20 @@ class GameRepository(
     fun observeMedia(gameId: Long): Flow<List<GameMediaEntity>> = mediaDao.observeForGame(gameId)
 
     fun observeAllBoxart(): Flow<List<GameMediaEntity>> = mediaDao.observeAllOfType("boxart")
+
+    /** Local boxart paths for a platform sample (settings hero / platform row). */
+    fun observeBoxartSample(
+        platformId: String,
+        limit: Int = 8,
+    ): Flow<List<String>> =
+        mediaDao.observeBoxartSample(platformId, limit).map { list ->
+            list.mapNotNull { it.localPath }
+        }
+
+    suspend fun boxartSample(
+        platformId: String,
+        limit: Int = 8,
+    ): List<String> = mediaDao.boxartSample(platformId, limit).mapNotNull { it.localPath }
 
     fun observeAllVideos(): Flow<List<GameMediaEntity>> = mediaDao.observeAllOfType("video")
 

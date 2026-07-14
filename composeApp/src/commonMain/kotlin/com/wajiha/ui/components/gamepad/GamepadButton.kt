@@ -1,7 +1,6 @@
 package com.wajiha.ui.components.gamepad
 
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
@@ -37,6 +36,7 @@ fun GamepadButton(
     outlined: Boolean = false,
     gamepadFocusable: Boolean = true,
     focusRequester: FocusRequester? = null,
+    onFocusedChanged: ((Boolean) -> Unit)? = null,
     sound: UiSound? = UiSound.Open,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -65,14 +65,21 @@ fun GamepadButton(
             .wajihaFocusIndicator(
                 highlighted = !useCustomNav && focused,
                 shape = WajihaShapes.button,
-            ).defaultMinSize(minHeight = WajihaSpacing.touchMin)
+            ).defaultMinSize(minHeight = LocalSettingRowMinHeight.current)
             .focusRequester(resolvedFocusRequester)
-            .reportSectionVisibleFocus(resolvedFocusRequester)
             .then(
+                if (gamepadFocusable) {
+                    Modifier.reportSectionVisibleFocus(resolvedFocusRequester)
+                } else {
+                    Modifier
+                },
+            ).then(
                 if (!useCustomNav) {
                     Modifier
-                        .onFocusChanged { focused = it.isFocused }
-                        .wajihaGamepadFocus(enabled && gamepadFocusable)
+                        .onFocusChanged {
+                            focused = it.isFocused
+                            onFocusedChanged?.invoke(it.isFocused)
+                        }.wajihaGamepadFocus(enabled && gamepadFocusable)
                 } else {
                     Modifier
                 },

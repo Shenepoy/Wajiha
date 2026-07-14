@@ -59,6 +59,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.LocalGamepadNavController
@@ -98,19 +99,25 @@ enum class SettingType {
     /** Integer value — Left decreases, Right increases; A also steps up. */
     Number,
 
-    /** Row supports Y → reset when [GamepadSettingRow.onReset] is set. */
-    WithReset,
+    /**
+     * Custom trailing + A [GamepadSettingRow.onActivate]; optional X
+     * [GamepadSettingRow.onSecondaryActivate]; Y if [GamepadSettingRow.onReset] is set.
+     */
+    Action,
 }
 
 /**
  * Unified settings row: whole row receives gamepad focus chrome; A activates;
- * optional yellow reset glyph (Y) when [onReset] is provided and [isAtDefault] is false.
+ * optional X secondary action; optional yellow reset glyph (Y) when [onReset]
+ * is provided and [isAtDefault] is false.
  */
 @Composable
 fun GamepadSettingRow(
     label: String,
     modifier: Modifier = Modifier,
     description: String? = null,
+    /** Optional muted text shown on the same row as [label]. */
+    labelMeta: String? = null,
     type: SettingType = SettingType.Toggle,
     focusRequester: FocusRequester? = null,
     onReset: (() -> Unit)? = null,
@@ -124,6 +131,8 @@ fun GamepadSettingRow(
     selected: String = "",
     onSelect: ((String) -> Unit)? = null,
     onActivate: (() -> Unit)? = null,
+    onSecondaryActivate: (() -> Unit)? = null,
+    onFocusedChanged: ((Boolean) -> Unit)? = null,
     numberValue: Int = 0,
     onNumberChange: ((Int) -> Unit)? = null,
     numberRange: IntRange = 0..100,
@@ -149,6 +158,7 @@ fun GamepadSettingRow(
             isAtDefault = isAtDefault,
             overridden = overridden,
             overrideHint = overrideHint,
+            onFocusedChanged = onFocusedChanged,
             modifier = modifier,
         )
         return
@@ -226,8 +236,10 @@ fun GamepadSettingRow(
             .then(
                 if (!useCustomNav) {
                     Modifier
-                        .onFocusChanged { focused = it.isFocused }
-                        .wajihaGamepadFocus()
+                        .onFocusChanged {
+                            focused = it.isFocused
+                            onFocusedChanged?.invoke(it.isFocused)
+                        }.wajihaGamepadFocus()
                         .onPreviewKeyEvent { event ->
                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             when {
@@ -237,6 +249,12 @@ fun GamepadSettingRow(
                                 }
 
                                 handleHorizontalKey(event.key) -> {
+                                    true
+                                }
+
+                                GamepadKeys.isX(event.type, event.key) && onSecondaryActivate != null -> {
+                                    feedback.confirm()
+                                    onSecondaryActivate()
                                     true
                                 }
 
@@ -254,27 +272,47 @@ fun GamepadSettingRow(
                 } else {
                     Modifier
                 },
-            ).pointerInput(
-                type,
-                checked,
-                options,
-                selected,
-                numberValue,
-                onCheckedChange,
-                onSelect,
-                onActivate,
-                onNumberChange,
-            ) {
-                if (type != SettingType.Number) {
-                    detectTapGestures { activate() }
-                }
-            }
+            ).then(
+                when {
+                    type == SettingType.Number -> {
+                        Modifier
+                    }
+
+                    onSecondaryActivate != null -> {
+                        // Dual-action: body tap focuses the row (hints/X/A) but does not activate.
+                        Modifier.pointerInput(Unit) {
+                            detectTapGestures {
+                                try {
+                                    resolvedFocusRequester.requestFocus()
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {
+                        Modifier.pointerInput(
+                            type,
+                            checked,
+                            options,
+                            selected,
+                            numberValue,
+                            onCheckedChange,
+                            onSelect,
+                            onActivate,
+                            onNumberChange,
+                        ) {
+                            detectTapGestures { activate() }
+                        }
+                    }
+                },
+            )
 
     Column(
         modifier =
             modifier
                 .fillMaxWidth()
-                .defaultMinSize(minHeight = WajihaSpacing.touchMin),
+                .defaultMinSize(minHeight = LocalSettingRowMinHeight.current),
     ) {
         if (stackedChoices && options.isNotEmpty()) {
             Column(
@@ -286,6 +324,7 @@ fun GamepadSettingRow(
             ) {
                 SettingLabelWithReset(
                     label = label,
+                    meta = labelMeta,
                     canReset = canReset,
                     onReset = onReset,
                     overridden = overridden,
@@ -311,6 +350,7 @@ fun GamepadSettingRow(
             ) {
                 SettingLabelWithReset(
                     label = label,
+                    meta = labelMeta,
                     canReset = canReset,
                     onReset = onReset,
                     overridden = overridden,
@@ -391,6 +431,7 @@ private fun MultiChoiceSettingRow(
     isAtDefault: Boolean,
     overridden: Boolean,
     overrideHint: String,
+    onFocusedChanged: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -454,7 +495,7 @@ private fun MultiChoiceSettingRow(
         modifier =
             modifier
                 .fillMaxWidth()
-                .defaultMinSize(minHeight = WajihaSpacing.touchMin),
+                .defaultMinSize(minHeight = LocalSettingRowMinHeight.current),
     ) {
         Row(
             modifier =
@@ -468,8 +509,10 @@ private fun MultiChoiceSettingRow(
                     .then(
                         if (!useCustomNav) {
                             Modifier
-                                .onFocusChanged { headerFocused = it.isFocused }
-                                .wajihaGamepadFocus()
+                                .onFocusChanged {
+                                    headerFocused = it.isFocused
+                                    onFocusedChanged?.invoke(it.isFocused)
+                                }.wajihaGamepadFocus()
                                 .onPreviewKeyEvent { event ->
                                     when {
                                         GamepadKeys.isConfirm(event.type, event.key) -> {
@@ -820,6 +863,7 @@ private fun SettingLabelWithReset(
     onReset: (() -> Unit)?,
     overridden: Boolean = false,
     overrideHint: String = "Changed from global default",
+    meta: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -831,7 +875,19 @@ private fun SettingLabelWithReset(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
+        if (!meta.isNullOrBlank()) {
+            Text(
+                text = meta,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+        }
         if (overridden) {
             PlatformOverrideIndicator(hint = overrideHint)
         }

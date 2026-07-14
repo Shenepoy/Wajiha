@@ -150,8 +150,20 @@ class GamepadKeyRouter(
                 dualState != DualScreenState.BlackoutSecondary
         }
         if (event.keyCode == KeyEvent.KEYCODE_BUTTON_R2) {
-            if (event.action == KeyEvent.ACTION_UP) {
+            // Fire on DOWN like L2. Thor also emits R2 as AXIS_GAS; axis edges on
+            // press while a prior UP-based key path toggled again on release and
+            // immediately undid the panel. Debounce in [LauncherTriggerActions]
+            // absorbs digital+analog double-fire at press time.
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                 return triggers.onR2("key")
+            }
+            val dualState = store.state.value
+            return dualState != DualScreenState.GameRunning &&
+                dualState != DualScreenState.BlackoutSecondary
+        }
+        if (event.keyCode == KeyEvent.KEYCODE_BUTTON_START) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                return triggers.onStart("key")
             }
             val dualState = store.state.value
             return dualState != DualScreenState.GameRunning &&

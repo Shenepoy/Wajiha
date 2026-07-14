@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.wajiha.ui.components.gamepad.wajihaPressedFeedback
 import com.wajiha.ui.theme.WajihaFocus
@@ -45,6 +46,7 @@ fun FolderTabRow(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    minHeight: Dp = WajihaSpacing.touchMin,
 ) {
     val listState = rememberLazyListState()
 
@@ -65,6 +67,7 @@ fun FolderTabRow(
                 label = label,
                 selected = index == selectedIndex,
                 onClick = { onSelect(index) },
+                minHeight = minHeight,
             )
         }
     }
@@ -75,6 +78,7 @@ private fun FolderTab(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    minHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
     var pressed by remember { mutableStateOf(false) }
@@ -139,7 +143,7 @@ private fun FolderTab(
                 color = labelColor,
                 modifier =
                     Modifier
-                        .defaultMinSize(minHeight = WajihaSpacing.touchMin)
+                        .defaultMinSize(minHeight = minHeight)
                         .padding(
                             horizontal = WajihaSpacing.md,
                             vertical = WajihaSpacing.sm,

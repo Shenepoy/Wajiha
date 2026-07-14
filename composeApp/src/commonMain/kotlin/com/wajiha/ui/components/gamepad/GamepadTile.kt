@@ -134,9 +134,15 @@ fun GamepadTile(
                         onLongPress = { onLongPress?.invoke() },
                         onTap = {
                             when {
-                                touchSwitchMode -> onLaunch()
+                                touchSwitchMode -> {
+                                    onLaunch()
+                                }
+
                                 // Second tap launches only when this tile already owns focus.
-                                selected && focused -> onLaunch()
+                                selected && focused -> {
+                                    onLaunch()
+                                }
+
                                 else -> {
                                     onSelect()
                                     claimFocusFromTouch()

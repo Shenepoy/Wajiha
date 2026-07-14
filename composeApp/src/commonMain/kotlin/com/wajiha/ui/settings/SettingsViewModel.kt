@@ -12,8 +12,10 @@ import com.wajiha.platform.LibraryActions
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingDisplayMode
 import com.wajiha.state.SecondaryMode
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -23,7 +25,7 @@ import kotlinx.coroutines.launch
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
     private val gameRepository: GameRepository,
-    platformRepository: PlatformRepository,
+    private val platformRepository: PlatformRepository,
     private val libraryActions: LibraryActions,
     private val dualScreenStore: DualScreenStore,
 ) : ViewModel() {
@@ -47,16 +49,38 @@ class SettingsViewModel(
             .observeRomFolders()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Visible (non-hidden) game counts keyed by platform id. */
+    val gameCountsByPlatform: StateFlow<Map<String, Int>> =
+        gameRepository
+            .observeAll()
+            .map { games ->
+                games.groupingBy { it.platformId }.eachCount()
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     /**
      * Platforms already in the library UI — those with at least one ROM folder.
      * Bundled packs leave most systems enabled; folders are the real "in use" signal.
      */
     val inUsePlatforms: StateFlow<List<PlatformEntity>> =
-        kotlinx.coroutines.flow
-            .combine(allPlatforms, folders) { platforms, folderList ->
-                val folderPlatformIds = folderList.map { it.platformId }.toSet()
-                platforms.filter { it.id in folderPlatformIds }.sortedBy { it.name }
-            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        combine(allPlatforms, folders) { platforms, folderList ->
+            val folderPlatformIds = folderList.map { it.platformId }.toSet()
+            platforms.filter { it.id in folderPlatformIds }.sortedBy { it.name }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Platform id → default emulator display name (when a default is set). */
+    val emulatorLabelsByPlatform: StateFlow<Map<String, String>> =
+        combine(
+            platformRepository.observeAll(),
+            platformRepository.observeAllEmulators(),
+        ) { platforms, emulators ->
+            val byId = emulators.associateBy { it.id }
+            platforms
+                .mapNotNull { platform ->
+                    val emulatorId = platform.defaultEmulatorId ?: return@mapNotNull null
+                    val label = byId[emulatorId]?.name ?: return@mapNotNull null
+                    platform.id to label
+                }.toMap()
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     init {
         // Mirror persisted options into the dual-screen store
@@ -145,6 +169,23 @@ class SettingsViewModel(
 
     fun setSwapGamepadHints(value: Boolean) {
         viewModelScope.launch { settingsRepository.setSwapGamepadHints(value) }
+    }
+
+    fun setSettingsHeroHelp(value: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setSettingsHeroHelp(value)
+            if (!value) {
+                settingsRepository.setSettingsHeroActions(false)
+                dualScreenStore.setSettingsHeroPicking(false)
+            }
+        }
+    }
+
+    fun setSettingsHeroActions(value: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setSettingsHeroActions(value)
+            if (!value) dualScreenStore.setSettingsHeroPicking(false)
+        }
     }
 
     fun setTheme(theme: String) {
@@ -249,6 +290,28 @@ class SettingsViewModel(
 
     fun setOnboardingDone() {
         viewModelScope.launch { settingsRepository.setOnboardingDone(true) }
+    }
+
+    fun boxartSampleFor(
+        platformId: String,
+        limit: Int = 8,
+    ): Flow<List<String>> = gameRepository.observeBoxartSample(platformId, limit)
+
+    fun observeEmulators(platformId: String) = platformRepository.observeEmulators(platformId)
+
+    fun setPlatformDefaultEmulator(
+        platformId: String,
+        emulatorId: String?,
+    ) {
+        viewModelScope.launch {
+            platformRepository.setDefaultEmulator(platformId, emulatorId)
+            val emulators = platformRepository.emulatorsFor(platformId)
+            if (emulators.isNotEmpty()) {
+                platformRepository.upsertEmulators(
+                    emulators.map { it.copy(isDefault = it.id == emulatorId) },
+                )
+            }
+        }
     }
 
     fun pickRomFolder(platformId: String) = libraryActions.pickRomFolder(platformId)

@@ -152,12 +152,15 @@ private fun menuNavItems(
 private fun MenuNavId.toFocusZone(): ContextMenuFocusZone =
     when (this) {
         MenuNavId.Open -> ContextMenuFocusZone.Open
+
         MenuNavId.TopLaunch,
         MenuNavId.BottomLaunch,
         -> ContextMenuFocusZone.OpenNested
 
         MenuNavId.Info -> ContextMenuFocusZone.Info
+
         MenuNavId.Delete -> ContextMenuFocusZone.Delete
+
         MenuNavId.RemoveLib,
         MenuNavId.DeleteFile,
         -> ContextMenuFocusZone.DeleteNested
@@ -683,16 +686,22 @@ fun GameContextMenu(
             // Row list may not have recomposed yet after expand; keep a stable index.
             navIndex =
                 when (id) {
-                    MenuNavId.TopLaunch -> 1
-                    MenuNavId.RemoveLib ->
+                    MenuNavId.TopLaunch -> {
+                        1
+                    }
+
+                    MenuNavId.RemoveLib -> {
                         menuNavItems(
                             openExpanded = false,
                             deleteExpanded = true,
                             dualDisplay = dualDisplay,
                         ).indexOf(MenuNavId.RemoveLib)
                             .coerceAtLeast(0)
+                    }
 
-                    else -> navIndex
+                    else -> {
+                        navIndex
+                    }
                 }
         }
         focusedZone = id.toFocusZone()
@@ -750,8 +759,13 @@ fun GameContextMenu(
                 }
             }
 
-            MenuNavId.RemoveLib -> pendingConfirm = PendingConfirm.RemoveFromLibrary
-            MenuNavId.DeleteFile -> pendingConfirm = PendingConfirm.DeleteFile
+            MenuNavId.RemoveLib -> {
+                pendingConfirm = PendingConfirm.RemoveFromLibrary
+            }
+
+            MenuNavId.DeleteFile -> {
+                pendingConfirm = PendingConfirm.DeleteFile
+            }
         }
         return true
     }
@@ -798,7 +812,10 @@ fun GameContextMenu(
         val index = navIndex.coerceIn(0, items.lastIndex)
         val current = items[index]
         when {
-            GamepadKeys.isBack(event.type, event.key) -> return handleBack()
+            GamepadKeys.isBack(event.type, event.key) -> {
+                return handleBack()
+            }
+
             GamepadKeys.isUp(event.type, event.key) -> {
                 if (index > 0) {
                     selectNav(items[index - 1])
@@ -857,7 +874,9 @@ fun GameContextMenu(
                         }
                     }
 
-                    else -> true
+                    else -> {
+                        true
+                    }
                 }
             }
 
@@ -871,7 +890,9 @@ fun GameContextMenu(
                         if (!deleteExpanded) activateNav(MenuNavId.Delete) else true
                     }
 
-                    else -> activateNav(current)
+                    else -> {
+                        activateNav(current)
+                    }
                 }
             }
 
@@ -880,7 +901,9 @@ fun GameContextMenu(
                 return activateNav(current)
             }
 
-            else -> return false
+            else -> {
+                return false
+            }
         }
     }
 

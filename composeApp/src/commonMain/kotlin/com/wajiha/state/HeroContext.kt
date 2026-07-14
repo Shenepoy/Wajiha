@@ -44,6 +44,9 @@ sealed class HeroContext {
     }
 }
 
+/** True when hero chrome owns the top-right corner (status pill should tuck to a sliver). */
+fun HeroContext.claimsStatusCorner(): Boolean = this is HeroContext.ScrapeReview
+
 /** Which launcher surface is active on each display (drives [HeroContext] resolution). */
 enum class LauncherPanel {
     GameLibrary,
@@ -74,4 +77,6 @@ data class MenuRouteSnapshot(
     val destination: MenuDestination = MenuDestination.Home,
     val platformDetailId: String? = null,
     val gameDetailId: Long? = null,
+    /** When true, back from PlatformDetail returns to PlatformPicker. */
+    val platformDetailFromPicker: Boolean = false,
 )

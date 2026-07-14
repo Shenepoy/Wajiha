@@ -26,8 +26,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import com.wajiha.input.GamepadKeys
 import com.wajiha.ui.theme.InputMode
 import com.wajiha.ui.theme.LocalInputMode
-import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.drop
+import kotlin.math.roundToInt
 
 /**
  * Scroll container for grouped settings cards. Provided via [LocalSettingSectionScroll]

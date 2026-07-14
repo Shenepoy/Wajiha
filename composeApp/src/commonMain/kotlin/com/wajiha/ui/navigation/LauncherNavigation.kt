@@ -71,6 +71,8 @@ fun LauncherSettingsFlow(
     store: DualScreenStore,
     platformDetailId: String?,
     onPlatformDetailIdChange: (String?) -> Unit,
+    platformDetailFromPicker: Boolean = false,
+    onPlatformDetailFromPickerChange: (Boolean) -> Unit = {},
     onRouteChange: (LauncherSettingsRoute) -> Unit,
     onExitSettings: () -> Unit,
     content: @Composable () -> Unit = {},
@@ -90,6 +92,7 @@ fun LauncherSettingsFlow(
                 },
                 onOpenPlatform = { id ->
                     onPlatformDetailIdChange(id)
+                    onPlatformDetailFromPickerChange(false)
                     viewModel.playOpen()
                     onRouteChange(LauncherSettingsRoute.PlatformDetail)
                 },
@@ -106,6 +109,7 @@ fun LauncherSettingsFlow(
                 },
                 onPick = { id ->
                     onPlatformDetailIdChange(id)
+                    onPlatformDetailFromPickerChange(true)
                     viewModel.playOpen()
                     onRouteChange(LauncherSettingsRoute.PlatformDetail)
                 },
@@ -124,7 +128,13 @@ fun LauncherSettingsFlow(
                     platformId = id,
                     onBack = {
                         viewModel.playBack()
-                        onRouteChange(LauncherSettingsRoute.Settings)
+                        onRouteChange(
+                            if (platformDetailFromPicker) {
+                                LauncherSettingsRoute.PlatformPicker
+                            } else {
+                                LauncherSettingsRoute.Settings
+                            },
+                        )
                     },
                 )
                 LaunchedEffect(Unit) {

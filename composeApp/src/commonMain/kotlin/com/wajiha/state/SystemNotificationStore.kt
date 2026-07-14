@@ -34,7 +34,12 @@ class SystemNotificationStore {
     private val _panelOpen = MutableStateFlow(false)
     val panelOpen: StateFlow<Boolean> = _panelOpen.asStateFlow()
 
+    /** Increments on each [post] so the status pill can peek when tucked. */
+    private val _peekRequestId = MutableStateFlow(0L)
+    val peekRequestId: StateFlow<Long> = _peekRequestId.asStateFlow()
+
     private var nextId = 1L
+    private var lastToggleAtMs: Long = 0L
 
     @OptIn(ExperimentalTime::class)
     fun post(
@@ -51,14 +56,34 @@ class SystemNotificationStore {
                 createdAtMs = Clock.System.now().toEpochMilliseconds(),
             )
         _notifications.update { listOf(item) + it.take(MAX_ITEMS - 1) }
+        _peekRequestId.update { it + 1 }
+        // Panel already open: don't leave an unread badge while the list is visible.
+        if (_panelOpen.value) markAllRead()
     }
 
-    fun togglePanel() {
+    /**
+     * Toggle the notification panel. Debounced so Thor's digital BUTTON_R2 and
+     * analog AXIS_GAS for one physical press cannot open-then-immediately-close.
+     *
+     * @return true when the toggle was applied; false when absorbed by debounce.
+     */
+    @OptIn(ExperimentalTime::class)
+    fun togglePanel(): Boolean {
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (now - lastToggleAtMs < TOGGLE_DEBOUNCE_MS) return false
+        lastToggleAtMs = now
         _panelOpen.update { open ->
             val next = !open
             if (next) markAllRead()
             next
         }
+        return true
+    }
+
+    fun openPanel() {
+        if (_panelOpen.value) return
+        markAllRead()
+        _panelOpen.value = true
     }
 
     fun closePanel() {
@@ -80,5 +105,6 @@ class SystemNotificationStore {
 
     companion object {
         private const val MAX_ITEMS = 40
+        private const val TOGGLE_DEBOUNCE_MS = 280L
     }
 }

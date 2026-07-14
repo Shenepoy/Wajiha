@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
@@ -30,6 +33,7 @@ import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadList
 import com.wajiha.ui.components.gamepad.GamepadSearchField
+import com.wajiha.ui.components.gamepad.ProvideSettingsDensity
 import com.wajiha.ui.components.gamepad.withoutDualScreenChrome
 import com.wajiha.ui.theme.WajihaSpacing
 import org.koin.compose.koinInject
@@ -51,6 +55,7 @@ fun PlatformPickerScreen(
     val dualStore = koinInject<DualScreenStore>()
     val screenState by dualStore.state.collectAsState()
     val isDual = screenState != DualScreenState.SingleDisplay
+    val settings by settingsViewModel.settings.collectAsState()
     val allPlatforms by settingsViewModel.allPlatforms.collectAsState()
     val folders by settingsViewModel.folders.collectAsState()
     val inUseIds =
@@ -86,60 +91,87 @@ fun PlatformPickerScreen(
             )
         }
 
-    WajihaScreen(
-        layerId = "platform_picker",
-        modifier = modifier,
-        onBack = onBack,
-        showActionBar = true,
-        gamepadHints =
-            listOf(
-                GamepadHint(GamepadHintButton.A, "Add/Open"),
-                GamepadHint(GamepadHintButton.B, "Back"),
-                GamepadHint(GamepadHintButton.L2, "Focus screen"),
-                GamepadHint(GamepadHintButton.A, "Edit search"),
-            ).withoutDualScreenChrome(isDual),
-        gamepadOwner = gamepadOwner,
-        onClaimGamepad = onClaimGamepad,
-        onOwnerGainedFocus = {
-            navController.focusState.focusedIndex = 0
-        },
-    ) {
-        GamepadNavHost(controller = navController) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                WajihaToolbar(title = "Add platform", onBack = onBack)
+    DisposableEffect(Unit) {
+        onDispose { clearSettingsHero(dualStore) }
+    }
 
-                GamepadSearchField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = "Search systems",
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.xs),
-                    navItemId = "search",
-                )
+    ProvideSettingsDensity {
+        WajihaScreen(
+            layerId = "platform_picker",
+            modifier = modifier,
+            onBack = onBack,
+            showActionBar = true,
+            gamepadHints =
+                listOf(
+                    GamepadHint(GamepadHintButton.A, "Select"),
+                    GamepadHint(GamepadHintButton.B, "Back"),
+                    GamepadHint(GamepadHintButton.L2, "Focus screen"),
+                ).withoutDualScreenChrome(isDual),
+            gamepadOwner = gamepadOwner,
+            onClaimGamepad = onClaimGamepad,
+            onOwnerGainedFocus = {
+                navController.focusState.focusedIndex = 0
+            },
+        ) {
+            GamepadNavHost(controller = navController) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    WajihaToolbar(title = "Add platform", onBack = onBack)
 
-                Text(
-                    text = "Pick a system, then set folders, emulator, scraper ids, and per-system scraper overrides.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.xs),
-                )
+                    GamepadSearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = "Search systems",
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.xs),
+                        navItemId = "search",
+                    )
 
-                GamepadList(
-                    items = filtered,
-                    key = { it.id },
-                    modifier = Modifier.weight(1f),
-                ) { platform ->
-                    GamepadNavItem(
-                        onActivate = { onPick(platform.id) },
-                        itemId = platform.id,
-                    ) {
-                        PlatformPickRow(
-                            platform = platform,
-                            alreadyInUse = platform.id in inUseIds,
-                            onClick = { onPick(platform.id) },
-                        )
+                    Text(
+                        text =
+                            "Pick a system to open its settings. Add a ROM folder on the " +
+                                "Folders tab to list it under Settings → Library.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier =
+                            Modifier.padding(
+                                horizontal = WajihaSpacing.md,
+                                vertical = WajihaSpacing.xs,
+                            ),
+                    )
+
+                    GamepadList(
+                        items = filtered,
+                        key = { it.id },
+                        modifier = Modifier.weight(1f),
+                    ) { platform ->
+                        val alreadyInUse = platform.id in inUseIds
+                        GamepadNavItem(
+                            onActivate = { onPick(platform.id) },
+                            itemId = platform.id,
+                        ) { highlighted ->
+                            LaunchedEffect(highlighted, platform.id, settings.settingsHeroActions, alreadyInUse) {
+                                if (highlighted) {
+                                    publishSettingsHero(
+                                        store = dualStore,
+                                        detail =
+                                            pickerRowHeroDetail(
+                                                name = platform.name,
+                                                alreadyInUse = alreadyInUse,
+                                                actionsEnabled = settings.settingsHeroActions,
+                                            ),
+                                        onPrimaryAction = { onPick(platform.id) },
+                                    )
+                                } else {
+                                    clearSettingsHero(dualStore)
+                                }
+                            }
+                            PlatformPickRow(
+                                platform = platform,
+                                alreadyInUse = alreadyInUse,
+                            )
+                        }
                     }
                 }
             }
@@ -151,22 +183,25 @@ fun PlatformPickerScreen(
 private fun PlatformPickRow(
     platform: PlatformEntity,
     alreadyInUse: Boolean,
-    onClick: () -> Unit,
 ) {
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = WajihaSpacing.sm + WajihaSpacing.xs, horizontal = WajihaSpacing.xs),
+                .padding(vertical = WajihaSpacing.sm, horizontal = WajihaSpacing.sm),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(platform.name, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = platform.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+            )
             Text(
                 text =
                     platform.shortName.uppercase() +
-                        if (alreadyInUse) " · already added" else "",
+                        if (alreadyInUse) " · already in library" else "",
                 style = MaterialTheme.typography.labelSmall,
                 color =
                     if (alreadyInUse) {
@@ -177,8 +212,9 @@ private fun PlatformPickRow(
             )
         }
         Text(
-            text = if (alreadyInUse) "Open" else "Add",
-            style = MaterialTheme.typography.labelLarge,
+            text = if (alreadyInUse) "Open" else "Configure",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
         )
     }

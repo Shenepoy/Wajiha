@@ -314,6 +314,22 @@ class ForegroundAppMonitor(
                     }
                 }
                 if (!store.hasActiveSessions()) {
+                    // Thor ATM getTasks often cannot see other packages — it returns
+                    // Wajiha even while Chrome/etc. own display 0. Prefer UsageStats.
+                    // Compare against MainActivity only: SecondaryHome resumes on the
+                    // bottom display must not look like "launcher reclaimed top".
+                    val usageFg = queryLatestNonLauncherForeground()
+                    if (usageFg != null) {
+                        val usageResume = queryLatestResumeTime(usageFg)
+                        val mainResume = queryLatestOwnMainActivityResumeTime()
+                        if (usageResume >= mainResume) {
+                            applyTopDisplayForeground(
+                                usageFg,
+                                reason = "usage overrides resolver=$ownPackage",
+                            )
+                            return
+                        }
+                    }
                     applyTopDisplayForeground(ownPackage, reason = "launcher on top")
                 }
                 return
@@ -938,6 +954,34 @@ class ForegroundAppMonitor(
                 if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED &&
                     event.timeStamp >= latestTime
                 ) {
+                    latestTime = event.timeStamp
+                }
+            }
+            return latestTime
+        } catch (_: Exception) {
+            return 0L
+        }
+    }
+
+    /**
+     * Resume time for [com.wajiha.android.MainActivity] only — ignores
+     * [com.wajiha.android.SecondaryHomeActivity] on the bottom display.
+     */
+    private fun queryLatestOwnMainActivityResumeTime(): Long {
+        if (!hasUsageAccess()) return 0L
+        try {
+            val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+            val end = System.currentTimeMillis()
+            val events = usm.queryEvents(end - EVENT_WINDOW_MS, end)
+            var latestTime = 0L
+            val event = UsageEvents.Event()
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                if (event.packageName != ownPackage) continue
+                if (event.eventType != UsageEvents.Event.ACTIVITY_RESUMED) continue
+                val className = event.className ?: continue
+                if (!className.endsWith(".MainActivity")) continue
+                if (event.timeStamp >= latestTime) {
                     latestTime = event.timeStamp
                 }
             }

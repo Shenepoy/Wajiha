@@ -21,11 +21,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.wajiha.data.db.EmulatorEntity
 import com.wajiha.data.db.GameEntity
+import com.wajiha.data.prefs.AppSettings
+import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeRunPolicy
 import com.wajiha.data.scraper.missingGapTypes
@@ -57,15 +59,22 @@ import com.wajiha.input.requestContentFocus
 import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
+import com.wajiha.state.SettingsHeroHint
+import com.wajiha.state.SettingsHeroOption
 import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
-import com.wajiha.ui.components.gamepad.MultiChoiceOption
-import com.wajiha.ui.components.gamepad.SettingSectionScrollColumn
+import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
+import com.wajiha.ui.components.gamepad.ProvideSettingsDensity
 import com.wajiha.ui.components.gamepad.SettingType
+import com.wajiha.ui.components.gamepad.WajihaMultiChoiceSetting
+import com.wajiha.ui.components.gamepad.WajihaSettingBlurb
+import com.wajiha.ui.components.gamepad.WajihaSettingDivider
+import com.wajiha.ui.components.gamepad.WajihaSettingPanel
+import com.wajiha.ui.components.gamepad.WajihaToggleSetting
 import com.wajiha.ui.components.gamepad.gameDetailGamepadHints
 import com.wajiha.ui.scraper.ScrapeModeSelector
 import com.wajiha.ui.scraper.ScrapeUiMode
@@ -73,6 +82,9 @@ import com.wajiha.ui.scraper.review.ScrapeReviewPicker
 import com.wajiha.ui.scraper.review.ScrapeReviewViewModel
 import com.wajiha.ui.scraper.singleGameHelperText
 import com.wajiha.ui.scraper.toPolicy
+import com.wajiha.ui.settings.clearSettingsHero
+import com.wajiha.ui.settings.genericSettingHeroDetail
+import com.wajiha.ui.settings.publishSettingsHero
 import com.wajiha.ui.settings.toEmulatorChoiceOptions
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
@@ -101,6 +113,9 @@ fun GameDetailScreen(
     LaunchedEffect(gameId) { viewModel.open(gameId) }
     val state by viewModel.uiState.collectAsState()
     val game = state.game
+    val dualStore = koinInject<DualScreenStore>()
+    val settingsRepository = koinInject<SettingsRepository>()
+    val settings by settingsRepository.settings.collectAsState(initial = AppSettings())
 
     val sections = ActionPaneSection.entries
     var selectedSectionIndex by remember { mutableIntStateOf(0) }
@@ -114,112 +129,69 @@ fun GameDetailScreen(
     }
 
     LaunchedEffect(selectedSectionIndex) {
+        clearSettingsHero(dualStore)
         try {
             sectionFocus.requestFocus()
         } catch (_: Exception) {
         }
     }
 
-    WajihaScreen(
-        layerId = "game_detail_$gameId",
-        modifier = Modifier,
-        onBack = onBack,
-        showActionBar = true,
-        gamepadHints = gameDetailGamepadHints(isDual = dualDisplay),
-        gamepadOwner = gamepadOwner,
-        onClaimGamepad = onClaimGamepad,
-        onOwnerGainedFocus = { sectionFocus.requestContentFocus() },
-        onPreviewKey = { event ->
-            val screenLayer = "game_detail_$gameId"
-            if (GamepadLayers.stack.topLayer != screenLayer) return@WajihaScreen false
-            when {
-                GamepadKeys.isL1(event.type, event.key) -> {
-                    if (selectedSectionIndex > 0) {
-                        selectSection(selectedSectionIndex - 1)
-                        true
-                    } else {
+    DisposableEffect(Unit) {
+        onDispose { clearSettingsHero(dualStore) }
+    }
+
+    ProvideSettingsDensity {
+        WajihaScreen(
+            layerId = "game_detail_$gameId",
+            modifier = Modifier,
+            onBack = onBack,
+            showActionBar = true,
+            gamepadHints = gameDetailGamepadHints(isDual = dualDisplay),
+            gamepadOwner = gamepadOwner,
+            onClaimGamepad = onClaimGamepad,
+            onOwnerGainedFocus = { sectionFocus.requestContentFocus() },
+            onPreviewKey = { event ->
+                val screenLayer = "game_detail_$gameId"
+                if (GamepadLayers.stack.topLayer != screenLayer) return@WajihaScreen false
+                when {
+                    GamepadKeys.isL1(event.type, event.key) -> {
+                        if (selectedSectionIndex > 0) {
+                            selectSection(selectedSectionIndex - 1)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+
+                    GamepadKeys.isR1(event.type, event.key) -> {
+                        if (selectedSectionIndex < sections.lastIndex) {
+                            selectSection(selectedSectionIndex + 1)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+
+                    else -> {
                         false
                     }
                 }
-
-                GamepadKeys.isR1(event.type, event.key) -> {
-                    if (selectedSectionIndex < sections.lastIndex) {
-                        selectSection(selectedSectionIndex + 1)
-                        true
-                    } else {
-                        false
-                    }
-                }
-
-                else -> {
-                    false
-                }
-            }
-        },
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            WajihaToolbar(
-                title = game?.displayName ?: "Game",
-                onBack = onBack,
-                backFocusable = false,
-            )
-
-            if (game == null) {
-                Text(
-                    text = "Game not found",
-                    modifier = Modifier.padding(WajihaSpacing.md),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            },
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                WajihaToolbar(
+                    title = game?.displayName ?: "Game",
+                    onBack = onBack,
+                    backFocusable = false,
                 )
-            } else if (dualDisplay) {
-                GameDetailTabsPane(
-                    game = game,
-                    state = state,
-                    sections = sections,
-                    selectedSectionIndex = selectedSectionIndex,
-                    onSelectSection = ::selectSection,
-                    secondaryDisplayId = secondaryDisplayId,
-                    sectionFocus = sectionFocus,
-                    viewModel = viewModel,
-                    showFavoriteRow = true,
-                    dualDisplay = true,
-                    gamepadOwner = gamepadOwner,
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = WajihaSpacing.md)
-                            .padding(bottom = WajihaSpacing.md),
-                )
-            } else {
-                Column(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = WajihaSpacing.md),
-                ) {
-                    GameDetailCompactHero(
-                        game = game,
-                        platformName = state.platform?.name,
-                        boxartPath = state.media.firstOrNull { it.type == "boxart" }?.localPath,
-                        onSetFavorite = viewModel::setFavorite,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = WajihaSpacing.xs),
+
+                if (game == null) {
+                    Text(
+                        text = "Game not found",
+                        modifier = Modifier.padding(WajihaSpacing.md),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    GameDetailSectionCard(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = WajihaSpacing.sm)
-                                .weight(0.28f),
-                    ) {
-                        GameDetailMetadataPanel(
-                            game = game,
-                            platformName = state.platform?.name,
-                            totalPlaytimeSec = state.totalPlaytimeSec,
-                            style = MetadataPanelStyle.Compact,
-                        )
-                    }
+                } else if (dualDisplay) {
                     GameDetailTabsPane(
                         game = game,
                         state = state,
@@ -229,15 +201,71 @@ fun GameDetailScreen(
                         secondaryDisplayId = secondaryDisplayId,
                         sectionFocus = sectionFocus,
                         viewModel = viewModel,
-                        showFavoriteRow = false,
-                        dualDisplay = false,
+                        showFavoriteRow = true,
+                        dualDisplay = true,
                         gamepadOwner = gamepadOwner,
+                        dualStore = dualStore,
+                        settingsHeroActions = settings.settingsHeroActions,
                         modifier =
                             Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .padding(top = WajihaSpacing.sm, bottom = WajihaSpacing.md),
+                                .fillMaxSize()
+                                .padding(horizontal = WajihaSpacing.md)
+                                .padding(bottom = WajihaSpacing.md),
                     )
+                } else {
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = WajihaSpacing.md),
+                    ) {
+                        GameDetailCompactHero(
+                            game = game,
+                            platformName = state.platform?.name,
+                            boxartPath = state.media.firstOrNull { it.type == "boxart" }?.localPath,
+                            onSetFavorite = viewModel::setFavorite,
+                            dualStore = dualStore,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = WajihaSpacing.xs),
+                        )
+                        WajihaSettingPanel(
+                            folderPanel = true,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = WajihaSpacing.sm)
+                                    .weight(0.28f),
+                        ) {
+                            GameDetailMetadataPanel(
+                                game = game,
+                                platformName = state.platform?.name,
+                                totalPlaytimeSec = state.totalPlaytimeSec,
+                                style = MetadataPanelStyle.Compact,
+                            )
+                        }
+                        GameDetailTabsPane(
+                            game = game,
+                            state = state,
+                            sections = sections,
+                            selectedSectionIndex = selectedSectionIndex,
+                            onSelectSection = ::selectSection,
+                            secondaryDisplayId = secondaryDisplayId,
+                            sectionFocus = sectionFocus,
+                            viewModel = viewModel,
+                            showFavoriteRow = false,
+                            dualDisplay = false,
+                            gamepadOwner = gamepadOwner,
+                            dualStore = dualStore,
+                            settingsHeroActions = settings.settingsHeroActions,
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .padding(top = WajihaSpacing.sm, bottom = WajihaSpacing.md),
+                        )
+                    }
                 }
             }
         }
@@ -257,6 +285,8 @@ private fun GameDetailTabsPane(
     showFavoriteRow: Boolean,
     dualDisplay: Boolean = false,
     gamepadOwner: GamepadOwner? = null,
+    dualStore: DualScreenStore,
+    settingsHeroActions: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -264,6 +294,7 @@ private fun GameDetailTabsPane(
             tabs = sections.map { it.label },
             selectedIndex = selectedSectionIndex,
             onSelect = onSelectSection,
+            minHeight = LocalSettingRowMinHeight.current,
             modifier =
                 Modifier
                     .fillMaxWidth()
@@ -271,7 +302,8 @@ private fun GameDetailTabsPane(
                     .padding(top = WajihaSpacing.sm),
         )
 
-        GameDetailSectionCard(
+        WajihaSettingPanel(
+            folderPanel = true,
             modifier =
                 Modifier
                     .weight(1f)
@@ -291,6 +323,8 @@ private fun GameDetailTabsPane(
                             viewModel.launchOnDisplay(secondaryDisplayId ?: 4)
                         },
                         showFavoriteRow = showFavoriteRow,
+                        dualStore = dualStore,
+                        settingsHeroActions = settingsHeroActions,
                         firstFocusRequester = sectionFocus,
                     )
                 }
@@ -300,6 +334,8 @@ private fun GameDetailTabsPane(
                         emulators = state.emulators,
                         selectedId = game.emulatorOverrideId,
                         onSelect = viewModel::setEmulatorOverride,
+                        dualStore = dualStore,
+                        settingsHeroActions = settingsHeroActions,
                         firstFocusRequester = sectionFocus,
                     )
                 }
@@ -347,6 +383,7 @@ private fun GameDetailCompactHero(
     platformName: String?,
     boxartPath: String?,
     onSetFavorite: (Boolean) -> Unit,
+    dualStore: DualScreenStore,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -399,12 +436,15 @@ private fun GameDetailCompactHero(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 PlatformBadge(label = platformName ?: game.platformId)
-                DetailToggleRow(
+                WajihaToggleSetting(
                     label = "Favorite",
                     checked = game.favorite,
                     onCheckedChange = onSetFavorite,
                     defaultChecked = false,
                     onReset = { onSetFavorite(false) },
+                    onFocusedChanged = { focused ->
+                        publishFavoriteHero(dualStore, focused, game.favorite)
+                    },
                 )
             }
         }
@@ -428,126 +468,6 @@ private fun PlatformBadge(label: String) {
                 ),
         )
     }
-}
-
-@Composable
-private fun GameDetailSectionCard(
-    modifier: Modifier = Modifier,
-    sectionContent: @Composable () -> Unit,
-) {
-    val shape = WajihaShapes.folderPanel
-    val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-
-    Surface(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .border(width = 1.dp, color = outlineColor, shape = shape),
-        shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(WajihaSpacing.md),
-        ) {
-            SettingSectionScrollColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-            ) {
-                sectionContent()
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionBlurb(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(bottom = WajihaSpacing.xs),
-    )
-}
-
-@Composable
-private fun GroupDivider() {
-    HorizontalDivider(
-        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-        modifier = Modifier.padding(vertical = WajihaSpacing.xs),
-    )
-}
-
-@Composable
-private fun DetailToggleRow(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    defaultChecked: Boolean,
-    onReset: () -> Unit,
-    description: String? = null,
-    focusRequester: FocusRequester? = null,
-) {
-    GamepadSettingRow(
-        label = label,
-        description = description,
-        type = SettingType.Toggle,
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        focusRequester = focusRequester,
-        onReset = onReset,
-        isAtDefault = checked == defaultChecked,
-    )
-}
-
-@Composable
-private fun DetailChoiceRow(
-    label: String,
-    description: String,
-    options: List<Pair<String, String>>,
-    selected: String,
-    onSelect: (String) -> Unit,
-    defaultValue: String,
-    onReset: () -> Unit,
-    focusRequester: FocusRequester? = null,
-) {
-    GamepadSettingRow(
-        label = label,
-        description = description,
-        type = SettingType.BinaryChoice,
-        options = options,
-        selected = selected,
-        onSelect = onSelect,
-        focusRequester = focusRequester,
-        onReset = onReset,
-        isAtDefault = selected == defaultValue,
-    )
-}
-
-@Composable
-private fun DetailMultiChoiceRow(
-    label: String,
-    description: String,
-    choiceOptions: List<MultiChoiceOption>,
-    selected: String,
-    onSelect: (String) -> Unit,
-    defaultValue: String,
-    onReset: () -> Unit,
-    focusRequester: FocusRequester? = null,
-) {
-    GamepadSettingRow(
-        label = label,
-        description = description,
-        type = SettingType.MultiChoice,
-        multiChoiceOptions = choiceOptions,
-        selected = selected,
-        onSelect = onSelect,
-        focusRequester = focusRequester,
-        onReset = onReset,
-        isAtDefault = selected == defaultValue,
-    )
 }
 
 enum class MetadataPanelStyle {
@@ -627,7 +547,7 @@ fun GameDetailMetadataPanel(
         }
 
         if (showPlayStats) {
-            if (showMetadata) GroupDivider()
+            if (showMetadata) WajihaSettingDivider()
             MetaInfoRow("Plays", "${game.playCount}", labelStyle, bodyStyle)
             val hours = totalPlaytimeSec / 3600
             val mins = (totalPlaytimeSec % 3600) / 60
@@ -636,7 +556,7 @@ fun GameDetailMetadataPanel(
         }
 
         if (showDescription) {
-            if (showMetadata || showPlayStats) GroupDivider()
+            if (showMetadata || showPlayStats) WajihaSettingDivider()
             Text(
                 text = "Description",
                 style = labelStyle,
@@ -712,6 +632,32 @@ private fun formatScrapeStatus(scrapedAt: Long?): String {
     return "Scraped $y-$m-$d"
 }
 
+private fun publishFavoriteHero(
+    dualStore: DualScreenStore,
+    focused: Boolean,
+    favorite: Boolean,
+) {
+    if (focused) {
+        publishSettingsHero(
+            dualStore,
+            genericSettingHeroDetail(
+                title = "Favorite",
+                subtitle = "Pin this game in your library.",
+                whyItMatters = "Favorites stay easy to find in the home library.",
+                valueText = if (favorite) "On" else "Off",
+                defaultLine = "Default: Off · Y resets",
+                controlHints =
+                    listOf(
+                        SettingsHeroHint("A", "Toggle"),
+                        SettingsHeroHint("Y", "Reset"),
+                    ),
+            ),
+        )
+    } else {
+        clearSettingsHero(dualStore)
+    }
+}
+
 @Composable
 private fun LaunchSectionContent(
     game: GameEntity,
@@ -722,9 +668,11 @@ private fun LaunchSectionContent(
     onLaunchTop: () -> Unit,
     onLaunchBottom: () -> Unit,
     showFavoriteRow: Boolean,
+    dualStore: DualScreenStore,
+    settingsHeroActions: Boolean,
     firstFocusRequester: FocusRequester? = null,
 ) {
-    SectionBlurb(
+    WajihaSettingBlurb(
         if (dualDisplay) {
             "Default display and quick launch options."
         } else {
@@ -733,7 +681,7 @@ private fun LaunchSectionContent(
     )
 
     if (showFavoriteRow) {
-        DetailToggleRow(
+        WajihaToggleSetting(
             label = "Favorite",
             description = "Pin this game in your library.",
             checked = game.favorite,
@@ -741,8 +689,11 @@ private fun LaunchSectionContent(
             defaultChecked = false,
             onReset = { onSetFavorite(false) },
             focusRequester = firstFocusRequester,
+            onFocusedChanged = { focused ->
+                publishFavoriteHero(dualStore, focused, game.favorite)
+            },
         )
-        GroupDivider()
+        WajihaSettingDivider()
     }
 
     if (dualDisplay) {
@@ -753,15 +704,30 @@ private fun LaunchSectionContent(
                 0, null -> topId
                 else -> bottomId
             }
+        val displayOptions =
+            listOf(
+                topId to "Top ($topId)",
+                bottomId to "Bottom ($bottomId)",
+            )
+        val selectedLabel =
+            displayOptions.firstOrNull { it.first == selectedDisplay }?.second ?: selectedDisplay
+        val heroOptions =
+            if (settingsHeroActions) {
+                displayOptions.map { (value, label) ->
+                    SettingsHeroOption(
+                        value = value,
+                        label = label,
+                        selected = value == selectedDisplay,
+                    )
+                }
+            } else {
+                emptyList()
+            }
         GamepadSettingRow(
             label = "Default display",
             description = "Which screen to use when launching from the grid.",
             type = SettingType.BinaryChoice,
-            options =
-                listOf(
-                    topId to "Top ($topId)",
-                    bottomId to "Bottom ($bottomId)",
-                ),
+            options = displayOptions,
             selected = selectedDisplay,
             onSelect = { value ->
                 onSetLaunchDisplay(if (value == topId) 0 else (secondaryDisplayId ?: 4))
@@ -769,9 +735,42 @@ private fun LaunchSectionContent(
             focusRequester = if (showFavoriteRow) null else firstFocusRequester,
             onReset = { onSetLaunchDisplay(null) },
             isAtDefault = game.launchOnDisplay == null,
+            onFocusedChanged = { focused ->
+                if (focused) {
+                    publishSettingsHero(
+                        store = dualStore,
+                        detail =
+                            genericSettingHeroDetail(
+                                title = "Default display",
+                                subtitle = "Which screen to use when launching from the grid.",
+                                whyItMatters = "Pick top or bottom so launches land on the screen you want.",
+                                valueText = selectedLabel,
+                                defaultLine = "Default: Top · Y resets",
+                                controlHints =
+                                    listOf(
+                                        SettingsHeroHint("A", "Select"),
+                                        SettingsHeroHint("Y", "Reset"),
+                                    ),
+                                options = heroOptions,
+                            ),
+                        onSelectOption =
+                            if (settingsHeroActions) {
+                                { value ->
+                                    onSetLaunchDisplay(
+                                        if (value == topId) 0 else (secondaryDisplayId ?: 4),
+                                    )
+                                }
+                            } else {
+                                null
+                            },
+                    )
+                } else {
+                    clearSettingsHero(dualStore)
+                }
+            },
         )
 
-        GroupDivider()
+        WajihaSettingDivider()
     }
 
     Text(
@@ -802,10 +801,12 @@ private fun EmulatorSectionContent(
     emulators: List<EmulatorEntity>,
     selectedId: String?,
     onSelect: (String?) -> Unit,
+    dualStore: DualScreenStore,
+    settingsHeroActions: Boolean,
     firstFocusRequester: FocusRequester? = null,
 ) {
     val systemControls = koinInject<SystemControls>()
-    SectionBlurb("Override which emulator launches this game. Platform default is used when none is selected.")
+    WajihaSettingBlurb("Override which emulator launches this game. Platform default is used when none is selected.")
 
     if (emulators.isEmpty()) {
         Text(
@@ -819,15 +820,61 @@ private fun EmulatorSectionContent(
                 isPackageInstalled = systemControls::isPackageInstalled,
                 includePlatformDefault = true,
             )
-        DetailMultiChoiceRow(
+        val selectedValue = selectedId.orEmpty()
+        val selectedLabel =
+            options.firstOrNull { it.value == selectedValue }?.label ?: "Platform default"
+        val heroOptions =
+            if (settingsHeroActions) {
+                options.map { opt ->
+                    SettingsHeroOption(
+                        value = opt.value,
+                        label = opt.label,
+                        selected = opt.value == selectedValue,
+                    )
+                }
+            } else {
+                emptyList()
+            }
+        WajihaMultiChoiceSetting(
             label = "Emulator",
             description = "A opens the list. Installed emulators are selectable; missing apps stay visible but greyed out.",
             choiceOptions = options,
-            selected = selectedId.orEmpty(),
+            selected = selectedValue,
             onSelect = { value -> onSelect(value.ifEmpty { null }) },
             defaultValue = "",
             onReset = { onSelect(null) },
             focusRequester = firstFocusRequester,
+            onFocusedChanged = { focused ->
+                if (focused) {
+                    publishSettingsHero(
+                        store = dualStore,
+                        detail =
+                            genericSettingHeroDetail(
+                                title = "Emulator",
+                                subtitle =
+                                    "Override which emulator launches this game. " +
+                                        "Platform default is used when none is selected.",
+                                whyItMatters = "Per-game override when a title needs a different player.",
+                                valueText = selectedLabel,
+                                defaultLine = "Default: Platform default · Y resets",
+                                controlHints =
+                                    listOf(
+                                        SettingsHeroHint("A", "Select"),
+                                        SettingsHeroHint("Y", "Reset"),
+                                    ),
+                                options = heroOptions,
+                            ),
+                        onSelectOption =
+                            if (settingsHeroActions) {
+                                { value -> onSelect(value.ifEmpty { null }) }
+                            } else {
+                                null
+                            },
+                    )
+                } else {
+                    clearSettingsHero(dualStore)
+                }
+            },
         )
     }
 }
@@ -878,7 +925,7 @@ private fun ScraperSectionContent(
         )
     }
 
-    SectionBlurb("Fetch metadata and artwork from configured scraper sources.")
+    WajihaSettingBlurb("Fetch metadata and artwork from configured scraper sources.")
 
     if (state.scraping) {
         Row(
@@ -943,7 +990,7 @@ private fun ScraperSectionContent(
         modifier = Modifier.padding(top = WajihaSpacing.xs),
     )
 
-    GroupDivider()
+    WajihaSettingDivider()
     Text(
         text = "Artwork",
         style = MaterialTheme.typography.bodyLarge,
@@ -1024,7 +1071,7 @@ private fun ScraperSectionContent(
         }
     }
 
-    GroupDivider()
+    WajihaSettingDivider()
     Text(
         text =
             if (sourcesReady) {

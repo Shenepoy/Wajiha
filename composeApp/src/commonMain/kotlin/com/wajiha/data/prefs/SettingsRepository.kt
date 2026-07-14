@@ -57,6 +57,16 @@ data class AppSettings(
      * display instead of under the grid / settings.
      */
     val swapGamepadHints: Boolean = false,
+    /**
+     * Settings hero (top screen): show contextual help / why-it-matters copy
+     * for the focused settings row.
+     */
+    val settingsHeroHelp: Boolean = true,
+    /**
+     * Settings hero: show action chips / option picker on the hero display
+     * (edit, rescan, configure, option select).
+     */
+    val settingsHeroActions: Boolean = false,
     val theme: String = "dark",
     /** FocusBorderStyle name (Solid, Dotted, …, Neon). */
     val focusBorderStyle: String = "Solid",
@@ -120,6 +130,8 @@ class SettingsRepository(
                 showSelectedGameName = prefs[SHOW_SELECTED_GAME_NAME] ?: false,
                 swapScreenRoles = prefs[SWAP_SCREEN_ROLES] ?: false,
                 swapGamepadHints = prefs[SWAP_GAMEPAD_HINTS] ?: false,
+                settingsHeroHelp = prefs[SETTINGS_HERO_HELP] ?: true,
+                settingsHeroActions = prefs[SETTINGS_HERO_ACTIONS] ?: false,
                 theme = prefs[THEME] ?: "dark",
                 focusBorderStyle = normalizeFocusBorderStyle(prefs[FOCUS_BORDER_STYLE]),
                 focusColor = normalizeFocusColor(prefs[FOCUS_COLOR]),
@@ -184,12 +196,15 @@ class SettingsRepository(
 
     suspend fun setShowHeroBanner(value: Boolean) = setPref(SHOW_HERO_BANNER, value, "showHeroBanner")
 
-    suspend fun setShowSelectedGameName(value: Boolean) =
-        setPref(SHOW_SELECTED_GAME_NAME, value, "showSelectedGameName")
+    suspend fun setShowSelectedGameName(value: Boolean) = setPref(SHOW_SELECTED_GAME_NAME, value, "showSelectedGameName")
 
     suspend fun setSwapScreenRoles(value: Boolean) = setPref(SWAP_SCREEN_ROLES, value, "swapScreenRoles")
 
     suspend fun setSwapGamepadHints(value: Boolean) = setPref(SWAP_GAMEPAD_HINTS, value, "swapGamepadHints")
+
+    suspend fun setSettingsHeroHelp(value: Boolean) = setPref(SETTINGS_HERO_HELP, value, "settingsHeroHelp")
+
+    suspend fun setSettingsHeroActions(value: Boolean) = setPref(SETTINGS_HERO_ACTIONS, value, "settingsHeroActions")
 
     suspend fun toggleSwapScreenRoles(): Boolean {
         var next = false
@@ -404,6 +419,8 @@ class SettingsRepository(
         val SHOW_SELECTED_GAME_NAME = booleanPreferencesKey("show_selected_game_name")
         val SWAP_SCREEN_ROLES = booleanPreferencesKey("swap_screen_roles")
         val SWAP_GAMEPAD_HINTS = booleanPreferencesKey("swap_gamepad_hints")
+        val SETTINGS_HERO_HELP = booleanPreferencesKey("settings_hero_help")
+        val SETTINGS_HERO_ACTIONS = booleanPreferencesKey("settings_hero_actions")
         val THEME = stringPreferencesKey("theme")
         private val FOCUS_BORDER_STYLE = stringPreferencesKey("focus_border_style")
         private val FOCUS_COLOR = stringPreferencesKey("focus_color")

@@ -22,11 +22,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,14 +47,20 @@ import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.SystemControls
+import com.wajiha.state.DualScreenStore
 import com.wajiha.state.HeroContext
+import com.wajiha.state.claimsStatusCorner
 import com.wajiha.ui.gamedetail.GameDetailMetadataPanel
 import com.wajiha.ui.gamedetail.GameDetailViewModel
 import com.wajiha.ui.gamedetail.MetadataPanelStyle
 import com.wajiha.ui.gamedetail.MetadataPanelVisibility
 import com.wajiha.ui.scraper.review.ScrapeReviewSlotHero
+import com.wajiha.ui.settings.SettingsFocusHero
+import com.wajiha.ui.settings.SettingsHeroDetailBody
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaMotion
+import com.wajiha.ui.theme.WajihaShapes
+import com.wajiha.ui.theme.WajihaSpacing
 import org.koin.compose.koinInject
 
 /**
@@ -126,7 +135,7 @@ fun TopScreen(
                 }
             }
         }
-        TopStatusBar()
+        TopStatusBar(reserveTopEnd = heroContext.claimsStatusCorner())
     }
 }
 
@@ -265,10 +274,8 @@ private fun SettingsHero(
     context: HeroContext.Settings,
     contentFocusRequester: FocusRequester? = null,
 ) {
-    ContextHeroFrame(
-        title = "Wajiha Settings",
-        subtitle = context.sectionLabel,
-        hint = "Settings open on the bottom screen  ·  L1 / R1 switch sections",
+    SettingsFocusHero(
+        sectionLabel = context.sectionLabel,
         contentFocusRequester = contentFocusRequester,
     )
 }
@@ -280,12 +287,31 @@ private fun GameDetailHero(
     contentFocusRequester: FocusRequester? = null,
 ) {
     val viewModel = koinInject<GameDetailViewModel>()
+    val dualStore = koinInject<DualScreenStore>()
     LaunchedEffect(gameId) { viewModel.open(gameId) }
     val state by viewModel.uiState.collectAsState()
+    val heroDetail by dualStore.settingsHeroDetail.collectAsState()
     val game = state.game
     val scheme = MaterialTheme.colorScheme
     val boxartPath = state.media.firstOrNull { it.type == "boxart" }?.localPath
     val heroPath = state.media.firstOrNull { it.type == "hero" }?.localPath
+    val showFocusedHelp = settings.settingsHeroHelp && heroDetail != null
+    val showActions = settings.settingsHeroActions
+    val interactive =
+        showFocusedHelp &&
+            showActions &&
+            heroDetail != null &&
+            (heroDetail!!.options.isNotEmpty() || heroDetail!!.actions.isNotEmpty())
+
+    LaunchedEffect(interactive, heroDetail?.title) {
+        dualStore.setSettingsHeroPicking(interactive)
+    }
+    DisposableEffect(Unit) {
+        onDispose { dualStore.setSettingsHeroPicking(false) }
+    }
+
+    val firstFocus = remember { FocusRequester() }
+    val resolvedFocus = contentFocusRequester ?: firstFocus
 
     if (game == null) {
         Box(
@@ -317,7 +343,7 @@ private fun GameDetailHero(
             Modifier
                 .fillMaxSize()
                 .then(
-                    if (contentFocusRequester != null) {
+                    if (!interactive && contentFocusRequester != null) {
                         Modifier
                             .focusRequester(contentFocusRequester)
                             .wajihaGamepadFocus()
@@ -438,7 +464,27 @@ private fun GameDetailHero(
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
-                if (settings.topHeroSectionHint) {
+                if (showFocusedHelp) {
+                    Surface(
+                        shape = WajihaShapes.dialog,
+                        color = scheme.surfaceContainerLow.copy(alpha = 0.92f),
+                        tonalElevation = 2.dp,
+                        shadowElevation = 3.dp,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            SettingsHeroDetailBody(
+                                detail = heroDetail!!,
+                                showActions = showActions,
+                                firstFocusRequester = if (interactive) resolvedFocus else null,
+                                compact = true,
+                            )
+                        }
+                    }
+                } else if (settings.topHeroSectionHint) {
                     Text(
                         text = "Launch, emulator, and scraper on the bottom screen  ·  L1 / R1 switch tabs",
                         style = MaterialTheme.typography.labelMedium,

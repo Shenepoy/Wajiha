@@ -1,12 +1,10 @@
 package com.wajiha.ui.components.gamepad
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,11 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wajiha.data.prefs.AppSettings
@@ -34,11 +28,7 @@ import com.wajiha.input.ControllerGlyphStore
 import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.isFaceGlyphButton
-import com.wajiha.input.withEnclosedTransparencyFilled
 import com.wajiha.ui.theme.WajihaSpacing
-import org.jetbrains.compose.resources.DrawableResource
-import org.jetbrains.compose.resources.imageResource
-import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.koinInject
 
 /** Fixed chrome height: one labelMedium line + Kenney glyph (~20dp). */
@@ -82,6 +72,27 @@ fun settingsGamepadHints(isDual: Boolean = true): List<GamepadHint> =
         add(GamepadHint(GamepadHintButton.A, "Select/Toggle"))
         add(GamepadHint(GamepadHintButton.B, "Back"))
         add(GamepadHint(GamepadHintButton.Y, "Reset"))
+        add(GamepadHint(GamepadHintButton.L1R1, "Section"))
+        if (isDual) {
+            add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+        }
+    }
+
+fun libraryPlatformRowGamepadHints(isDual: Boolean = true): List<GamepadHint> =
+    buildList {
+        add(GamepadHint(GamepadHintButton.A, "Rescan"))
+        add(GamepadHint(GamepadHintButton.X, "Edit"))
+        add(GamepadHint(GamepadHintButton.B, "Back"))
+        add(GamepadHint(GamepadHintButton.L1R1, "Section"))
+        if (isDual) {
+            add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+        }
+    }
+
+fun libraryChromeGamepadHints(isDual: Boolean = true): List<GamepadHint> =
+    buildList {
+        add(GamepadHint(GamepadHintButton.A, "Select"))
+        add(GamepadHint(GamepadHintButton.B, "Back"))
         add(GamepadHint(GamepadHintButton.L1R1, "Section"))
         if (isDual) {
             add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
@@ -205,11 +216,19 @@ private fun GamepadHintChip(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (icons.isNotEmpty()) {
-            KenneyGlyphRow(
-                icons = icons,
-                lightModeNonFace = boostLightNonFace,
-                otherStyle = otherStyle,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                icons.forEach { drawable ->
+                    KenneyGlyphImage(
+                        drawable = drawable,
+                        size = GlyphSize,
+                        lightModeNonFace = boostLightNonFace,
+                        otherStyle = otherStyle,
+                    )
+                }
+            }
         } else {
             Text(
                 text = ControllerGlyphLabels.label(hint.button, scheme),
@@ -229,69 +248,5 @@ private fun GamepadHintChip(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
         )
-    }
-}
-
-@Composable
-private fun KenneyGlyphRow(
-    icons: List<DrawableResource>,
-    lightModeNonFace: Boolean,
-    otherStyle: ControllerGlyphOtherStyle,
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        icons.forEach { drawable ->
-            KenneyGlyphImage(
-                drawable = drawable,
-                lightModeNonFace = lightModeNonFace,
-                otherStyle = otherStyle,
-            )
-        }
-    }
-}
-
-@Composable
-private fun KenneyGlyphImage(
-    drawable: DrawableResource,
-    lightModeNonFace: Boolean,
-    otherStyle: ControllerGlyphOtherStyle,
-) {
-    when {
-        // Filled mono uses transparent letter cutouts — fill those holes with black on light UI.
-        lightModeNonFace && otherStyle == ControllerGlyphOtherStyle.Filled -> {
-            val source = imageResource(drawable)
-            val filled =
-                remember(drawable, source.width, source.height) {
-                    source.withEnclosedTransparencyFilled(Color.Black)
-                }
-            Image(
-                bitmap = filled,
-                contentDescription = null,
-                modifier = Modifier.size(GlyphSize),
-                contentScale = ContentScale.Fit,
-            )
-        }
-
-        // Outline mono is white ink — tint black so strokes/letters read on light backgrounds.
-        lightModeNonFace && otherStyle == ControllerGlyphOtherStyle.Outline -> {
-            Image(
-                painter = painterResource(drawable),
-                contentDescription = null,
-                modifier = Modifier.size(GlyphSize),
-                contentScale = ContentScale.Fit,
-                colorFilter = ColorFilter.tint(Color.Black, BlendMode.SrcIn),
-            )
-        }
-
-        else -> {
-            Image(
-                painter = painterResource(drawable),
-                contentDescription = null,
-                modifier = Modifier.size(GlyphSize),
-                contentScale = ContentScale.Fit,
-            )
-        }
     }
 }

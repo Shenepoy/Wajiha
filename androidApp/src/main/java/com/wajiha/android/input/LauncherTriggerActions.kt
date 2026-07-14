@@ -28,7 +28,10 @@ class LauncherTriggerActions(
         return true
     }
 
-    /** @return true when the press was handled. */
+    /**
+     * @return true when handled (including debounce absorb). Toggle itself lives in
+     * [SystemNotificationStore] so digital + analog paths share one debounce clock.
+     */
     fun onR2(label: String): Boolean {
         val dualState = store.state.value
         if (dualState == DualScreenState.GameRunning ||
@@ -36,12 +39,39 @@ class LauncherTriggerActions(
         ) {
             return false
         }
-        notifications.togglePanel()
+        val applied = notifications.togglePanel()
         WajihaLog.i(
             WajihaTags.GAMEPAD,
-            "map: R2($label) → notifications panelOpen=${notifications.panelOpen.value}",
+            if (applied) {
+                "map: R2($label) → notifications panelOpen=${notifications.panelOpen.value}"
+            } else {
+                "map: R2($label) debounce absorbed panelOpen=${notifications.panelOpen.value}"
+            },
         )
-        appActions.playSound(UiSound.Navigate)
+        if (applied) {
+            appActions.playSound(UiSound.Navigate)
+        }
+        return true
+    }
+
+    /** Start → open Settings on the display that currently owns the menu. */
+    fun onStart(label: String): Boolean {
+        val dualState = store.state.value
+        if (dualState == DualScreenState.GameRunning ||
+            dualState == DualScreenState.BlackoutSecondary
+        ) {
+            return false
+        }
+        val applied = store.requestOpenSettings()
+        WajihaLog.i(
+            WajihaTags.GAMEPAD,
+            if (applied) {
+                "map: Start($label) → open Settings"
+            } else {
+                "map: Start($label) open Settings dropped (buffer full)"
+            },
+        )
+        // Sound plays in the menu-owner collector (same as the Settings chrome button).
         return true
     }
 }

@@ -111,6 +111,7 @@ fun App() {
 
         var route by remember { mutableStateOf(Route.Home) }
         var platformDetailId by remember { mutableStateOf<String?>(null) }
+        var platformDetailFromPicker by remember { mutableStateOf(false) }
         var gameDetailId by remember { mutableStateOf<Long?>(null) }
         var onboardingDismissed by remember { mutableStateOf(false) }
         val snackbarHostState = rememberWajihaSnackbarHostState()
@@ -155,6 +156,7 @@ fun App() {
             if (primaryShowsMenu) {
                 val snap = dualStore.menuRoute.value
                 platformDetailId = snap.platformDetailId
+                platformDetailFromPicker = snap.platformDetailFromPicker
                 gameDetailId = snap.gameDetailId
                 route =
                     when (snap.destination) {
@@ -174,7 +176,7 @@ fun App() {
         }
 
         // Publish while owning the menu (key on route only so swap adopt wins).
-        LaunchedEffect(route, platformDetailId, gameDetailId) {
+        LaunchedEffect(route, platformDetailId, platformDetailFromPicker, gameDetailId) {
             if (!primaryShowsMenu) return@LaunchedEffect
             dualStore.publishMenuRoute(
                 MenuRouteSnapshot(
@@ -192,6 +194,7 @@ fun App() {
                         },
                     platformDetailId = platformDetailId,
                     gameDetailId = gameDetailId,
+                    platformDetailFromPicker = platformDetailFromPicker,
                 ),
             )
         }
@@ -312,6 +315,14 @@ fun App() {
             }
         }
 
+        LaunchedEffect(primaryShowsMenu) {
+            if (!primaryShowsMenu) return@LaunchedEffect
+            dualStore.openSettingsRequests.collect {
+                viewModel.playOpen()
+                route = Route.Settings
+            }
+        }
+
         LaunchedEffect(isDual, swapped, secondaryMode) {
             if (isDual && swapped && secondaryMode == SecondaryMode.NowPlaying) {
                 route = Route.NowRunning
@@ -347,7 +358,11 @@ fun App() {
                     }
 
                     Route.PlatformDetail -> {
-                        Route.Settings
+                        if (platformDetailFromPicker) {
+                            Route.PlatformPicker
+                        } else {
+                            Route.Settings
+                        }
                     }
 
                     Route.PlatformPicker -> {
@@ -405,6 +420,7 @@ fun App() {
                             },
                             onOpenPlatform = { id ->
                                 platformDetailId = id
+                                platformDetailFromPicker = false
                                 viewModel.playOpen()
                                 route = Route.PlatformDetail
                             },
@@ -423,6 +439,7 @@ fun App() {
                             },
                             onPick = { id ->
                                 platformDetailId = id
+                                platformDetailFromPicker = true
                                 viewModel.playOpen()
                                 route = Route.PlatformDetail
                             },
@@ -440,7 +457,12 @@ fun App() {
                                 platformId = id,
                                 onBack = {
                                     viewModel.playBack()
-                                    route = Route.Settings
+                                    route =
+                                        if (platformDetailFromPicker) {
+                                            Route.PlatformPicker
+                                        } else {
+                                            Route.Settings
+                                        }
                                 },
                                 gamepadOwner = GamepadOwner.Primary,
                                 onClaimGamepad = dualStore::claimGamepad,

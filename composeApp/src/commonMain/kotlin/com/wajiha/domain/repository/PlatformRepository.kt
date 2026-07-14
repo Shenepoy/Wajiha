@@ -36,6 +36,8 @@ class PlatformRepository(
 
     fun observeEmulators(platformId: String): Flow<List<EmulatorEntity>> = emulatorDao.observeForPlatform(platformId)
 
+    fun observeAllEmulators(): Flow<List<EmulatorEntity>> = emulatorDao.observeAll()
+
     suspend fun emulatorsFor(platformId: String): List<EmulatorEntity> = emulatorDao.forPlatform(platformId)
 
     suspend fun emulatorById(id: String): EmulatorEntity? = emulatorDao.byId(id)

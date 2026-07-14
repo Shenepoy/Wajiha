@@ -47,6 +47,15 @@ class HomeViewModel(
 ) : ViewModel() {
     private val selectedPlatformId = MutableStateFlow<String?>(null)
     private val launchError = MutableStateFlow<String?>(null)
+    private var lastLaunchAtMs = 0L
+
+    /** Ignore duplicate confirm/tap within the launch window (tap + A double-fire). */
+    private fun tryBeginLaunch(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastLaunchAtMs < LAUNCH_DEBOUNCE_MS) return false
+        lastLaunchAtMs = now
+        return true
+    }
 
     /** Platforms that actually have games, in configured order. */
     private val platformsWithGames =
@@ -119,6 +128,7 @@ class HomeViewModel(
     }
 
     fun launchGame(gameId: Long) {
+        if (!tryBeginLaunch()) return
         appActions.playSound(UiSound.Launch)
         viewModelScope.launch {
             launchError.value = appActions.launchGame(gameId)
@@ -129,6 +139,7 @@ class HomeViewModel(
         gameId: Long,
         displayId: Int,
     ) {
+        if (!tryBeginLaunch()) return
         appActions.playSound(UiSound.Launch)
         viewModelScope.launch {
             launchError.value = appActions.launchGameOnDisplay(gameId, displayId)
@@ -156,6 +167,7 @@ class HomeViewModel(
     }
 
     fun launchApp(packageName: String) {
+        if (!tryBeginLaunch()) return
         appActions.playSound(UiSound.Open)
         appActions.launchApp(packageName)
     }
@@ -164,6 +176,7 @@ class HomeViewModel(
         packageName: String,
         displayId: Int,
     ) {
+        if (!tryBeginLaunch()) return
         appActions.playSound(UiSound.Launch)
         appActions.launchAppOnDisplay(packageName, displayId)
     }
@@ -180,6 +193,10 @@ class HomeViewModel(
     fun playOpen() = appActions.playSound(UiSound.Open)
 
     fun playBack() = appActions.playSound(UiSound.Back)
+
+    private companion object {
+        private const val LAUNCH_DEBOUNCE_MS = 800L
+    }
 }
 
 private data class GameMediaMaps(

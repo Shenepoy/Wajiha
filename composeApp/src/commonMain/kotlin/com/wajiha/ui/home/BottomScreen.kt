@@ -92,6 +92,7 @@ import com.wajiha.state.NowPlayingState
 import com.wajiha.ui.components.WajihaEmptyState
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.gamepad.GamepadChip
+import com.wajiha.ui.components.gamepad.GamepadHintGlyph
 import com.wajiha.ui.components.gamepad.GamepadTile
 import com.wajiha.ui.components.gamepad.hasCenterInViewport
 import com.wajiha.ui.components.gamepad.visibleFractionOnScrollAxis
@@ -861,7 +862,9 @@ fun BottomScreen(
                                         gamepadFocusable =
                                             when {
                                                 menuOpen -> false
+
                                                 restoringSessionFocus -> isRestoreSession
+
                                                 // Only the selected session accepts Compose focus —
                                                 // prevents scroll from parking focus on a peek tile.
                                                 else -> isSelected
@@ -936,7 +939,9 @@ fun BottomScreen(
                                     gamepadFocusable =
                                         when {
                                             menuOpen -> false
+
                                             restoringGridFocus -> isRestoreTile
+
                                             // Only the selected tile is focusable. Touch-scroll
                                             // otherwise moves Compose focus onto the first/peek
                                             // tile while selectedGameId stays elsewhere — user
@@ -1017,8 +1022,7 @@ fun HomeChromeBar(
                                     MaterialTheme.colorScheme.background.copy(alpha = 0.55f),
                                 ),
                         ),
-                    )
-                    .padding(
+                    ).padding(
                         start = WajihaSpacing.md,
                         end = WajihaSpacing.sm,
                         top = WajihaSpacing.md,
@@ -1465,6 +1469,7 @@ private suspend fun LazyListState.ensurePlatformFilterVisible(index: Int) {
         item.offset < start + pad -> {
             animateScrollBy((item.offset - start - pad).toFloat())
         }
+
         item.offset + item.size > end - pad -> {
             animateScrollBy((item.offset + item.size - end + pad).toFloat())
         }
@@ -1489,10 +1494,22 @@ private fun HomeChromeActions(
                 modifier = Modifier.focusProperties { canFocus = false },
             ) { Text("System") }
         }
-        TextButton(
-            onClick = onOpenSettings,
-            modifier = Modifier.focusProperties { canFocus = false },
-        ) { Text("Settings") }
+        Box(modifier = Modifier.focusProperties { canFocus = false }) {
+            TextButton(onClick = onOpenSettings) {
+                Text("Settings")
+            }
+            // Overlay on the Settings button only; does not expand the row.
+            Box(modifier = Modifier.matchParentSize()) {
+                GamepadHintGlyph(
+                    button = GamepadHintButton.Start,
+                    size = 12.dp,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 2.dp, end = 2.dp),
+                )
+            }
+        }
     }
 }
 

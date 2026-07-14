@@ -1,6 +1,8 @@
 package com.wajiha.android.launch
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.view.Display
 import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.monitor.ForegroundAppMonitor
@@ -36,6 +38,7 @@ class GameLauncher(
     private val displayCoordinator: DisplayCoordinator,
 ) {
     private val json = WajihaJson.Default
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     suspend fun launchGame(gameId: Long): LaunchResult {
         val game =
@@ -105,7 +108,7 @@ class GameLauncher(
                 sessionResumedAt = now,
                 launchedByWajiha = true,
             )
-        dualScreenStore.beginGameSession(session)
+        dualScreenStore.beginGameSession(session, deferSecondaryUi = true)
         WajihaLog.i(
             WajihaLogKind.LAUNCH,
             "launchGame: start pkg=$packageName displayId=$resolvedDisplay " +
@@ -120,6 +123,12 @@ class GameLauncher(
             foregroundAppMonitor.onSessionStarted(packageName)
             displayCoordinator.focusGameOnPrimary(packageName)
             KeepAliveService.start(context)
+            // Apply Now Playing / preferred bottom UI after the emulator attaches —
+            // doing it inside beginGameSession flashes the bottom screen black.
+            mainHandler.postDelayed(
+                { dualScreenStore.applyDeferredSecondaryModeAfterLaunch() },
+                SECONDARY_UI_AFTER_LAUNCH_MS,
+            )
             WajihaLog.i(WajihaLogKind.LAUNCH, "launchGame: ok pkg=$packageName gameId=${game.id}")
         } else {
             dualScreenStore.endGameSession(packageName)
@@ -202,6 +211,8 @@ class GameLauncher(
     }
 
     private companion object {
+        /** Let startActivity / first emulator frame settle before bottom UI swap. */
+        private const val SECONDARY_UI_AFTER_LAUNCH_MS = 450L
         val pathTokens = listOf("{file.path}", "%ROM%", "%ROM_PATH%", "%ROMRAW%")
         val uriTokens = listOf("{file.uri}", "%ROM_URI%", "%ROM_CONTENT%")
     }
