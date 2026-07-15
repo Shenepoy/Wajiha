@@ -37,6 +37,8 @@ import com.wajiha.ui.theme.rememberInputModeController
  * [onPreviewKey] is registered on [GamepadLayers] for focus-independent dispatch
  * (Android activity bridge) and mirrored on [onPreviewKeyEvent] when the focus
  * tree tunnels through this root — no root focus target (that would steal indicators).
+ * Bridged preview keys also call [InputModeController.onGamepadKey] so Outside
+ * focus rings return after a touch-open (D-pad never reached Compose otherwise).
  *
  * The layer [DisposableEffect] keys only on [layerId]. Preview handlers are kept
  * fresh via [rememberUpdatedState] so BottomScreen recompositions (common on the
@@ -60,9 +62,16 @@ fun GamepadScreen(
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val latestPreviewKey = rememberUpdatedState(onPreviewKey)
+    // Created before the layer handler so bridged D-pad (GamepadPreviewKeyBridge)
+    // can restore Gamepad chrome — those keys never reach onPreviewKeyEvent.
+    val inputModeController = rememberInputModeController()
+    val latestInputMode = rememberUpdatedState(inputModeController)
 
     DisposableEffect(layerId) {
         val handler: (KeyEvent) -> Boolean = { event ->
+            if (GamepadKeys.switchesToGamepadMode(event)) {
+                latestInputMode.value.onGamepadKey()
+            }
             latestPreviewKey.value?.invoke(event) == true
         }
         GamepadLayers.stack.push(layerId)
@@ -75,11 +84,14 @@ fun GamepadScreen(
         }
     }
 
-    if (onOwnerGainedFocus != null) {
-        RememberGamepadOwnerFocus(owner = owner, onGained = onOwnerGainedFocus)
+    // Always track ownership when [owner] is set so losing L2 clears focus rings.
+    if (owner != null) {
+        RememberGamepadOwnerFocus(
+            owner = owner,
+            onGained = onOwnerGainedFocus ?: {},
+        )
     }
 
-    val inputModeController = rememberInputModeController()
     val focusRingOverlay = rememberFocusRingOverlayState()
     val textFieldEditing = GamepadTextEditRegistry.isEditing
 
