@@ -282,7 +282,20 @@ fun classifyHttpStatus(
         status == 401 || status == 403 ||
             "invalid" in lower && ("key" in lower || "auth" in lower || "credential" in lower) ||
             "unauthorized" in lower || "forbidden" in lower -> {
-            ScrapeFailure(ScrapeFailureKind.Auth, "Authentication failed", status)
+            val message =
+                when {
+                    "développeur" in lower ||
+                        "developpeur" in lower ||
+                        "developer" in lower -> {
+                        "ScreenScraper developer ID missing or invalid " +
+                            "(Settings → Dev ID, or gradle devid — not your user login)"
+                    }
+
+                    else -> {
+                        "Authentication failed"
+                    }
+                }
+            ScrapeFailure(ScrapeFailureKind.Auth, message, status)
         }
 
         status == 429 || "rate" in lower && "limit" in lower || "quota" in lower -> {

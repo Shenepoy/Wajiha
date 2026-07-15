@@ -149,6 +149,13 @@ data class ScraperSettings(
     // Credentials
     val screenScraperUser: String = "",
     val screenScraperPassword: String = "",
+    /**
+     * Optional ScreenScraper developer app pair (`devid` / `devpassword`).
+     * SS API requires these for every call; leave blank to omit them from requests.
+     * When blank, build-time gradle credentials are used if present.
+     */
+    val screenScraperDevId: String = "",
+    val screenScraperDevPassword: String = "",
     val steamGridDbApiKey: String = "",
     val raUsername: String = "",
     val raApiKey: String = "",

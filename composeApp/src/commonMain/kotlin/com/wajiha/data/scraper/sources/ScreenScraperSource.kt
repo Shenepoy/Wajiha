@@ -17,6 +17,7 @@ import com.wajiha.data.scraper.SourceHealthBudget
 import com.wajiha.data.scraper.SourceLookupOutcome
 import com.wajiha.data.scraper.classifyHttpStatus
 import com.wajiha.data.scraper.getStringResult
+import com.wajiha.data.scraper.resolveScreenScraperDevCredentials
 import com.wajiha.data.scraper.screenScraperParams
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
@@ -32,8 +33,8 @@ import kotlinx.serialization.Serializable
  */
 class ScreenScraperSource(
     private val http: HttpClient,
-    private val devId: String = "",
-    private val devPassword: String = "",
+    private val buildDevId: String = "",
+    private val buildDevPassword: String = "",
 ) : ScraperSource {
     override val id = "screenscraper"
     override val displayName = "ScreenScraper"
@@ -41,12 +42,23 @@ class ScreenScraperSource(
     private val health = SourceHealthBudget(id, maxCallsPerWindow = 50)
 
     override fun isConfigured(settings: ScraperSettings): Boolean =
-        settings.screenScraperUser.isNotBlank() && settings.screenScraperPassword.isNotBlank()
+        settings.screenScraperUser.isNotBlank() &&
+            settings.screenScraperPassword.isNotBlank() &&
+            resolveScreenScraperDevCredentials(settings, buildDevId, buildDevPassword) != null
 
     override suspend fun lookupResult(
         query: ScrapeQuery,
         settings: ScraperSettings,
     ): SourceLookupOutcome {
+        if (resolveScreenScraperDevCredentials(settings, buildDevId, buildDevPassword) == null) {
+            return SourceLookupOutcome.Failed(
+                ScrapeFailure(
+                    ScrapeFailureKind.NotConfigured,
+                    "ScreenScraper developer ID missing — add Dev ID/password in Settings " +
+                        "(or gradle devid). User account alone is not enough.",
+                ),
+            )
+        }
         if (!health.isAvailable()) {
             return SourceLookupOutcome.Failed(
                 ScrapeFailure(ScrapeFailureKind.RateLimited, "ScreenScraper temporarily unavailable"),
@@ -177,7 +189,7 @@ class ScreenScraperSource(
         health.recordCall()
         val result =
             http.getStringResult("https://api.screenscraper.fr/api2/jeuInfos.php") {
-                screenScraperParams(settings, devId, devPassword)
+                screenScraperParams(settings, buildDevId, buildDevPassword)
                 if (gameId != null) {
                     parameter("gameid", gameId)
                 } else {
@@ -222,7 +234,7 @@ class ScreenScraperSource(
         health.recordCall()
         val result =
             http.getStringResult("https://api.screenscraper.fr/api2/jeuRecherche.php") {
-                screenScraperParams(settings, devId, devPassword)
+                screenScraperParams(settings, buildDevId, buildDevPassword)
                 parameter("recherche", cleaned)
                 systemeid?.let { parameter("systemeid", it) }
             }
@@ -263,6 +275,13 @@ class ScreenScraperSource(
                 when {
                     "quota" in lower || "rate" in lower -> {
                         ScrapeFailure(ScrapeFailureKind.RateLimited, "ScreenScraper quota exceeded")
+                    }
+
+                    "développeur" in lower || "developpeur" in lower || "developer" in lower -> {
+                        ScrapeFailure(
+                            ScrapeFailureKind.Auth,
+                            "ScreenScraper developer ID missing or invalid",
+                        )
                     }
 
                     "login" in lower || "password" in lower || "user" in lower -> {

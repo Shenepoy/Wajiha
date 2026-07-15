@@ -562,6 +562,22 @@ private fun ScraperAccountsSection(viewModel: ScraperViewModel) {
                 CompactCredentialField("Password", settings.screenScraperPassword, secret = true) { v ->
                     viewModel.update { it.copy(screenScraperPassword = v) }
                 }
+                CompactCredentialField("Dev ID (optional)", settings.screenScraperDevId) { v ->
+                    viewModel.update { it.copy(screenScraperDevId = v) }
+                }
+                CompactCredentialField(
+                    "Dev password (optional)",
+                    settings.screenScraperDevPassword,
+                    secret = true,
+                ) { v ->
+                    viewModel.update { it.copy(screenScraperDevPassword = v) }
+                }
+                Text(
+                    "SS API needs a developer app pair. Leave Dev fields blank to omit them — " +
+                        "your user login alone is not enough for ScreenScraper.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         if ("steamgriddb" in enabled) {

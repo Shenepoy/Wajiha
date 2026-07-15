@@ -26,12 +26,14 @@ Wajiha combines the best patterns from four studied apps (NeoStation, Daijishō,
 ./gradlew :androidApp:test                 # Android unit tests (ROM path probes)
 ```
 
-Optional ScreenScraper developer credentials (improves API rate limits; the app also works with just a user account) go into `~/.gradle/gradle.properties`:
+ScreenScraper’s API requires a developer app pair (`devid` / `devpassword`) on every call, plus your user login in Settings for quotas. Enter Dev ID/password in **Settings → Scraper → ScreenScraper**, or (for local builds) in `~/.gradle/gradle.properties`:
 
 ```properties
 wajiha.screenscraper.devid=YOUR_DEV_ID
 wajiha.screenscraper.devpassword=YOUR_DEV_PASSWORD
 ```
+
+Blank values are omitted from requests — never sent as empty `devid=`.
 
 ## First-run setup
 

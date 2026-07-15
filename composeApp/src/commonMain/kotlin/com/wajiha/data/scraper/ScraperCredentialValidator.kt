@@ -27,6 +27,12 @@ class ScraperCredentialValidator(
         if (settings.screenScraperUser.isBlank() || settings.screenScraperPassword.isBlank()) {
             return CredentialTestResult.Failure("Username and password required")
         }
+        if (resolveScreenScraperDevCredentials(settings, devCreds) == null) {
+            return CredentialTestResult.Failure(
+                "Developer ID required by ScreenScraper API — add Dev ID/password " +
+                    "(or gradle wajiha.screenscraper.devid). User login alone is not enough.",
+            )
+        }
         return try {
             val body =
                 http
@@ -34,7 +40,24 @@ class ScraperCredentialValidator(
                         screenScraperParams(settings, devCreds)
                     }.body<String>()
             if (body.contains("\"error\"", ignoreCase = true)) {
-                CredentialTestResult.Failure("Invalid credentials or API error")
+                val lower = body.lowercase()
+                val message =
+                    when {
+                        "développeur" in lower ||
+                            "developpeur" in lower ||
+                            "developer" in lower -> {
+                            "Developer credentials rejected — check Dev ID/password"
+                        }
+
+                        "login" in lower || "password" in lower || "user" in lower -> {
+                            "Invalid username/password"
+                        }
+
+                        else -> {
+                            "Invalid credentials or API error"
+                        }
+                    }
+                CredentialTestResult.Failure(message)
             } else {
                 val pseudo =
                     runCatching {

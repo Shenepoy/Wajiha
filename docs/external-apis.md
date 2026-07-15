@@ -7,7 +7,7 @@ Wajiha is a client app — these are third-party services called from scraper so
 ## ScreenScraper (api2)
 
 - **Base:** `https://api.screenscraper.fr/api2/`
-- **Auth:** Settings user `ssid` / `sspassword` (Scraper screen). Optional developer `devid` / `devpassword` from `~/.gradle/gradle.properties` only if you have an SS developer app pair — blank values are omitted from requests.
+- **Auth:** Developer `devid` / `devpassword` (required by SS API — Settings Dev fields, else `~/.gradle/gradle.properties`) plus user `ssid` / `sspassword` (Settings). Blank developer values are omitted from requests (never sent as empty params).
 - **Endpoints:** `jeuInfos.php` (hash + name + `gameid` hydrate), `jeuRecherche.php` (search), `ssuserInfos.php` (credential test)
 - **Lookup ladder:** hash/`romnom`+`systemeid` → cleaned name → `jeuRecherche` → hydrate via `jeuInfos&gameid=`
 - **`romtype`:** `iso` for chd/cue/iso/gdi/…; `rom` otherwise
