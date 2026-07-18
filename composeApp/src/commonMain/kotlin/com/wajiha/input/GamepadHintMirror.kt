@@ -4,12 +4,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
+import com.wajiha.ui.components.gamepad.FocusScreenGamepadHint
 import com.wajiha.ui.components.gamepad.GamepadActionBar
+import com.wajiha.ui.components.gamepad.GamepadActionBarChrome
+import com.wajiha.ui.components.gamepad.withoutFocusScreenHint
 import com.wajiha.ui.navigation.menuOnPrimary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +24,9 @@ import org.koin.compose.koinInject
 /**
  * Process-wide mirror of the active menu screen's [GamepadHint] list so the
  * hero display can show them when Settings → Screens → Swap gamepad hints is on.
+ *
+ * Never includes L2 Focus — that hint is owned by [DualScreenStore.l2HintOwner]
+ * and shown locally on the unfocused display (or as a hero overlay).
  */
 object GamepadHintMirror {
     private val _hints = MutableStateFlow<List<GamepadHint>>(emptyList())
@@ -32,7 +40,7 @@ object GamepadHintMirror {
         hints: List<GamepadHint>,
     ) {
         publisherId = id
-        _hints.value = hints
+        _hints.value = hints.withoutFocusScreenHint()
     }
 
     fun clear(id: String) {
@@ -93,7 +101,11 @@ fun PublishGamepadHintsEffect(
  * Shows [hints] locally, or publishes them to the hero when swap-hints is active
  * and this host is the menu display.
  *
- * [hostOwner] null = treat as menu host (single-display / embedded panels).
+ * L2 "Focus" is stripped from [hints], never mirrored, and re-added only when
+ * [DualScreenStore.l2HintOwner] matches [hostOwner] (unfocused target).
+ * When other hints are mirrored away, an L2-only local bar can still appear.
+ *
+ * [hostOwner] null = treat as menu host (single-display / embedded panels); no L2.
  */
 @Composable
 fun MirroredOrLocalGamepadActionBar(
@@ -101,21 +113,36 @@ fun MirroredOrLocalGamepadActionBar(
     hints: List<GamepadHint>,
     hostOwner: GamepadOwner? = null,
 ) {
+    val dualStore = koinInject<DualScreenStore>()
+    val l2HintOwner by dualStore.l2HintOwner.collectAsState()
     val swapActive = rememberSwapGamepadHintsActive()
     val isMenuHost = rememberIsMenuHost(hostOwner)
-    val mirrorAway = swapActive && isMenuHost && hints.isNotEmpty()
-    PublishGamepadHintsEffect(publisherId, hints, mirrorAway)
-    if (!mirrorAway && hints.isNotEmpty()) {
-        GamepadActionBar(hints = hints)
+    val baseHints =
+        remember(hints) {
+            hints.withoutFocusScreenHint()
+        }
+    val showL2Here = hostOwner != null && l2HintOwner == hostOwner
+    val l2Hints = if (showL2Here) listOf(FocusScreenGamepadHint) else emptyList()
+    val mirrorAway = swapActive && isMenuHost && baseHints.isNotEmpty()
+    PublishGamepadHintsEffect(publisherId, baseHints, mirrorAway)
+    val localHints = if (mirrorAway) l2Hints else baseHints + l2Hints
+    if (localHints.isNotEmpty()) {
+        GamepadActionBar(hints = localHints)
     }
 }
 
 /** Hero-side host for mirrored hints (empty when swap is off or nothing published). */
 @Composable
-fun MirroredGamepadHintsHost() {
+fun MirroredGamepadHintsHost(modifier: Modifier = Modifier) {
     val swapActive = rememberSwapGamepadHintsActive()
     val hints by GamepadHintMirror.hints.collectAsState()
-    if (swapActive && hints.isNotEmpty()) {
-        GamepadActionBar(hints = hints)
+    val safeHints = remember(hints) { hints.withoutFocusScreenHint() }
+    if (swapActive && safeHints.isNotEmpty()) {
+        // Overlay chrome: hero stays full-bleed under the bar.
+        GamepadActionBar(
+            modifier = modifier,
+            hints = safeHints,
+            chrome = GamepadActionBarChrome.Overlay,
+        )
     }
 }

@@ -1,0 +1,95 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-alpha.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-beta.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Parse tag channel
+        id: meta
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            CHANNEL=stable
+            PRERELEASE=false
+            MAKE_LATEST=true
+            RELEASE_NAME="Wajiha ${VERSION}"
+          elif [[ "$VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-alpha\.([0-9]+)$ ]]; then
+            CHANNEL=alpha
+            PRERELEASE=true
+            MAKE_LATEST=false
+            RELEASE_NAME="Wajiha ${BASH_REMATCH[1]} Alpha ${BASH_REMATCH[2]}"
+          elif [[ "$VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
+            CHANNEL=beta
+            PRERELEASE=true
+            MAKE_LATEST=false
+            RELEASE_NAME="Wajiha ${BASH_REMATCH[1]} Beta ${BASH_REMATCH[2]}"
+          elif [[ "$VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+)$ ]]; then
+            CHANNEL=rc
+            PRERELEASE=true
+            MAKE_LATEST=false
+            RELEASE_NAME="Wajiha ${BASH_REMATCH[1]} RC ${BASH_REMATCH[2]}"
+          else
+            echo "Unsupported tag: ${TAG}" >&2
+            exit 1
+          fi
+
+          {
+            echo "version=${VERSION}"
+            echo "channel=${CHANNEL}"
+            echo "prerelease=${PRERELEASE}"
+            echo "make_latest=${MAKE_LATEST}"
+            echo "release_name=${RELEASE_NAME}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: |
+          ./gradlew :androidApp:assembleDebug \
+            -Pwajiha.versionName="${{ steps.meta.outputs.version }}" \
+            -Pwajiha.versionCode="${{ github.run_number }}"
+
+      - name: Stage APK
+        run: |
+          mkdir -p dist
+          SRC="$(ls androidApp/build/outputs/apk/debug/*.apk | head -n1)"
+          DEST="dist/Wajiha-${{ steps.meta.outputs.version }}-debug.apk"
+          cp "$SRC" "$DEST"
+          echo "apk_path=${DEST}" >> "$GITHUB_OUTPUT"
+        id: apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: ${{ steps.meta.outputs.release_name }}
+          generate_release_notes: true
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          make_latest: ${{ steps.meta.outputs.make_latest }}
+          files: ${{ steps.apk.outputs.apk_path }}

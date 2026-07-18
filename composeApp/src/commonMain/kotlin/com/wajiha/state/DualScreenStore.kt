@@ -284,6 +284,46 @@ class DualScreenStore {
     /** Which activity hosts the hero / top preview. */
     fun heroGamepadOwner(): GamepadOwner = if (gamesMenuOnPrimary) GamepadOwner.Secondary else GamepadOwner.Primary
 
+    /**
+     * Hero has real focusable UI (scrape slot grid or settings/detail actions).
+     * Idle artwork / Apps / System heroes do not count.
+     */
+    fun isHeroInteractive(): Boolean = _scrapeReviewPicking.value || _settingsHeroPicking.value
+
+    /**
+     * L2 may flip ownership: dual layout, not blackout, and the hero is interactive
+     * (menu is always a valid return target).
+     */
+    fun isL2SwitchAvailable(): Boolean {
+        val dualState = _state.value
+        if (dualState == DualScreenState.SingleDisplay) return false
+        if (dualState == DualScreenState.BlackoutSecondary) return false
+        return isHeroInteractive()
+    }
+
+    /**
+     * Display that should show the L2 "Focus screen" hint — the unfocused owner
+     * while [isL2SwitchAvailable]. Null when L2 is inactive.
+     */
+    val l2HintOwner: StateFlow<GamepadOwner?> =
+        combine(
+            _state,
+            _gamepadOwner,
+            _scrapeReviewPicking,
+            _settingsHeroPicking,
+        ) { dualState, owner, scrapePicking, settingsPicking ->
+            if (dualState == DualScreenState.SingleDisplay ||
+                dualState == DualScreenState.BlackoutSecondary
+            ) {
+                return@combine null
+            }
+            if (!scrapePicking && !settingsPicking) return@combine null
+            when (owner) {
+                GamepadOwner.Primary -> GamepadOwner.Secondary
+                GamepadOwner.Secondary -> GamepadOwner.Primary
+            }
+        }.stateIn(scope, SharingStarted.Eagerly, null)
+
     // Options (mirrored from settings so state transitions can use them synchronously)
     var blackoutOnLaunch: Boolean = false
     var preferredGameMode: SecondaryMode = SecondaryMode.NowPlaying
@@ -614,14 +654,17 @@ class DualScreenStore {
     }
 
     fun setSecondaryMode(mode: SecondaryMode) {
-        _secondaryMode.value = mode
+        // Trophies secondary tab removed; keep enum for legacy prefs / valueOf safety.
+        val resolved =
+            if (mode == SecondaryMode.Achievements) SecondaryMode.NowPlaying else mode
+        _secondaryMode.value = resolved
         _state.update { current ->
             when {
-                mode == SecondaryMode.Off && current == DualScreenState.GameRunning -> {
+                resolved == SecondaryMode.Off && current == DualScreenState.GameRunning -> {
                     DualScreenState.BlackoutSecondary
                 }
 
-                mode != SecondaryMode.Off && current == DualScreenState.BlackoutSecondary -> {
+                resolved != SecondaryMode.Off && current == DualScreenState.BlackoutSecondary -> {
                     DualScreenState.GameRunning
                 }
 
