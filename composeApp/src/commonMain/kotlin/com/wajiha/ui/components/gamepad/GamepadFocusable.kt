@@ -15,7 +15,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import com.wajiha.input.FocusClaimSource
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.LocalFocusContinuityController
+import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.ui.components.LocalUiFeedback
@@ -31,6 +34,7 @@ fun GamepadFocusable(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
     navHighlighted: Boolean = false,
+    focusId: Any? = null,
     shape: Shape = WajihaShapes.focus,
     content: @Composable () -> Unit,
 ) {
@@ -39,6 +43,13 @@ fun GamepadFocusable(
     val useCustomNav = LocalGamepadNavController.current != null
     val highlight = navHighlighted || (!useCustomNav && (focused || selected))
     val feedback = LocalUiFeedback.current
+    val continuity = LocalFocusContinuityController.current
+    val layerId = LocalFocusLayerId.current
+    val resolvedFocusId = focusId ?: remember { Any() }
+    val anchor =
+        remember(continuity, layerId, resolvedFocusId) {
+            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(resolvedFocusId, layerId)
+        }
 
     fun performClick() {
         feedback.confirm()
@@ -54,11 +65,16 @@ fun GamepadFocusable(
                     highlighted = highlight,
                     shape = shape,
                     selected = selected || navHighlighted,
+                    focusAnchor = anchor,
                 ).then(
                     if (!useCustomNav) {
                         Modifier
-                            .onFocusChanged { focused = it.isFocused }
-                            .wajihaGamepadFocus()
+                            .onFocusChanged {
+                                focused = it.isFocused
+                                if (it.isFocused && anchor != null) {
+                                    continuity?.claim(anchor, FocusClaimSource.Compose)
+                                }
+                            }.wajihaGamepadFocus()
                             .onPreviewKeyEvent { event ->
                                 if (GamepadKeys.isConfirm(event.type, event.key)) {
                                     performClick()
@@ -73,6 +89,9 @@ fun GamepadFocusable(
                 ).pointerInput(Unit) {
                     detectTapGestures(
                         onPress = {
+                            if (anchor != null) {
+                                continuity?.claim(anchor, FocusClaimSource.Touch)
+                            }
                             pressed = true
                             val released = tryAwaitRelease()
                             pressed = false

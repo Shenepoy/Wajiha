@@ -1,6 +1,5 @@
 package com.wajiha.ui.components.gamepad
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,10 +20,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import com.wajiha.ui.theme.WajihaFocus
+import com.wajiha.input.FocusClaimSource
+import com.wajiha.input.LocalFocusContinuityController
+import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
-import com.wajiha.ui.theme.showGamepadChrome
 
 @Composable
 fun GamepadSlider(
@@ -35,27 +35,32 @@ fun GamepadSlider(
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
     steps: Int = 0,
     valueLabel: String? = null,
+    focusId: Any? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val step = (valueRange.endInclusive - valueRange.start) / (steps + 1).coerceAtLeast(1)
+    val continuity = LocalFocusContinuityController.current
+    val layerId = LocalFocusLayerId.current
+    val resolvedFocusId = focusId ?: label
+    val anchor =
+        remember(continuity, layerId, resolvedFocusId) {
+            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(resolvedFocusId, layerId)
+        }
 
     Column(
         modifier =
             modifier
                 .fillMaxWidth()
                 .clip(WajihaShapes.focus)
-                .then(
-                    if (showGamepadChrome(focused)) {
-                        Modifier.border(
-                            width = WajihaFocus.borderWidth,
-                            color = WajihaFocus.borderColor(),
-                            shape = WajihaShapes.focus,
-                        )
-                    } else {
-                        Modifier
-                    },
-                ).onFocusChanged { focused = it.isFocused }
-                .focusable()
+                .wajihaFocusIndicator(
+                    highlighted = focused,
+                    focusAnchor = anchor,
+                ).onFocusChanged {
+                    focused = it.isFocused
+                    if (it.isFocused && anchor != null) {
+                        continuity?.claim(anchor, FocusClaimSource.Compose)
+                    }
+                }.focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {

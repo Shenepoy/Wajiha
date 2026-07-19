@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -34,7 +35,9 @@ import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadLayers
-import com.wajiha.input.requestContentFocus
+import com.wajiha.input.rememberFocusContext
+import com.wajiha.input.rememberedFocusContext
+import com.wajiha.input.rememberedFocusTarget
 import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
@@ -53,6 +56,7 @@ import com.wajiha.ui.components.gamepad.GamepadSafeTextField
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
 import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
 import com.wajiha.ui.components.gamepad.ProvideSettingsDensity
+import com.wajiha.ui.components.gamepad.SettingSectionFocusRestorer
 import com.wajiha.ui.components.gamepad.SettingType
 import com.wajiha.ui.components.gamepad.WajihaSettingBlurb
 import com.wajiha.ui.components.gamepad.WajihaSettingDivider
@@ -71,7 +75,7 @@ import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
-private enum class PlatformSettingsTab(
+enum class PlatformSettingsTab(
     val label: String,
 ) {
     General("General"),
@@ -90,6 +94,7 @@ fun PlatformSettingsScreen(
     platformId: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    initialTab: PlatformSettingsTab = PlatformSettingsTab.General,
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     viewModel: PlatformSettingsViewModel = koinInject(),
@@ -107,22 +112,46 @@ fun PlatformSettingsScreen(
     val feedback = LocalUiFeedback.current
 
     val tabs = PlatformSettingsTab.entries
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    var selectedTabIndex by
+        remember(platformId, initialTab) {
+            val remembered =
+                rememberedFocusContext("platform_settings:$platformId:tab") as? Int
+            mutableIntStateOf(
+                if (initialTab != PlatformSettingsTab.General) {
+                    initialTab.ordinal
+                } else {
+                    remembered?.coerceIn(0, tabs.lastIndex) ?: initialTab.ordinal
+                },
+            )
+        }
     val sectionFocus = remember { FocusRequester() }
     val screenLayer = "platform_settings"
+    val sectionFocusRestorer =
+        remember(platformId, selectedTabIndex) {
+            SettingSectionFocusRestorer(
+                "platform_settings:$platformId:tab:$selectedTabIndex",
+            )
+        }
+    val targetBeforeTabFocus =
+        remember(platformId, selectedTabIndex) {
+            rememberedFocusTarget(screenLayer)
+        }
 
     fun selectTab(index: Int) {
         val newIndex = index.coerceIn(0, tabs.lastIndex)
         feedback.tabSelect(selectedTabIndex, newIndex)
         selectedTabIndex = newIndex
+        rememberFocusContext("platform_settings:$platformId:tab", newIndex)
     }
 
-    LaunchedEffect(selectedTabIndex) {
+    LaunchedEffect(selectedTabIndex, platform?.id, state.folders.isEmpty()) {
+        if (platform == null) return@LaunchedEffect
         // Keep previous hero until the new tab's focus publishes (avoids double flash).
-        try {
-            sectionFocus.requestFocus()
-        } catch (_: Exception) {
-        }
+        withFrameNanos { }
+        sectionFocusRestorer.restore(
+            targetId = targetBeforeTabFocus,
+            fallback = sectionFocus,
+        )
     }
 
     DisposableEffect(Unit) {
@@ -138,7 +167,12 @@ fun PlatformSettingsScreen(
             gamepadHints = gameDetailGamepadHints(isDual = dualDisplay),
             gamepadOwner = gamepadOwner,
             onClaimGamepad = onClaimGamepad,
-            onOwnerGainedFocus = { sectionFocus.requestContentFocus() },
+            onOwnerGainedFocus = {
+                sectionFocusRestorer.restore(
+                    targetId = rememberedFocusTarget(screenLayer),
+                    fallback = sectionFocus,
+                )
+            },
             onPreviewKey = { event ->
                 if (GamepadLayers.stack.topLayer != screenLayer) return@WajihaScreen false
                 when {
@@ -241,6 +275,7 @@ fun PlatformSettingsScreen(
 
                         WajihaSettingPanel(
                             folderPanel = true,
+                            focusRestorer = sectionFocusRestorer,
                             modifier =
                                 Modifier
                                     .weight(1f)
@@ -439,6 +474,20 @@ private fun PlatformFoldersTabContent(
     firstFocusRequester: FocusRequester,
 ) {
     val platform = state.platform ?: return
+    val addFolderHeroFocus: (Boolean) -> Unit = { focused ->
+        if (focused) {
+            publishSettingsHero(
+                dualStore,
+                genericSettingHeroDetail(
+                    title = "Add folder",
+                    subtitle = "Pick a ROM folder on this device for this system.",
+                ),
+                onPrimaryAction = viewModel::pickRomFolder,
+            )
+        } else {
+            clearSettingsHero(dualStore)
+        }
+    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
@@ -447,6 +496,22 @@ private fun PlatformFoldersTabContent(
             "Folders scanned for games on this system. " +
                 "Add at least one to include it in Settings → Library.",
         )
+        if (state.folders.isEmpty()) {
+            WajihaEmptyState(
+                title = "Choose your games folder",
+                subtitle =
+                    "Select the folder that contains this system's ROMs. " +
+                        "Wajiha will scan it and add discovered games to your library.",
+                action = {
+                    GamepadButton(
+                        text = "Add folder",
+                        onClick = viewModel::pickRomFolder,
+                        focusRequester = firstFocusRequester,
+                        onFocusedChanged = addFolderHeroFocus,
+                    )
+                },
+            )
+        }
         WajihaToggleSetting(
             label = "Deep scan",
             description = "Walk nested subfolders more thoroughly when scanning (depth 15 vs 3).",
@@ -454,7 +519,7 @@ private fun PlatformFoldersTabContent(
             onCheckedChange = viewModel::setDeepScan,
             defaultChecked = false,
             onReset = { viewModel.setDeepScan(false) },
-            focusRequester = firstFocusRequester,
+            focusRequester = if (state.folders.isEmpty()) null else firstFocusRequester,
             onFocusedChanged =
                 settingsToggleHeroFocus(
                     store = dualStore,
@@ -463,69 +528,45 @@ private fun PlatformFoldersTabContent(
                     checked = platform.deepScan,
                 ),
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            GamepadButton(
-                text = "Rescan",
-                onClick = viewModel::rescanPlatform,
-                outlined = true,
-                onFocusedChanged = { focused ->
-                    if (focused) {
-                        publishSettingsHero(
-                            store = dualStore,
-                            detail =
-                                genericSettingHeroDetail(
-                                    title = "Rescan",
-                                    subtitle = "Scan ROM folders for this system and refresh the library.",
-                                ).copy(
-                                    actions =
-                                        if (settingsHeroActions) {
-                                            listOf(SettingsHeroAction("rescan", "Rescan"))
-                                        } else {
-                                            emptyList()
-                                        },
-                                ),
-                            onPrimaryAction = viewModel::rescanPlatform,
-                        )
-                    } else {
-                        clearSettingsHero(dualStore)
-                    }
-                },
-            )
-            GamepadButton(
-                text = "Add folder",
-                onClick = viewModel::pickRomFolder,
-                modifier = Modifier.padding(start = WajihaSpacing.sm),
-                onFocusedChanged = { focused ->
-                    if (focused) {
-                        publishSettingsHero(
-                            dualStore,
-                            genericSettingHeroDetail(
-                                title = "Add folder",
-                                subtitle = "Pick a ROM folder on this device for this system.",
-                            ),
-                            onPrimaryAction = viewModel::pickRomFolder,
-                        )
-                    } else {
-                        clearSettingsHero(dualStore)
-                    }
-                },
-            )
-        }
-        if (state.folders.isEmpty()) {
-            WajihaEmptyState(
-                title = "No folders yet",
-                subtitle = "Add a ROM folder to bring this system into your library.",
-                action = {
-                    GamepadButton(
-                        text = "Add folder",
-                        onClick = viewModel::pickRomFolder,
-                    )
-                },
-            )
-        } else {
+        if (state.folders.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                GamepadButton(
+                    text = "Rescan",
+                    onClick = viewModel::rescanPlatform,
+                    outlined = true,
+                    onFocusedChanged = { focused ->
+                        if (focused) {
+                            publishSettingsHero(
+                                store = dualStore,
+                                detail =
+                                    genericSettingHeroDetail(
+                                        title = "Rescan",
+                                        subtitle = "Scan ROM folders for this system and refresh the library.",
+                                    ).copy(
+                                        actions =
+                                            if (settingsHeroActions) {
+                                                listOf(SettingsHeroAction("rescan", "Rescan"))
+                                            } else {
+                                                emptyList()
+                                            },
+                                    ),
+                                onPrimaryAction = viewModel::rescanPlatform,
+                            )
+                        } else {
+                            clearSettingsHero(dualStore)
+                        }
+                    },
+                )
+                GamepadButton(
+                    text = "Add folder",
+                    onClick = viewModel::pickRomFolder,
+                    modifier = Modifier.padding(start = WajihaSpacing.sm),
+                    onFocusedChanged = addFolderHeroFocus,
+                )
+            }
             state.folders.forEach { folder ->
                 FolderRow(
                     folder = folder,

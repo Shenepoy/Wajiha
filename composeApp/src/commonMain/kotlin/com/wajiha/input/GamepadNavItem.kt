@@ -35,11 +35,25 @@ fun GamepadNavItem(
 ) {
     val controller = LocalGamepadNavController.current
     val id = itemId ?: remember { Any() }
+    val continuity = LocalFocusContinuityController.current
+    val layerId = LocalFocusLayerId.current
+    val anchor =
+        remember(continuity, layerId, id) {
+            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(id, layerId)
+        }
 
     if (controller != null) {
-        DisposableEffect(id, enabled, onActivate, onEnterEdit, onExitEdit) {
+        DisposableEffect(id, enabled, onActivate, onEnterEdit, onExitEdit, anchor) {
             controller.register(id, onActivate, enabled, onEnterEdit, onExitEdit)
-            onDispose { controller.unregister(id) }
+            if (enabled && anchor != null) {
+                continuity?.register(anchor)
+            }
+            onDispose {
+                controller.unregister(id)
+                if (anchor != null) {
+                    continuity?.unregister(anchor)
+                }
+            }
         }
         // Observe index changes so highlight updates on D-pad moves.
         val focusedIndex = controller.focusState.focusedIndex
@@ -49,12 +63,22 @@ fun GamepadNavItem(
                 if (highlighted) onFocus()
             }
         }
+        androidx.compose.runtime.LaunchedEffect(highlighted, anchor) {
+            if (highlighted && anchor != null) {
+                continuity?.claim(anchor, FocusClaimSource.Gamepad)
+            }
+        }
         val showChrome = showGamepadChrome(highlighted)
         NavItemChrome(
             modifier = modifier,
             showChrome = showChrome,
             onActivate = onActivate,
             enabled = enabled,
+            onTouchFocus = {
+                if (anchor != null) {
+                    continuity?.claim(anchor, FocusClaimSource.Touch)
+                }
+            },
         ) {
             content(showChrome)
         }
@@ -75,6 +99,7 @@ private fun NavItemChrome(
     showChrome: Boolean,
     onActivate: () -> Unit,
     enabled: Boolean,
+    onTouchFocus: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -98,8 +123,13 @@ private fun NavItemChrome(
                     } else {
                         Modifier
                     },
-                ).pointerInput(onActivate, enabled) {
-                    if (enabled) detectTapGestures { onActivate() }
+                ).pointerInput(onActivate, onTouchFocus, enabled) {
+                    if (enabled) {
+                        detectTapGestures {
+                            onTouchFocus()
+                            onActivate()
+                        }
+                    }
                 },
     ) {
         content()

@@ -131,9 +131,11 @@ class GamepadKeyRouter(
             }
             scope.launch {
                 val swapped = settingsRepository.toggleSwapScreenRoles()
+                store.onScreenRolesSwapped(menuOnPrimary = swapped)
                 WajihaLog.i(
                     WajihaTags.GAMEPAD,
-                    "map: SELECT → swapScreenRoles=$swapped (from=$from)",
+                    "map: SELECT → swapScreenRoles=$swapped " +
+                        "focusOwner=${store.gamepadOwner.value} (from=$from)",
                 )
                 appActions.playSound(UiSound.Navigate)
             }

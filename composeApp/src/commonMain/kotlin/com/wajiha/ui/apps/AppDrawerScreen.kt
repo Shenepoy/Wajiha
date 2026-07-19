@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +43,7 @@ import androidx.compose.ui.zIndex
 import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.rememberedFocusTarget
 import com.wajiha.input.requestContentFocus
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
@@ -54,7 +56,6 @@ import com.wajiha.ui.theme.InputMode
 import com.wajiha.ui.theme.LocalInputMode
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 
 /** App drawer: same NeoStation select/confirm model as game tiles. */
@@ -75,7 +76,10 @@ fun AppDrawerScreen(
 ) {
     LaunchedEffect(Unit) { onLoad() }
 
-    var selectedPackage by remember { mutableStateOf<String?>(null) }
+    val rememberedPackage = rememberedFocusTarget("app_drawer") as? String
+    var selectedPackage by remember {
+        mutableStateOf(rememberedPackage?.takeIf { pkg -> apps.any { it.packageName == pkg } })
+    }
     var aTileHasFocus by remember { mutableStateOf(false) }
     var contextMenuTarget by remember { mutableStateOf<AppContextTarget?>(null) }
     var contextMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
@@ -85,9 +89,22 @@ fun AppDrawerScreen(
     var restoreFocusPackage by remember { mutableStateOf<String?>(null) }
     val menuOpen = contextMenuTarget != null
     val bottomDisplayId = secondaryDisplayId ?: 4
-    val gridState = rememberLazyGridState()
+    val initialSelectedAppIndex =
+        apps.indexOfFirst { it.packageName == selectedPackage }.coerceAtLeast(0)
+    // Paint the remembered app in the first frame after a role swap instead of
+    // briefly showing the start of the grid and correcting on owner gain.
+    val gridState =
+        rememberLazyGridState(
+            initialFirstVisibleItemIndex = initialSelectedAppIndex,
+        )
     val inputMode = LocalInputMode.current
     var pendingViewportSnap by remember { mutableStateOf(false) }
+
+    LaunchedEffect(apps, rememberedPackage) {
+        if (selectedPackage == null && rememberedPackage != null && apps.any { it.packageName == rememberedPackage }) {
+            selectedPackage = rememberedPackage
+        }
+    }
 
     LaunchedEffect(apps.size, selectedPackage) {
         val focused = apps.firstOrNull { it.packageName == selectedPackage }
@@ -121,6 +138,16 @@ fun AppDrawerScreen(
         } catch (_: Exception) {
         }
         return true
+    }
+
+    LaunchedEffect(gridState, inputMode, apps) {
+        snapshotFlow { gridState.isScrollInProgress }
+            .collect { scrolling ->
+                if (!scrolling && inputMode == InputMode.Touch && pendingViewportSnap) {
+                    pendingViewportSnap = false
+                    snapFocusToTopVisible()
+                }
+            }
     }
 
     fun openContextMenu(packageName: String) {
@@ -176,6 +203,20 @@ fun AppDrawerScreen(
             if (!menuOpen) {
                 val pkg = selectedPackage ?: apps.firstOrNull()?.packageName
                 if (pkg != null) {
+                    val appIndex = apps.indexOfFirst { it.packageName == pkg }
+                    val appIsVisible =
+                        gridState.layoutInfo.visibleItemsInfo.any { info ->
+                            info.key == pkg &&
+                                info.hasCenterInViewport(
+                                    gridState.layoutInfo,
+                                    horizontalScroll = false,
+                                )
+                        }
+                    if (appIndex >= 0 && !appIsVisible) {
+                        // Fallback for list mutations or an already-mounted grid.
+                        gridState.scrollToItem(appIndex)
+                        withFrameNanos { }
+                    }
                     tileFocusRequesters[pkg]?.requestContentFocus()
                 }
             }
@@ -245,7 +286,7 @@ fun AppDrawerScreen(
                     if (restoringGridFocus) {
                         val pkg = restoreFocusPackage ?: selectedPackage
                         if (pkg != null) {
-                            delay(40)
+                            withFrameNanos { }
                             try {
                                 tileFocusRequesters[pkg]?.requestFocus()
                             } catch (_: Exception) {
@@ -351,6 +392,7 @@ private fun AppTile(
         onLongPress = onLongPress,
         onFocusChanged = onTileFocusChanged,
         focusRequester = focusRequester,
+        focusId = app.packageName,
         gamepadFocusable = gamepadFocusable,
         navHighlighted = navHighlighted,
         modifier = modifier.padding(WajihaSpacing.sm),

@@ -56,6 +56,7 @@ import com.wajiha.ui.secondary.nowPlayingOverlayPlacement
 import com.wajiha.ui.secondary.rememberOpenSession
 import com.wajiha.ui.settings.PlatformPickerScreen
 import com.wajiha.ui.settings.PlatformSettingsScreen
+import com.wajiha.ui.settings.PlatformSettingsTab
 import com.wajiha.ui.settings.SettingsScreen
 import com.wajiha.ui.settings.SettingsViewModel
 import com.wajiha.ui.system.QuickSettingsPanel
@@ -457,6 +458,12 @@ fun App() {
                         } else {
                             PlatformSettingsScreen(
                                 platformId = id,
+                                initialTab =
+                                    if (platformDetailFromPicker) {
+                                        PlatformSettingsTab.Folders
+                                    } else {
+                                        PlatformSettingsTab.General
+                                    },
                                 onBack = {
                                     viewModel.playBack()
                                     route =

@@ -37,9 +37,9 @@ val LocalInputMode = compositionLocalOf { InputMode.Touch }
 
 val LocalInputModeController = staticCompositionLocalOf<InputModeController?> { null }
 
-/** Controls whether focus chrome ignores touch input mode. */
+/** Classifies focus chrome surfaces; visibility is no longer suppressed by touch. */
 enum class GamepadFocusChromeScope {
-    /** Hide focus chrome while touch mode is active; restore on gamepad key. */
+    /** Standard focus chrome. */
     Default,
 
     /** Game grid tiles — always show nav/selection chrome. */
@@ -52,17 +52,12 @@ enum class GamepadFocusChromeScope {
 val LocalGamepadFocusChromeScope = compositionLocalOf { GamepadFocusChromeScope.Default }
 
 /**
- * True when gamepad focus rings and nav highlights should render for the current scope.
+ * True when focus rings and navigation highlights should render.
+ *
+ * Touch and gamepad share one logical selection, so touch must never make the
+ * active control appear uncontrolled. Input mode remains useful for scrolling,
+ * keyboard behavior, and hints, but no longer controls focus-ring visibility.
  * [GamepadActionBar] is separate: Auto + no connected pad hides the hint bar.
  */
 @Composable
-fun showGamepadChrome(highlighted: Boolean = true): Boolean {
-    if (!highlighted) return false
-    return when (LocalGamepadFocusChromeScope.current) {
-        GamepadFocusChromeScope.GameGrid,
-        GamepadFocusChromeScope.Menu,
-        -> true
-
-        GamepadFocusChromeScope.Default -> LocalInputMode.current == InputMode.Gamepad
-    }
-}
+fun showGamepadChrome(highlighted: Boolean = true): Boolean = highlighted

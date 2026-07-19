@@ -15,6 +15,7 @@ import com.wajiha.ui.scraper.ScraperScreen
 import com.wajiha.ui.scraper.ScraperViewModel
 import com.wajiha.ui.settings.PlatformPickerScreen
 import com.wajiha.ui.settings.PlatformSettingsScreen
+import com.wajiha.ui.settings.PlatformSettingsTab
 import com.wajiha.ui.settings.SettingsScreen
 import com.wajiha.ui.settings.SettingsViewModel
 import org.koin.compose.koinInject
@@ -126,6 +127,12 @@ fun LauncherSettingsFlow(
             } else {
                 PlatformSettingsScreen(
                     platformId = id,
+                    initialTab =
+                        if (platformDetailFromPicker) {
+                            PlatformSettingsTab.Folders
+                        } else {
+                            PlatformSettingsTab.General
+                        },
                     onBack = {
                         viewModel.playBack()
                         onRouteChange(

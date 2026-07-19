@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +56,8 @@ import com.wajiha.data.scraper.ScrapeRunPolicy
 import com.wajiha.data.scraper.missingGapTypes
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadLayers
+import com.wajiha.input.rememberFocusContext
+import com.wajiha.input.rememberedFocusContext
 import com.wajiha.input.requestContentFocus
 import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenStore
@@ -118,7 +121,13 @@ fun GameDetailScreen(
     val settings by settingsRepository.settings.collectAsState(initial = AppSettings())
 
     val sections = ActionPaneSection.entries
-    var selectedSectionIndex by remember { mutableIntStateOf(0) }
+    var selectedSectionIndex by remember(gameId) {
+        mutableIntStateOf(
+            (rememberedFocusContext("game_detail:$gameId:section") as? Int)
+                ?.coerceIn(0, sections.lastIndex)
+                ?: 0,
+        )
+    }
     val sectionFocus = remember { FocusRequester() }
     val feedback = LocalUiFeedback.current
 
@@ -126,10 +135,12 @@ fun GameDetailScreen(
         val newIndex = index.coerceIn(0, sections.lastIndex)
         feedback.tabSelect(selectedSectionIndex, newIndex)
         selectedSectionIndex = newIndex
+        rememberFocusContext("game_detail:$gameId:section", newIndex)
     }
 
     LaunchedEffect(selectedSectionIndex) {
         // Keep previous hero until the new section's focus publishes (avoids double flash).
+        withFrameNanos { }
         try {
             sectionFocus.requestFocus()
         } catch (_: Exception) {

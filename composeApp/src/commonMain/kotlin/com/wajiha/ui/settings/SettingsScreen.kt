@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -56,10 +57,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import com.wajiha.ui.components.FolderTabRow
-import com.wajiha.ui.components.drawFolderTopEdge
-import com.wajiha.ui.components.folderChromeBorder
-import com.wajiha.ui.components.folderChromeOutlineColor
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.db.RomFolderEntity
 import com.wajiha.data.prefs.AppSettings
@@ -67,7 +64,9 @@ import com.wajiha.data.prefs.FocusIndicatorPreferenceValues
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadLayers
-import com.wajiha.input.requestContentFocus
+import com.wajiha.input.rememberFocusContext
+import com.wajiha.input.rememberedFocusContext
+import com.wajiha.input.rememberedFocusTarget
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.PermissionStates
 import com.wajiha.platform.SystemControls
@@ -75,9 +74,13 @@ import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.SettingsHeroKind
 import com.wajiha.state.SettingsHeroOption
+import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.WajihaEmptyState
 import com.wajiha.ui.components.WajihaScreen
+import com.wajiha.ui.components.drawFolderTopEdge
+import com.wajiha.ui.components.folderChromeBorder
+import com.wajiha.ui.components.folderChromeOutlineColor
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadSafeTextField
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
@@ -86,6 +89,7 @@ import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
 import com.wajiha.ui.components.gamepad.LocalSettingSectionScroll
 import com.wajiha.ui.components.gamepad.MultiChoiceOption
 import com.wajiha.ui.components.gamepad.ProvideSettingsDensity
+import com.wajiha.ui.components.gamepad.SettingSectionFocusRestorer
 import com.wajiha.ui.components.gamepad.SettingType
 import com.wajiha.ui.components.gamepad.WajihaChoiceSetting
 import com.wajiha.ui.components.gamepad.WajihaMultiChoiceSetting
@@ -158,16 +162,31 @@ fun SettingsScreen(
     val feedback = LocalUiFeedback.current
 
     val sections = SettingsSection.entries
-    var selectedSectionIndex by remember { mutableIntStateOf(0) }
+    var selectedSectionIndex by remember {
+        mutableIntStateOf(
+            (rememberedFocusContext("settings:section") as? Int)
+                ?.coerceIn(0, sections.lastIndex)
+                ?: 0,
+        )
+    }
     var libraryFocusKind by remember { mutableStateOf(LibraryFocusKind.Chrome) }
     var perms by remember { mutableStateOf(PermissionStates()) }
     val sectionFocus = remember { FocusRequester() }
+    val sectionFocusRestorer =
+        remember(selectedSectionIndex) {
+            SettingSectionFocusRestorer("settings:section:$selectedSectionIndex")
+        }
+    val targetBeforeSectionFocus =
+        remember(selectedSectionIndex) {
+            rememberedFocusTarget("settings")
+        }
     val emulatorLabels by settingsViewModel.emulatorLabelsByPlatform.collectAsState()
 
     fun selectSection(index: Int) {
         val newIndex = index.coerceIn(0, sections.lastIndex)
         feedback.tabSelect(selectedSectionIndex, newIndex)
         selectedSectionIndex = newIndex
+        rememberFocusContext("settings:section", newIndex)
     }
 
     LaunchedEffect(selectedSectionIndex) {
@@ -177,10 +196,11 @@ fun SettingsScreen(
         }
         // Don't clear the hero here — that blanks the top screen before the new
         // section's focused row republishes (double flash). Focus swap overwrites.
-        try {
-            sectionFocus.requestFocus()
-        } catch (_: Exception) {
-        }
+        withFrameNanos { }
+        sectionFocusRestorer.restore(
+            targetId = targetBeforeSectionFocus,
+            fallback = sectionFocus,
+        )
     }
 
     DisposableEffect(Unit) {
@@ -217,7 +237,12 @@ fun SettingsScreen(
                 },
             gamepadOwner = gamepadOwner,
             onClaimGamepad = onClaimGamepad,
-            onOwnerGainedFocus = { sectionFocus.requestContentFocus() },
+            onOwnerGainedFocus = {
+                sectionFocusRestorer.restore(
+                    targetId = rememberedFocusTarget("settings"),
+                    fallback = sectionFocus,
+                )
+            },
             onPreviewKey = { event ->
                 if (GamepadLayers.stack.topLayer != "settings") return@WajihaScreen false
                 when {
@@ -314,6 +339,7 @@ fun SettingsScreen(
                     val selectedSection = sections[selectedSectionIndex]
                     WajihaSettingPanel(
                         folderPanel = true,
+                        focusRestorer = sectionFocusRestorer,
                         modifier =
                             Modifier
                                 .weight(1f)
@@ -613,9 +639,15 @@ private fun ScreensSectionContent(
             label = "Swap screen roles (grid on top, hero on bottom)",
             description = "Flip which display shows the game grid versus hero artwork.",
             checked = settings.swapScreenRoles,
-            onCheckedChange = settingsViewModel::setSwapScreenRoles,
+            onCheckedChange = { swapped ->
+                settingsViewModel.setSwapScreenRoles(swapped)
+                dualScreenStore.onScreenRolesSwapped(menuOnPrimary = swapped)
+            },
             defaultChecked = false,
-            onReset = { settingsViewModel.setSwapScreenRoles(false) },
+            onReset = {
+                settingsViewModel.setSwapScreenRoles(false)
+                dualScreenStore.onScreenRolesSwapped(menuOnPrimary = false)
+            },
             onFocusedChanged =
                 settingsToggleHeroFocus(
                     store = dualScreenStore,
@@ -1620,7 +1652,7 @@ private fun SettingsFocusColorRow(
         if (sectionScroll != null && header != null) {
             sectionScroll.scrollHeaderToTop(header)
         }
-        delay(50)
+        withFrameNanos { }
         val focusIndex =
             when {
                 isCustomSelected -> {

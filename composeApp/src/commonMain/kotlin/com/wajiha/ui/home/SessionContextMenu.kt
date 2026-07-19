@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -67,6 +68,8 @@ import androidx.compose.ui.zIndex
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadLayers
 import com.wajiha.input.GamepadTextEditRegistry
+import com.wajiha.input.LocalFocusContinuityController
+import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
 import com.wajiha.ui.theme.GamepadFocusChromeScope
@@ -395,14 +398,19 @@ fun SessionContextMenu(
 
     val closeRowFocus = remember(target.packageName) { FocusRequester() }
     val layerId = "session_context_${target.packageName}"
+    val focusContinuity = LocalFocusContinuityController.current
 
-    DisposableEffect(layerId) {
+    DisposableEffect(layerId, focusContinuity) {
         GamepadLayers.stack.push(layerId)
-        onDispose { GamepadLayers.stack.pop(layerId) }
+        focusContinuity?.pushLayer(layerId)
+        onDispose {
+            GamepadLayers.stack.pop(layerId)
+            focusContinuity?.popLayer(layerId)
+        }
     }
 
     LaunchedEffect(target.packageName) {
-        delay(40)
+        withFrameNanos { }
         try {
             closeRowFocus.requestFocus()
         } catch (_: Exception) {
@@ -422,50 +430,61 @@ fun SessionContextMenu(
 
     BackHandler { handleBack() }
 
-    BoxWithConstraints(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    if (GamepadKeys.isBack(event.type, event.key)) handleBack() else false
-                },
-    ) {
-        ContextMenuDimScrim(
-            tileCutoutRoot = anchorBounds,
-            onDismiss = onDismiss,
-        )
+    CompositionLocalProvider(LocalFocusLayerId provides layerId) {
+        BoxWithConstraints(
+            modifier =
+                modifier
+                    .fillMaxSize()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        if (GamepadKeys.isBack(event.type, event.key)) handleBack() else false
+                    },
+        ) {
+            ContextMenuDimScrim(
+                tileCutoutRoot = anchorBounds,
+                onDismiss = onDismiss,
+            )
 
-        val menuOffset =
-            remember(
-                anchorBounds,
-                constraints.maxWidth,
-                constraints.maxHeight,
-                menuSize,
-                lockedSide,
-            ) {
-                with(density) {
-                    val menuW =
-                        if (menuSize.width > 0) {
-                            menuSize.width.toFloat()
-                        } else {
-                            ContextMenuWidth.toPx()
-                        }
-                    val menuH =
-                        if (menuSize.height > 0) {
-                            menuSize.height.toFloat()
-                        } else {
-                            96.dp.toPx()
-                        }
-                    val gapPx = gap.toPx()
-                    val padPx = WajihaSpacing.sm.toPx()
-                    val cw = constraints.maxWidth.toFloat()
-                    val ch = constraints.maxHeight.toFloat()
+            val menuOffset =
+                remember(
+                    anchorBounds,
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                    menuSize,
+                    lockedSide,
+                ) {
+                    with(density) {
+                        val menuW =
+                            if (menuSize.width > 0) {
+                                menuSize.width.toFloat()
+                            } else {
+                                ContextMenuWidth.toPx()
+                            }
+                        val menuH =
+                            if (menuSize.height > 0) {
+                                menuSize.height.toFloat()
+                            } else {
+                                96.dp.toPx()
+                            }
+                        val gapPx = gap.toPx()
+                        val padPx = WajihaSpacing.sm.toPx()
+                        val cw = constraints.maxWidth.toFloat()
+                        val ch = constraints.maxHeight.toFloat()
 
-                    if (anchorBounds != null) {
-                        val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
-                        val side =
-                            lockedSide ?: chooseMenuSide(
+                        if (anchorBounds != null) {
+                            val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
+                            val side =
+                                lockedSide ?: chooseMenuSide(
+                                    anchor = anchor,
+                                    menuW = menuW,
+                                    menuH = menuH,
+                                    containerW = cw,
+                                    containerH = ch,
+                                    gapPx = gapPx,
+                                    padPx = padPx,
+                                )
+                            offsetForLockedSide(
+                                side = side,
                                 anchor = anchor,
                                 menuW = menuW,
                                 menuH = menuH,
@@ -474,95 +493,86 @@ fun SessionContextMenu(
                                 gapPx = gapPx,
                                 padPx = padPx,
                             )
-                        offsetForLockedSide(
-                            side = side,
-                            anchor = anchor,
-                            menuW = menuW,
-                            menuH = menuH,
-                            containerW = cw,
-                            containerH = ch,
-                            gapPx = gapPx,
-                            padPx = padPx,
-                        )
-                    } else {
-                        IntOffset(
-                            (cw - menuW - padPx).roundToInt().coerceAtLeast(padPx.roundToInt()),
-                            padPx.roundToInt(),
-                        )
+                        } else {
+                            IntOffset(
+                                (cw - menuW - padPx).roundToInt().coerceAtLeast(padPx.roundToInt()),
+                                padPx.roundToInt(),
+                            )
+                        }
+                    }
+                }
+
+            LaunchedEffect(menuSize, anchorBounds, constraints.maxWidth, constraints.maxHeight) {
+                if (lockedSide == null && menuSize != IntSize.Zero && anchorBounds != null) {
+                    with(density) {
+                        val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
+                        lockedSide =
+                            chooseMenuSide(
+                                anchor = anchor,
+                                menuW = menuSize.width.toFloat(),
+                                menuH = menuSize.height.toFloat(),
+                                containerW = constraints.maxWidth.toFloat(),
+                                containerH = constraints.maxHeight.toFloat(),
+                                gapPx = gap.toPx(),
+                                padPx = WajihaSpacing.sm.toPx(),
+                            )
                     }
                 }
             }
 
-        LaunchedEffect(menuSize, anchorBounds, constraints.maxWidth, constraints.maxHeight) {
-            if (lockedSide == null && menuSize != IntSize.Zero && anchorBounds != null) {
-                with(density) {
-                    val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
-                    lockedSide =
-                        chooseMenuSide(
-                            anchor = anchor,
-                            menuW = menuSize.width.toFloat(),
-                            menuH = menuSize.height.toFloat(),
-                            containerW = constraints.maxWidth.toFloat(),
-                            containerH = constraints.maxHeight.toFloat(),
-                            gapPx = gap.toPx(),
-                            padPx = WajihaSpacing.sm.toPx(),
-                        )
-                }
-            }
-        }
+            val menuPlaced = menuSize != IntSize.Zero
 
-        val menuPlaced = menuSize != IntSize.Zero
-
-        Box(
-            modifier =
-                Modifier
-                    .zIndex(1f)
-                    .alpha(if (menuPlaced) 1f else 0f)
-                    .offset { menuOffset },
-        ) {
-            Column(
+            Box(
                 modifier =
                     Modifier
-                        .onSizeChanged { size ->
-                            if (size != IntSize.Zero) menuSize = size
-                        }.width(ContextMenuWidth),
+                        .zIndex(1f)
+                        .alpha(if (menuPlaced) 1f else 0f)
+                        .offset { menuOffset },
             ) {
-                Surface(
-                    shape = WajihaShapes.chip,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    tonalElevation = 3.dp,
-                    shadowElevation = 3.dp,
+                Column(
+                    modifier =
+                        Modifier
+                            .onSizeChanged { size ->
+                                if (size != IntSize.Zero) menuSize = size
+                            }.width(ContextMenuWidth),
                 ) {
-                    ContextMenuTitleText(
-                        text = target.sessionLabel,
-                        modifier =
-                            Modifier.padding(
-                                horizontal = WajihaSpacing.sm,
-                                vertical = WajihaSpacing.xs,
-                            ),
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(ContextMenuTitleGap))
-
-                Surface(
-                    shape = WajihaShapes.chip,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    tonalElevation = 3.dp,
-                    shadowElevation = 3.dp,
-                ) {
-                    CompositionLocalProvider(
-                        LocalGamepadFocusChromeScope provides GamepadFocusChromeScope.Menu,
+                    Surface(
+                        shape = WajihaShapes.chip,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 3.dp,
+                        shadowElevation = 3.dp,
                     ) {
-                        Column(modifier = Modifier.padding(vertical = WajihaSpacing.xs)) {
-                            SessionContextMenuRow(
-                                label = "Close",
-                                focusRequester = closeRowFocus,
-                                onClick = {
-                                    onCloseSession(target.packageName)
-                                    onDismiss()
-                                },
-                            )
+                        ContextMenuTitleText(
+                            text = target.sessionLabel,
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = WajihaSpacing.sm,
+                                    vertical = WajihaSpacing.xs,
+                                ),
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(ContextMenuTitleGap))
+
+                    Surface(
+                        shape = WajihaShapes.chip,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 3.dp,
+                        shadowElevation = 3.dp,
+                    ) {
+                        CompositionLocalProvider(
+                            LocalGamepadFocusChromeScope provides GamepadFocusChromeScope.Menu,
+                        ) {
+                            Column(modifier = Modifier.padding(vertical = WajihaSpacing.xs)) {
+                                SessionContextMenuRow(
+                                    label = "Close",
+                                    focusRequester = closeRowFocus,
+                                    onClick = {
+                                        onCloseSession(target.packageName)
+                                        onDismiss()
+                                    },
+                                )
+                            }
                         }
                     }
                 }

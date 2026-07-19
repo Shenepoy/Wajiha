@@ -13,6 +13,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -27,6 +28,8 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Dp
+import com.wajiha.input.FocusAnchor
+import com.wajiha.input.FocusContinuityController
 import com.wajiha.ui.theme.FocusBorderStyle
 
 /**
@@ -35,22 +38,51 @@ import com.wajiha.ui.theme.FocusBorderStyle
  */
 @Stable
 class FocusRingOverlayState {
-    var entry by mutableStateOf<FocusRingOverlayEntry?>(null)
-        private set
+    constructor(controller: FocusContinuityController? = null) {
+        this.controller = controller
+    }
+
+    private var controller: FocusContinuityController? = null
+    private val entries = mutableStateMapOf<FocusAnchor, FocusRingOverlayEntry>()
+
+    private var retainedEntry by mutableStateOf<FocusRingOverlayEntry?>(null)
+
+    val entry: FocusRingOverlayEntry?
+        get() = controller?.activeAnchor?.let { entries[it] } ?: retainedEntry
 
     fun publish(entry: FocusRingOverlayEntry) {
-        this.entry = entry
+        val anchor = entry.anchor
+        if (anchor != null) {
+            entries[anchor] = entry
+        }
+        val accepted =
+            anchor == null ||
+                controller?.let { continuity ->
+                    continuity.offer(anchor) && continuity.isActive(anchor)
+                } != false
+        if (accepted) {
+            retainedEntry = entry
+        }
     }
 
     fun clear(token: Any) {
-        if (this.entry?.token === token) {
-            this.entry = null
-        }
+        entries.entries.removeAll { (_, entry) -> entry.token === token }
+        // Keep the last valid geometry until its successor publishes. Clearing
+        // here caused one-frame ring loss during lazy-item and modal handoffs.
+    }
+
+    fun register(anchor: FocusAnchor) {
+        controller?.register(anchor)
+    }
+
+    fun unregister(anchor: FocusAnchor) {
+        controller?.unregister(anchor)
     }
 }
 
 data class FocusRingOverlayEntry(
     val token: Any,
+    val anchor: FocusAnchor? = null,
     val boundsInRoot: Rect,
     val color: Color,
     val thickness: Dp,
@@ -61,7 +93,8 @@ data class FocusRingOverlayEntry(
 val LocalFocusRingOverlay = compositionLocalOf<FocusRingOverlayState?> { null }
 
 @Composable
-fun rememberFocusRingOverlayState(): FocusRingOverlayState = remember { FocusRingOverlayState() }
+fun rememberFocusRingOverlayState(controller: FocusContinuityController? = null): FocusRingOverlayState =
+    remember(controller) { FocusRingOverlayState(controller) }
 
 /**
  * Full-screen host: content first, then Outside focus chrome drawn after children so the ring
@@ -124,6 +157,7 @@ fun FocusRingOverlayHost(
 fun FocusRingOverlayRegistrationEffect(
     state: FocusRingOverlayState,
     token: Any,
+    anchor: FocusAnchor? = null,
     active: Boolean,
     boundsInRoot: Rect?,
     color: Color,
@@ -131,14 +165,23 @@ fun FocusRingOverlayRegistrationEffect(
     borderStyle: FocusBorderStyle,
     shape: Shape,
 ) {
-    DisposableEffect(token) {
-        onDispose { state.clear(token) }
+    DisposableEffect(state, token, anchor, active) {
+        if (active && anchor != null) {
+            state.register(anchor)
+        }
+        onDispose {
+            if (active && anchor != null) {
+                state.unregister(anchor)
+            }
+            state.clear(token)
+        }
     }
     SideEffect {
         if (active && boundsInRoot != null && !boundsInRoot.isEmpty) {
             state.publish(
                 FocusRingOverlayEntry(
                     token = token,
+                    anchor = anchor,
                     boundsInRoot = boundsInRoot,
                     color = color,
                     thickness = thickness,

@@ -134,7 +134,7 @@ fun ScraperScreen(
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onOwnerGainedFocus = {
-            navController.focusState.focusedIndex = 0
+            navController.focusState.clampIndex()
         },
     ) {
         GamepadNavHost(controller = navController) {

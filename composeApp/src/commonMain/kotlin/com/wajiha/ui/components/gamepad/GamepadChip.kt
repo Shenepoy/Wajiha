@@ -21,7 +21,10 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import com.wajiha.input.FocusClaimSource
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.LocalFocusContinuityController
+import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.UiSound
@@ -36,6 +39,7 @@ fun GamepadChip(
     modifier: Modifier = Modifier,
     gamepadFocusable: Boolean = true,
     focusRequester: FocusRequester? = null,
+    focusId: Any? = null,
     sound: UiSound? = null,
     soundWhenUnselected: Boolean = false,
 ) {
@@ -43,6 +47,15 @@ fun GamepadChip(
     val useCustomNav = LocalGamepadNavController.current != null
     val feedback = LocalUiFeedback.current
     val interactionSource = rememberPressInteractionSource()
+    val localFocusRequester = remember { FocusRequester() }
+    val resolvedFocusRequester = focusRequester ?: localFocusRequester
+    val continuity = LocalFocusContinuityController.current
+    val layerId = LocalFocusLayerId.current
+    val resolvedFocusId = focusId ?: label
+    val anchor =
+        remember(continuity, layerId, resolvedFocusId) {
+            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(resolvedFocusId, layerId)
+        }
 
     fun performClick() {
         val shouldPlay =
@@ -74,17 +87,22 @@ fun GamepadChip(
         interactionSource = interactionSource,
         modifier =
             modifier
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .focusRequester(resolvedFocusRequester)
                 .clip(WajihaShapes.chip)
                 .wajihaPressedFeedback(interactionSource, WajihaShapes.chip)
                 .wajihaFocusIndicator(
                     highlighted = !useCustomNav && focused,
                     shape = WajihaShapes.chip,
+                    focusAnchor = anchor,
                 ).then(
                     if (!useCustomNav) {
                         Modifier
-                            .onFocusChanged { focused = it.isFocused }
-                            .wajihaGamepadFocus(gamepadFocusable)
+                            .onFocusChanged {
+                                focused = it.isFocused
+                                if (it.isFocused && anchor != null) {
+                                    continuity?.claim(anchor, FocusClaimSource.Compose)
+                                }
+                            }.wajihaGamepadFocus(gamepadFocusable)
                             .onPreviewKeyEvent { event ->
                                 if (GamepadKeys.isConfirm(event.type, event.key)) {
                                     performClick()
@@ -97,7 +115,16 @@ fun GamepadChip(
                         Modifier
                     },
                 ).pointerInput(Unit) {
-                    detectTapGestures { performClick() }
+                    detectTapGestures {
+                        if (anchor != null) {
+                            continuity?.claim(anchor, FocusClaimSource.Touch)
+                        }
+                        try {
+                            resolvedFocusRequester.requestFocus()
+                        } catch (_: Exception) {
+                        }
+                        performClick()
+                    }
                 },
         colors =
             FilterChipDefaults.filterChipColors(

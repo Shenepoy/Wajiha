@@ -2,6 +2,7 @@ package com.wajiha.input
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -25,10 +26,15 @@ fun GamepadOverlayLayer(
 ) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusContinuity = LocalFocusContinuityController.current
 
-    DisposableEffect(layerId) {
+    DisposableEffect(layerId, focusContinuity) {
         GamepadLayers.stack.push(layerId)
-        onDispose { GamepadLayers.stack.pop(layerId) }
+        focusContinuity?.pushLayer(layerId)
+        onDispose {
+            GamepadLayers.stack.pop(layerId)
+            focusContinuity?.popLayer(layerId)
+        }
     }
 
     BackHandler(onBack = onDismiss)
@@ -62,6 +68,8 @@ fun GamepadOverlayLayer(
                     }
                 },
     ) {
-        content()
+        CompositionLocalProvider(LocalFocusLayerId provides layerId) {
+            content()
+        }
     }
 }

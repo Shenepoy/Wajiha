@@ -67,6 +67,7 @@ fun SessionGridTile(
         onLongPress = onLongPress,
         touchSwitchMode = true,
         focusRequester = focusRequester,
+        focusId = "session:${session.packageName}",
         gamepadFocusable = gamepadFocusable,
         navHighlighted = navHighlighted || (isFeatured && selected),
         modifier =

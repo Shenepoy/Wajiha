@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -61,13 +62,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.wajiha.input.FocusClaimSource
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.LocalFocusContinuityController
+import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
-import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -120,6 +123,7 @@ fun GamepadSettingRow(
     labelMeta: String? = null,
     type: SettingType = SettingType.Toggle,
     focusRequester: FocusRequester? = null,
+    focusId: Any? = null,
     onReset: (() -> Unit)? = null,
     isAtDefault: Boolean = false,
     overridden: Boolean = false,
@@ -154,6 +158,7 @@ fun GamepadSettingRow(
             selected = selected,
             onSelect = onSelect,
             focusRequester = focusRequester,
+            focusId = focusId ?: label,
             onReset = onReset,
             isAtDefault = isAtDefault,
             overridden = overridden,
@@ -172,6 +177,23 @@ fun GamepadSettingRow(
     val stackedChoices = type == SettingType.BinaryChoice && options.size > 3
     val localFocusRequester = remember { FocusRequester() }
     val resolvedFocusRequester = focusRequester ?: localFocusRequester
+    val continuity = LocalFocusContinuityController.current
+    val layerId = LocalFocusLayerId.current
+    val resolvedFocusId = focusId ?: label
+    val anchor =
+        remember(continuity, layerId, resolvedFocusId) {
+            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(resolvedFocusId, layerId)
+        }
+
+    fun claimTouchFocus() {
+        if (anchor != null) {
+            continuity?.claim(anchor, FocusClaimSource.Touch)
+        }
+        try {
+            resolvedFocusRequester.requestFocus()
+        } catch (_: Exception) {
+        }
+    }
 
     fun adjustNumber(delta: Int) {
         val changer = onNumberChange ?: return
@@ -230,14 +252,17 @@ fun GamepadSettingRow(
     val interactionModifier =
         Modifier
             .clip(WajihaShapes.focus)
-            .wajihaFocusIndicator(highlighted = highlight)
+            .wajihaFocusIndicator(highlighted = highlight, focusAnchor = anchor)
             .focusRequester(resolvedFocusRequester)
-            .reportSectionVisibleFocus(resolvedFocusRequester)
+            .reportSectionVisibleFocus(resolvedFocusRequester, resolvedFocusId)
             .then(
                 if (!useCustomNav) {
                     Modifier
                         .onFocusChanged {
                             focused = it.isFocused
+                            if (it.isFocused && anchor != null) {
+                                continuity?.claim(anchor, FocusClaimSource.Compose)
+                            }
                             onFocusedChanged?.invoke(it.isFocused)
                         }.wajihaGamepadFocus()
                         .onPreviewKeyEvent { event ->
@@ -282,10 +307,7 @@ fun GamepadSettingRow(
                         // Dual-action: body tap focuses the row (hints/X/A) but does not activate.
                         Modifier.pointerInput(Unit) {
                             detectTapGestures {
-                                try {
-                                    resolvedFocusRequester.requestFocus()
-                                } catch (_: Exception) {
-                                }
+                                claimTouchFocus()
                             }
                         }
                     }
@@ -302,7 +324,10 @@ fun GamepadSettingRow(
                             onActivate,
                             onNumberChange,
                         ) {
-                            detectTapGestures { activate() }
+                            detectTapGestures {
+                                claimTouchFocus()
+                                activate()
+                            }
                         }
                     }
                 },
@@ -427,6 +452,7 @@ private fun MultiChoiceSettingRow(
     selected: String,
     onSelect: ((String) -> Unit)?,
     focusRequester: FocusRequester?,
+    focusId: Any,
     onReset: (() -> Unit)?,
     isAtDefault: Boolean,
     overridden: Boolean,
@@ -442,6 +468,12 @@ private fun MultiChoiceSettingRow(
     val feedback = LocalUiFeedback.current
     val selectedOption = options.firstOrNull { it.value == selected }
     val selectedLabel = selectedOption?.label.orEmpty()
+    val continuity = LocalFocusContinuityController.current
+    val layerId = LocalFocusLayerId.current
+    val headerAnchor =
+        remember(continuity, layerId, focusId) {
+            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(focusId, layerId)
+        }
 
     val headerFocusRequester = focusRequester ?: remember { FocusRequester() }
     val sectionScroll = LocalSettingSectionScroll.current
@@ -475,7 +507,7 @@ private fun MultiChoiceSettingRow(
         if (sectionScroll != null && header != null) {
             sectionScroll.scrollHeaderToTop(header)
         }
-        delay(50)
+        withFrameNanos { }
         val selectedIndex =
             options
                 .indexOfFirst { it.value == selected && it.enabled }
@@ -503,14 +535,19 @@ private fun MultiChoiceSettingRow(
                     .fillMaxWidth()
                     .onGloballyPositioned { headerCoordinates = it }
                     .clip(WajihaShapes.focus)
-                    .wajihaFocusIndicator(highlighted = headerHighlight)
-                    .focusRequester(headerFocusRequester)
-                    .reportSectionVisibleFocus(headerFocusRequester)
+                    .wajihaFocusIndicator(
+                        highlighted = headerHighlight,
+                        focusAnchor = headerAnchor,
+                    ).focusRequester(headerFocusRequester)
+                    .reportSectionVisibleFocus(headerFocusRequester, focusId)
                     .then(
                         if (!useCustomNav) {
                             Modifier
                                 .onFocusChanged {
                                     headerFocused = it.isFocused
+                                    if (it.isFocused && headerAnchor != null) {
+                                        continuity?.claim(headerAnchor, FocusClaimSource.Compose)
+                                    }
                                     onFocusedChanged?.invoke(it.isFocused)
                                 }.wajihaGamepadFocus()
                                 .onPreviewKeyEvent { event ->
@@ -537,6 +574,13 @@ private fun MultiChoiceSettingRow(
                         },
                     ).pointerInput(expanded) {
                         detectTapGestures {
+                            if (headerAnchor != null) {
+                                continuity?.claim(headerAnchor, FocusClaimSource.Touch)
+                            }
+                            try {
+                                headerFocusRequester.requestFocus()
+                            } catch (_: Exception) {
+                            }
                             feedback.confirm()
                             if (expanded) collapse() else expand()
                         }
@@ -601,6 +645,7 @@ private fun MultiChoiceSettingRow(
                 onReset = onReset,
                 useCustomNav = useCustomNav,
                 listFocusRequesters = listFocusRequesters,
+                focusId = focusId,
                 onSelect = ::selectOption,
             )
         }
@@ -615,6 +660,7 @@ private fun MultiChoicePickerPanel(
     onReset: (() -> Unit)?,
     useCustomNav: Boolean,
     listFocusRequesters: List<FocusRequester>,
+    focusId: Any,
     onSelect: (String) -> Unit,
 ) {
     val feedback = LocalUiFeedback.current
@@ -647,6 +693,7 @@ private fun MultiChoicePickerPanel(
                     selected = option.value == selected,
                     focusRequester = listFocusRequesters[index],
                     useCustomNav = useCustomNav,
+                    focusId = "$focusId:option:${option.value}",
                     onSelect = { onSelect(option.value) },
                 )
             }
@@ -660,11 +707,18 @@ private fun MultiChoiceListItem(
     selected: Boolean,
     focusRequester: FocusRequester,
     useCustomNav: Boolean,
+    focusId: Any,
     onSelect: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val highlight = !useCustomNav && focused && option.enabled
     val disabledAlpha = 0.45f
+    val continuity = LocalFocusContinuityController.current
+    val layerId = LocalFocusLayerId.current
+    val anchor =
+        remember(continuity, layerId, focusId) {
+            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(focusId, layerId)
+        }
     val labelColor =
         when {
             !option.enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
@@ -702,13 +756,20 @@ private fun MultiChoiceListItem(
                             Color.Transparent
                         }
                     },
-                ).wajihaFocusIndicator(highlighted = highlight, shape = RectangleShape)
-                .focusRequester(focusRequester)
+                ).wajihaFocusIndicator(
+                    highlighted = highlight,
+                    shape = RectangleShape,
+                    focusAnchor = anchor,
+                ).focusRequester(focusRequester)
                 .then(
                     if (!useCustomNav && option.enabled) {
                         Modifier
-                            .onFocusChanged { focused = it.isFocused }
-                            .wajihaGamepadFocus()
+                            .onFocusChanged {
+                                focused = it.isFocused
+                                if (it.isFocused && anchor != null) {
+                                    continuity?.claim(anchor, FocusClaimSource.Compose)
+                                }
+                            }.wajihaGamepadFocus()
                             .onPreviewKeyEvent { event ->
                                 if (GamepadKeys.isConfirm(event.type, event.key)) {
                                     onSelect()
@@ -723,7 +784,16 @@ private fun MultiChoiceListItem(
                 ).then(
                     if (option.enabled) {
                         Modifier.pointerInput(option.value) {
-                            detectTapGestures { onSelect() }
+                            detectTapGestures {
+                                if (anchor != null) {
+                                    continuity?.claim(anchor, FocusClaimSource.Touch)
+                                }
+                                try {
+                                    focusRequester.requestFocus()
+                                } catch (_: Exception) {
+                                }
+                                onSelect()
+                            }
                         }
                     } else {
                         Modifier

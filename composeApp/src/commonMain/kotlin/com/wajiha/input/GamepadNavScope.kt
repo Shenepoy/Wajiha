@@ -42,7 +42,6 @@ class GamepadNavCoordinator {
     fun moveToNextZone(): Boolean {
         if (activeZoneIndex < maxZoneIndex) {
             activeZoneIndex++
-            zones[activeZoneIndex]?.focusState?.let { it.focusedIndex = 0 }
             updateActive()
             return true
         }
@@ -52,7 +51,6 @@ class GamepadNavCoordinator {
     fun moveToPrevZone(): Boolean {
         if (activeZoneIndex > 0) {
             activeZoneIndex--
-            zones[activeZoneIndex]?.focusState?.let { it.focusedIndex = 0 }
             updateActive()
             return true
         }

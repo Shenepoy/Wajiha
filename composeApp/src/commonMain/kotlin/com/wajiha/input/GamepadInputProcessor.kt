@@ -5,20 +5,20 @@ import androidx.compose.ui.input.key.KeyEventType
 import kotlin.time.Clock
 
 /**
- * Throttles rapid key repeats and applies a short grace period after layer push.
+ * Throttles rapid key repeats without swallowing the first input on a new layer.
  */
 class GamepadInputProcessor(
     private val repeatIntervalMs: Long = 120L,
     /** D-pad hold-to-scroll cadence (higher = slower focus moves). */
     private val dpadRepeatIntervalMs: Long = 130L, // 120L
-    private val gracePeriodMs: Long = 250L,
 ) {
     private var lastKey: Key? = null
     private var lastEventTimeMs: Long = 0L
-    private var layerPushedAtMs: Long = 0L
 
     fun onLayerPushed() {
-        layerPushedAtMs = Clock.System.now().toEpochMilliseconds()
+        // A new owner/layer starts a fresh repeat sequence. Time-based grace
+        // made the UI look dead when the first intentional key arrived quickly.
+        reset()
     }
 
     fun shouldConsume(
@@ -27,7 +27,6 @@ class GamepadInputProcessor(
     ): Boolean {
         if (key == Key.ButtonX || isShoulderTabKey(key)) return false
         val now = Clock.System.now().toEpochMilliseconds()
-        if (now - layerPushedAtMs < gracePeriodMs) return true
         if (type != KeyEventType.KeyDown) return false
         val interval = if (key in dpadKeys) dpadRepeatIntervalMs else repeatIntervalMs
         if (key == lastKey && now - lastEventTimeMs < interval) {

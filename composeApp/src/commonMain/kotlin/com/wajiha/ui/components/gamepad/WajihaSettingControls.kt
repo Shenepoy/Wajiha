@@ -3,6 +3,7 @@ package com.wajiha.ui.components.gamepad
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -40,11 +41,45 @@ fun WajihaSettingDivider() {
     )
 }
 
+/** Standard single-action settings row with a touch-friendly trailing button. */
+@Composable
+fun WajihaActionSetting(
+    label: String,
+    actionLabel: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    description: String? = null,
+    labelMeta: String? = null,
+    focusRequester: FocusRequester? = null,
+    onFocusedChanged: ((Boolean) -> Unit)? = null,
+) {
+    GamepadSettingRow(
+        label = label,
+        description = description,
+        labelMeta = labelMeta,
+        type = SettingType.Action,
+        onActivate = onClick,
+        focusRequester = focusRequester,
+        onFocusedChanged = onFocusedChanged,
+        modifier = modifier,
+        content = {
+            GamepadButton(
+                text = actionLabel,
+                onClick = onClick,
+                outlined = true,
+                gamepadFocusable = false,
+            )
+        },
+    )
+}
+
 @Composable
 fun WajihaSettingPanel(
     modifier: Modifier = Modifier,
     folderPanel: Boolean = false,
-    sectionContent: @Composable () -> Unit,
+    scrollable: Boolean = true,
+    focusRestorer: SettingSectionFocusRestorer? = null,
+    sectionContent: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = if (folderPanel) WajihaShapes.folderPanel else WajihaShapes.card
     val chromeBorder = folderChromeBorder()
@@ -77,11 +112,21 @@ fun WajihaSettingPanel(
                         top = if (folderPanel) WajihaSpacing.md else WajihaSpacing.sm,
                     ),
         ) {
-            SettingSectionScrollColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
-            ) {
-                sectionContent()
+            if (scrollable) {
+                SettingSectionScrollColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
+                    focusRestorer = focusRestorer,
+                ) {
+                    sectionContent()
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
+                ) {
+                    sectionContent()
+                }
             }
         }
     }

@@ -4,10 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
-import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
 
 /**
@@ -30,8 +30,9 @@ fun RememberGamepadOwnerFocus(
         if (currentOwner != owner) return@LaunchedEffect
         // Skip the initial epoch=0 composition unless we already own keys —
         // still restore once so first paint lands on content.
-        // Let cross-activity key forward settle before requesting focus.
-        delay(40)
+        // Wait for the owner composition to attach; logical focus is restored
+        // immediately and Compose focus follows on the next frame.
+        withFrameNanos { }
         onGained()
     }
 }

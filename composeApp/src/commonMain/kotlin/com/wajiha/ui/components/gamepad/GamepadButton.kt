@@ -19,7 +19,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import com.wajiha.input.FocusClaimSource
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.LocalFocusContinuityController
+import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.UiSound
@@ -36,6 +39,7 @@ fun GamepadButton(
     outlined: Boolean = false,
     gamepadFocusable: Boolean = true,
     focusRequester: FocusRequester? = null,
+    focusId: Any? = null,
     onFocusedChanged: ((Boolean) -> Unit)? = null,
     sound: UiSound? = UiSound.Open,
 ) {
@@ -45,6 +49,13 @@ fun GamepadButton(
     val interactionSource = rememberPressInteractionSource()
     val localFocusRequester = remember { FocusRequester() }
     val resolvedFocusRequester = focusRequester ?: localFocusRequester
+    val continuity = LocalFocusContinuityController.current
+    val layerId = LocalFocusLayerId.current
+    val resolvedFocusId = focusId ?: text
+    val anchor =
+        remember(continuity, layerId, resolvedFocusId) {
+            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(resolvedFocusId, layerId)
+        }
 
     fun performClick() {
         if (!enabled) return
@@ -65,6 +76,7 @@ fun GamepadButton(
             .wajihaFocusIndicator(
                 highlighted = !useCustomNav && focused,
                 shape = WajihaShapes.button,
+                focusAnchor = anchor,
             ).defaultMinSize(minHeight = LocalSettingRowMinHeight.current)
             .focusRequester(resolvedFocusRequester)
             .then(
@@ -78,6 +90,9 @@ fun GamepadButton(
                     Modifier
                         .onFocusChanged {
                             focused = it.isFocused
+                            if (it.isFocused && anchor != null) {
+                                continuity?.claim(anchor, FocusClaimSource.Compose)
+                            }
                             onFocusedChanged?.invoke(it.isFocused)
                         }.wajihaGamepadFocus(enabled && gamepadFocusable)
                 } else {
@@ -97,7 +112,18 @@ fun GamepadButton(
                     Modifier
                 },
             ).pointerInput(enabled) {
-                if (enabled) detectTapGestures { performClick() }
+                if (enabled) {
+                    detectTapGestures {
+                        if (anchor != null) {
+                            continuity?.claim(anchor, FocusClaimSource.Touch)
+                        }
+                        try {
+                            resolvedFocusRequester.requestFocus()
+                        } catch (_: Exception) {
+                        }
+                        performClick()
+                    }
+                }
             }
 
     if (outlined) {

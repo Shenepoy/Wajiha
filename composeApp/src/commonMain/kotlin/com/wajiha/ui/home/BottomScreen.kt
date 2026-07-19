@@ -84,6 +84,7 @@ import coil3.compose.AsyncImage
 import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.rememberedFocusTarget
 import com.wajiha.input.requestContentFocus
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
@@ -91,6 +92,7 @@ import com.wajiha.state.GamepadOwner
 import com.wajiha.state.NowPlayingState
 import com.wajiha.ui.components.WajihaEmptyState
 import com.wajiha.ui.components.WajihaScreen
+import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.GamepadHintGlyph
 import com.wajiha.ui.components.gamepad.GamepadTile
@@ -150,15 +152,21 @@ fun BottomScreen(
     showSessionGrid: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
+    val rememberedGameId = rememberedFocusTarget("home_grid") as? Long
     var selectedGameId by remember {
         mutableStateOf(
             state.tiles
-                .firstOrNull()
+                .firstOrNull { it.game.id == rememberedGameId }
                 ?.game
-                ?.id,
+                ?.id
+                ?: state.tiles
+                    .firstOrNull()
+                    ?.game
+                    ?.id,
         )
     }
     var selectedSessionPackage by remember { mutableStateOf<String?>(null) }
+    var previousGameIds by remember { mutableStateOf(state.tiles.map { it.game.id }) }
     var contextMenuTarget by remember { mutableStateOf<GameContextTarget?>(null) }
     var contextMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
     var sessionContextMenuTarget by remember { mutableStateOf<SessionContextTarget?>(null) }
@@ -171,11 +179,25 @@ fun BottomScreen(
     var restoreFocusSessionPackage by remember { mutableStateOf<String?>(null) }
     val tileFocusRequesters = remember { mutableStateMapOf<Long, FocusRequester>() }
     val sessionFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
+    val emptyActionFocus = remember { FocusRequester() }
     val menuOpen = contextMenuTarget != null || sessionContextMenuTarget != null
     val sessionFocused = selectedSessionPackage != null
     val gridSessions = if (showSessionGrid) sessions else emptyList()
     val focusManager = LocalFocusManager.current
-    val libraryGridState = rememberLazyGridState()
+    val initiallySelectedGameIndex = state.tiles.indexOfFirst { it.game.id == selectedGameId }
+    val initialLibraryIndex =
+        if (initiallySelectedGameIndex >= 0) {
+            val prefix = if (gridSessions.isEmpty()) 0 else gridSessions.size + 1
+            prefix + initiallySelectedGameIndex
+        } else {
+            0
+        }
+    // Start directly on the remembered semantic target. Without this, a role
+    // swap paints index 0 for one frame before owner restoration scrolls here.
+    val libraryGridState =
+        rememberLazyGridState(
+            initialFirstVisibleItemIndex = initialLibraryIndex,
+        )
     var pendingLibraryViewportSnap by remember { mutableStateOf(false) }
     val pendingLibraryViewportSnapLatest = rememberUpdatedState(pendingLibraryViewportSnap)
     // True while a finger is down on the library grid — used to arm post-touch D-pad snap
@@ -417,6 +439,16 @@ fun BottomScreen(
         return true
     }
 
+    LaunchedEffect(libraryGridState, state.tiles) {
+        snapshotFlow { libraryGridState.isScrollInProgress }
+            .collect { scrolling ->
+                if (!scrolling && !libraryPointerDown.get() && pendingLibraryViewportSnap) {
+                    pendingLibraryViewportSnap = false
+                    snapLibraryFocusToVisibleViewport()
+                }
+            }
+    }
+
     /**
      * D-pad for library tiles from [selectedGameId] (column-major, [gridRows]).
      * Games sit after the session divider in a clean grid, so index math matches
@@ -541,6 +573,19 @@ fun BottomScreen(
             if (!menuOpen) {
                 val sessionPkg = selectedSessionPackage
                 if (sessionPkg != null) {
+                    val sessionIndex = gridSessions.indexOfFirst { it.packageName == sessionPkg }
+                    val sessionIsVisible =
+                        libraryGridState.layoutInfo.visibleItemsInfo.any { info ->
+                            info.key == "session-$sessionPkg" &&
+                                info.hasCenterInViewport(
+                                    libraryGridState.layoutInfo,
+                                    horizontalScroll = true,
+                                )
+                        }
+                    if (sessionIndex >= 0 && !sessionIsVisible) {
+                        libraryGridState.scrollToItem(sessionIndex)
+                        withFrameNanos { }
+                    }
                     sessionFocusRequesters[sessionPkg]?.requestContentFocus()
                 } else {
                     val gameId =
@@ -549,6 +594,22 @@ fun BottomScreen(
                             ?.game
                             ?.id
                     if (gameId != null) {
+                        val gameIsVisible =
+                            libraryGridState.layoutInfo.visibleItemsInfo.any { info ->
+                                info.key == gameId &&
+                                    info.hasCenterInViewport(
+                                        libraryGridState.layoutInfo,
+                                        horizontalScroll = true,
+                                    )
+                            }
+                        if (!gameIsVisible) {
+                            libraryLazyIndexForGame(gameId)?.let { lazyIndex ->
+                                // Fallback for mutations or an already-mounted grid
+                                // whose viewport predates the role swap.
+                                libraryGridState.scrollToItem(lazyIndex)
+                                withFrameNanos { }
+                            }
+                        }
                         tileFocusRequesters[gameId]?.requestContentFocus()
                     }
                 }
@@ -677,26 +738,30 @@ fun BottomScreen(
                         subtitle = "Add a platform, then point Wajiha at a ROM folder",
                         modifier = Modifier.fillMaxSize(),
                         action = {
-                            if (onAddGames != null) {
-                                TextButton(
-                                    onClick = onAddGames,
-                                    modifier =
-                                        Modifier
-                                            .padding(top = WajihaSpacing.sm)
-                                            .focusProperties { canFocus = false },
-                                ) {
-                                    Text("Add platform")
+                            LaunchedEffect(onAddGames) {
+                                withFrameNanos { }
+                                try {
+                                    emptyActionFocus.requestFocus()
+                                } catch (_: Exception) {
                                 }
                             }
-                            TextButton(
-                                onClick = onOpenSettings,
-                                modifier =
-                                    Modifier
-                                        .padding(top = WajihaSpacing.xs)
-                                        .focusProperties { canFocus = false },
-                            ) {
-                                Text("Open Settings")
+                            if (onAddGames != null) {
+                                GamepadButton(
+                                    text = "Add platform",
+                                    onClick = onAddGames,
+                                    focusRequester = emptyActionFocus,
+                                    focusId = "empty:add_platform",
+                                    modifier = Modifier.padding(top = WajihaSpacing.sm),
+                                )
                             }
+                            GamepadButton(
+                                text = "Open Settings",
+                                onClick = onOpenSettings,
+                                focusRequester = if (onAddGames == null) emptyActionFocus else null,
+                                focusId = "empty:settings",
+                                outlined = true,
+                                modifier = Modifier.padding(top = WajihaSpacing.xs),
+                            )
                         },
                     )
                 } else {
@@ -715,9 +780,19 @@ fun BottomScreen(
                             val ids = state.tiles.map { it.game.id }
                             if (ids.isEmpty()) return@LaunchedEffect
                             if (selectedGameId !in ids) {
-                                selectedGameId = ids.first()
-                                onFocusGame(ids.first())
+                                val previousIndex =
+                                    previousGameIds
+                                        .indexOf(selectedGameId)
+                                        .takeIf { it >= 0 }
+                                        ?: 0
+                                val fallback =
+                                    rememberedGameId
+                                        ?.takeIf { it in ids }
+                                        ?: ids[previousIndex.coerceIn(ids.indices)]
+                                selectedGameId = fallback
+                                onFocusGame(fallback)
                             }
+                            previousGameIds = ids
                             if (!menuOpen && !restoringGridFocus && !restoringSessionFocus &&
                                 !sessionFocused && selectedGameId != null
                             ) {
@@ -732,21 +807,11 @@ fun BottomScreen(
                             if (!menuOpen && restoringGridFocus) {
                                 val gameId = restoreFocusGameId ?: selectedGameId
                                 if (gameId != null) {
-                                    // Wait for menu layer pop + tiles to become focusable again.
-                                    delay(50)
-                                    var focused = false
-                                    repeat(4) { attempt ->
-                                        if (focused) return@repeat
-                                        try {
-                                            tileFocusRequesters[gameId]?.requestFocus()
-                                            focused = true
-                                        } catch (_: Exception) {
-                                            delay(16L * (attempt + 1))
-                                        }
+                                    withFrameNanos { }
+                                    try {
+                                        tileFocusRequesters[gameId]?.requestFocus()
+                                    } catch (_: Exception) {
                                     }
-                                    // Hold the lock until focus has settled so a neighbor
-                                    // tile can't steal selection via onSelect.
-                                    delay(32)
                                 }
                                 restoringGridFocus = false
                                 restoreFocusGameId = null
@@ -757,18 +822,11 @@ fun BottomScreen(
                             if (!menuOpen && restoringSessionFocus) {
                                 val pkg = restoreFocusSessionPackage ?: selectedSessionPackage
                                 if (pkg != null) {
-                                    delay(50)
-                                    var focused = false
-                                    repeat(4) { attempt ->
-                                        if (focused) return@repeat
-                                        try {
-                                            sessionFocusRequesters[pkg]?.requestFocus()
-                                            focused = true
-                                        } catch (_: Exception) {
-                                            delay(16L * (attempt + 1))
-                                        }
+                                    withFrameNanos { }
+                                    try {
+                                        sessionFocusRequesters[pkg]?.requestFocus()
+                                    } catch (_: Exception) {
                                     }
-                                    delay(32)
                                 }
                                 restoringSessionFocus = false
                                 restoreFocusSessionPackage = null
@@ -820,6 +878,12 @@ fun BottomScreen(
                                                 }
                                             } finally {
                                                 libraryPointerDown.set(false)
+                                                if (!libraryGridState.isScrollInProgress &&
+                                                    pendingLibraryViewportSnapLatest.value
+                                                ) {
+                                                    pendingLibraryViewportSnap = false
+                                                    snapLibraryFocusToVisibleViewport()
+                                                }
                                                 // Keep Compose focus on the selected tile (only it
                                                 // is focusable). clearFocus here used to drop key
                                                 // delivery so the post-scroll D-pad never snapped.
@@ -1598,6 +1662,7 @@ private fun GameTileCard(
         onLongPress = onLongPress,
         onFocusChanged = onFocusChanged,
         focusRequester = focusRequester,
+        focusId = tile.game.id,
         gamepadFocusable = gamepadFocusable,
         navHighlighted = navHighlighted,
         // D-pad/touch own selection; focus-during-scroll must not rewind selectedGameId.

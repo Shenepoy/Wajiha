@@ -42,6 +42,24 @@ fun <T> GamepadList(
     val navController = LocalGamepadNavController.current
     var pendingViewportSnap by remember { mutableStateOf(false) }
 
+    fun focusTopVisible(): Boolean {
+        val layoutInfo = listState.layoutInfo
+        val firstVisible =
+            layoutInfo.visibleItemsInfo
+                .firstOrNull { info ->
+                    val extent = info.size
+                    if (extent <= 0) return@firstOrNull false
+                    val center = info.offset + extent / 2
+                    center >= layoutInfo.viewportStartOffset &&
+                        center < layoutInfo.viewportEndOffset
+                }?.index
+                ?: return false
+        val nav = navController ?: return false
+        nav.focusState.focusedIndex =
+            firstVisible.coerceIn(0, (nav.focusState.itemCount - 1).coerceAtLeast(0))
+        return true
+    }
+
     LaunchedEffect(listState, inputMode) {
         snapshotFlow {
             listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
@@ -49,6 +67,16 @@ fun <T> GamepadList(
             .collect {
                 if (inputMode == InputMode.Touch) {
                     pendingViewportSnap = true
+                }
+            }
+    }
+
+    LaunchedEffect(listState, inputMode, navController) {
+        snapshotFlow { listState.isScrollInProgress }
+            .collect { scrolling ->
+                if (!scrolling && inputMode == InputMode.Touch && pendingViewportSnap) {
+                    pendingViewportSnap = false
+                    focusTopVisible()
                 }
             }
     }
@@ -67,26 +95,7 @@ fun <T> GamepadList(
                             GamepadKeys.isRight(event.type, event.key)
                     if (!isDpad) return@onPreviewKeyEvent false
                     pendingViewportSnap = false
-                    val layoutInfo = listState.layoutInfo
-                    val firstVisible =
-                        layoutInfo.visibleItemsInfo
-                            .firstOrNull { info ->
-                                val extent = info.size
-                                if (extent <= 0) return@firstOrNull false
-                                val center = info.offset + extent / 2
-                                center >= layoutInfo.viewportStartOffset &&
-                                    center < layoutInfo.viewportEndOffset
-                            }?.index
-                            ?: return@onPreviewKeyEvent false
-                    val nav = navController
-                    if (nav != null) {
-                        // Land on the top in-view row only — next press moves.
-                        nav.focusState.focusedIndex =
-                            firstVisible.coerceIn(0, (nav.focusState.itemCount - 1).coerceAtLeast(0))
-                        true
-                    } else {
-                        false
-                    }
+                    focusTopVisible()
                 },
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),

@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
@@ -54,6 +56,8 @@ fun GamepadScreen(
     owner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     onPreviewKey: ((KeyEvent) -> Boolean)? = null,
+    restorePolicy: FocusRestorePolicy = FocusRestorePolicy.PreserveAnchor,
+    defaultFocusId: Any? = null,
     /** Called when [owner] gains gamepad ownership — restore content focus. */
     onOwnerGainedFocus: (suspend () -> Unit)? = null,
     content: @Composable () -> Unit,
@@ -66,6 +70,15 @@ fun GamepadScreen(
     // can restore Gamepad chrome — those keys never reach onPreviewKeyEvent.
     val inputModeController = rememberInputModeController()
     val latestInputMode = rememberUpdatedState(inputModeController)
+    val focusContinuity =
+        remember(layerId, restorePolicy) {
+            FocusContinuityController(layerId, restorePolicy)
+        }
+
+    LaunchedEffect(focusContinuity, defaultFocusId) {
+        withFrameNanos { }
+        focusContinuity.finishRestore(defaultFocusId)
+    }
 
     DisposableEffect(layerId) {
         val handler: (KeyEvent) -> Boolean = { event ->
@@ -92,7 +105,7 @@ fun GamepadScreen(
         )
     }
 
-    val focusRingOverlay = rememberFocusRingOverlayState()
+    val focusRingOverlay = rememberFocusRingOverlayState(focusContinuity)
     val textFieldEditing = GamepadTextEditRegistry.isEditing
 
     BackHandler(enabled = textFieldEditing) {
@@ -102,6 +115,9 @@ fun GamepadScreen(
     CompositionLocalProvider(
         LocalInputModeController provides inputModeController,
         LocalInputMode provides inputModeController.mode,
+        LocalFocusContinuityController provides focusContinuity,
+        LocalFocusLayerId provides layerId,
+        LocalGamepadOwner provides owner,
         LocalFocusRingOverlay provides focusRingOverlay,
     ) {
         FocusRingOverlayHost(

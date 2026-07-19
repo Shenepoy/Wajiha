@@ -29,6 +29,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.wajiha.input.FocusAnchor
+import com.wajiha.input.LocalFocusContinuityController
+import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.ui.theme.FocusBorderStyle
 import com.wajiha.ui.theme.FocusPlacement
 import com.wajiha.ui.theme.LocalFocusIndicatorStyle
@@ -47,6 +50,7 @@ fun Modifier.wajihaFocusIndicator(
     highlighted: Boolean,
     shape: Shape = RoundedCornerShape(8.dp),
     selected: Boolean = false,
+    focusAnchor: FocusAnchor? = null,
 ): Modifier =
     composed {
         if (!showGamepadChrome(highlighted)) return@composed this
@@ -64,6 +68,7 @@ fun Modifier.wajihaFocusIndicator(
                 thickness = thickness,
                 borderStyle = borderStyle,
                 shape = shape,
+                focusAnchor = focusAnchor,
             )
         }
 
@@ -117,14 +122,24 @@ private fun Modifier.outsideFocusViaOverlay(
     thickness: Dp,
     borderStyle: FocusBorderStyle,
     shape: Shape,
+    focusAnchor: FocusAnchor?,
 ): Modifier =
     composed {
         val token = remember { Any() }
         var boundsInRoot by remember { mutableStateOf<Rect?>(null) }
+        val continuity = LocalFocusContinuityController.current
+        val layerId = LocalFocusLayerId.current
+        val resolvedAnchor =
+            focusAnchor
+                ?: continuity?.takeIf { layerId.isNotEmpty() }?.anchor(
+                    targetId = token,
+                    layerId = layerId,
+                )
 
         FocusRingOverlayRegistrationEffect(
             state = overlay,
             token = token,
+            anchor = resolvedAnchor,
             active = true,
             boundsInRoot = boundsInRoot,
             color = color,

@@ -12,6 +12,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.input.key.KeyEvent
+import com.wajiha.input.FocusRestorePolicy
 import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadScreen
 import com.wajiha.input.MirroredOrLocalGamepadActionBar
@@ -31,6 +32,8 @@ fun WajihaScreen(
     gamepadOwner: GamepadOwner? = null,
     onClaimGamepad: ((GamepadOwner) -> Unit)? = null,
     onPreviewKey: ((KeyEvent) -> Boolean)? = null,
+    restorePolicy: FocusRestorePolicy = FocusRestorePolicy.PreserveAnchor,
+    defaultFocusId: Any? = null,
     onOwnerGainedFocus: (suspend () -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
     backgroundContent: (@Composable () -> Unit)? = null,
@@ -46,6 +49,8 @@ fun WajihaScreen(
         owner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onPreviewKey = onPreviewKey,
+        restorePolicy = restorePolicy,
+        defaultFocusId = defaultFocusId,
         onOwnerGainedFocus = onOwnerGainedFocus,
     ) {
         WajihaSnackbarScaffold(

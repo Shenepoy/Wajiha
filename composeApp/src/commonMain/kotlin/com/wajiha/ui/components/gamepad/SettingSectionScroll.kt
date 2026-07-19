@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
@@ -24,6 +25,8 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import com.wajiha.input.GamepadKeys
+import com.wajiha.input.rememberFocusContext
+import com.wajiha.input.rememberedFocusContext
 import com.wajiha.ui.theme.InputMode
 import com.wajiha.ui.theme.LocalInputMode
 import kotlinx.coroutines.flow.drop
@@ -75,6 +78,25 @@ class SettingSectionScroll(
         }
     }
 
+    suspend fun restoreFocus(id: Any): Boolean {
+        val entry = focusEntries[id] ?: return false
+        val container = containerCoordinates?.boundsInRoot() ?: return false
+        if (!hasCenterInViewportVertically(entry.bounds, container)) {
+            val targetY =
+                (scrollState.value + entry.bounds.top - container.top)
+                    .roundToInt()
+                    .coerceAtLeast(0)
+            scrollState.scrollTo(targetY)
+            withFrameNanos { }
+        }
+        return try {
+            entry.requester.requestFocus()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private data class FocusEntry(
         val requester: FocusRequester,
         val bounds: Rect,
@@ -83,23 +105,71 @@ class SettingSectionScroll(
 
 val LocalSettingSectionScroll = compositionLocalOf<SettingSectionScroll?> { null }
 
+@Stable
+class SettingSectionFocusRestorer(
+    private val memoryKey: String,
+) {
+    internal var section: SettingSectionScroll? = null
+
+    internal fun initialScrollOffset(): Int = rememberedFocusContext("$memoryKey:offset") as? Int ?: 0
+
+    internal fun rememberScrollOffset(value: Int) {
+        rememberFocusContext("$memoryKey:offset", value)
+    }
+
+    suspend fun restore(
+        targetId: Any?,
+        fallback: FocusRequester,
+    ) {
+        if (targetId != null && section?.restoreFocus(targetId) == true) return
+        try {
+            fallback.requestFocus()
+        } catch (_: Exception) {
+        }
+    }
+}
+
 /** Scrollable column used inside settings / game-detail section cards. */
 @Composable
 fun SettingSectionScrollColumn(
     modifier: Modifier = Modifier,
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    focusRestorer: SettingSectionFocusRestorer? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val scrollState = rememberScrollState()
+    val scrollState =
+        rememberScrollState(
+            initial = focusRestorer?.initialScrollOffset() ?: 0,
+        )
     val sectionScroll = remember(scrollState) { SettingSectionScroll(scrollState) }
     val inputMode = LocalInputMode.current
+
+    DisposableEffect(focusRestorer, sectionScroll) {
+        focusRestorer?.section = sectionScroll
+        onDispose {
+            if (focusRestorer?.section === sectionScroll) {
+                focusRestorer.section = null
+            }
+        }
+    }
 
     LaunchedEffect(scrollState, inputMode) {
         snapshotFlow { scrollState.value }
             .drop(1)
             .collect {
+                focusRestorer?.rememberScrollOffset(it)
                 if (inputMode == InputMode.Touch) {
                     sectionScroll.pendingViewportSnap = true
+                }
+            }
+    }
+
+    LaunchedEffect(scrollState, inputMode, sectionScroll) {
+        snapshotFlow { scrollState.isScrollInProgress }
+            .collect { scrolling ->
+                if (!scrolling && inputMode == InputMode.Touch && sectionScroll.pendingViewportSnap) {
+                    sectionScroll.pendingViewportSnap = false
+                    sectionScroll.focusTopmostVisible()
                 }
             }
     }

@@ -18,6 +18,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
+import com.wajiha.input.FocusClaimSource
+import com.wajiha.input.LocalFocusContinuityController
+import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.ui.theme.WajihaFocus
@@ -39,6 +42,7 @@ fun GamepadTile(
     onFocusChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
+    focusId: Any? = null,
     gamepadFocusable: Boolean = true,
     navHighlighted: Boolean = false,
     /** When true, touch always invokes [onLaunch] (session switcher tiles). */
@@ -56,6 +60,13 @@ fun GamepadTile(
     val localRequester = remember { FocusRequester() }
     val requester = focusRequester ?: localRequester
     val scope = rememberCoroutineScope()
+    val continuity = LocalFocusContinuityController.current
+    val layerId = LocalFocusLayerId.current
+    val resolvedFocusId = focusId ?: remember { Any() }
+    val anchor =
+        remember(continuity, layerId, resolvedFocusId) {
+            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(resolvedFocusId, layerId)
+        }
     val rawHighlight =
         navHighlighted ||
             (
@@ -105,12 +116,14 @@ fun GamepadTile(
                                 highlighted = true,
                                 shape = WajihaShapes.tile,
                                 selected = true,
+                                focusAnchor = anchor,
                             )
                     } else {
                         Modifier.wajihaFocusIndicator(
                             highlighted = rawHighlight,
                             shape = WajihaShapes.tile,
                             selected = selected,
+                            focusAnchor = anchor,
                         )
                     },
                 ).then(
@@ -119,6 +132,9 @@ fun GamepadTile(
                             .focusRequester(requester)
                             .onFocusChanged {
                                 focused = it.isFocused
+                                if (it.isFocused && anchor != null) {
+                                    continuity?.claim(anchor, FocusClaimSource.Compose)
+                                }
                                 onFocusChanged(it.isFocused)
                                 if (it.isFocused && selectOnFocus) onSelect()
                             }.wajihaGamepadFocus(
@@ -131,8 +147,16 @@ fun GamepadTile(
                     },
                 ).pointerInput(selected, focused, onSelect, onLaunch, onLongPress, touchSwitchMode, useCustomNav) {
                     detectTapGestures(
-                        onLongPress = { onLongPress?.invoke() },
+                        onLongPress = {
+                            if (anchor != null) {
+                                continuity?.claim(anchor, FocusClaimSource.Touch)
+                            }
+                            onLongPress?.invoke()
+                        },
                         onTap = {
+                            if (anchor != null) {
+                                continuity?.claim(anchor, FocusClaimSource.Touch)
+                            }
                             when {
                                 touchSwitchMode -> {
                                     onLaunch()

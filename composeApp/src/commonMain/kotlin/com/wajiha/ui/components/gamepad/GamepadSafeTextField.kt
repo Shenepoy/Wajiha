@@ -30,8 +30,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadTextEditRegistry
 import com.wajiha.input.LocalGamepadNavController
-import com.wajiha.ui.theme.InputMode
-import com.wajiha.ui.theme.LocalInputMode
 import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
@@ -56,7 +54,6 @@ fun GamepadSafeTextField(
     val keyboard = LocalSoftwareKeyboardController.current
     val controller = LocalGamepadNavController.current
     val useCustomNav = controller != null
-    val inputMode = LocalInputMode.current
     val id = navItemId ?: remember { Any() }
     var highlighted by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -103,7 +100,7 @@ fun GamepadSafeTextField(
         modifier
             .clip(WajihaShapes.focus)
             .then(
-                if (highlighted && inputMode == InputMode.Gamepad) {
+                if (highlighted) {
                     Modifier.border(
                         width = WajihaFocus.borderWidth,
                         color = WajihaFocus.borderColor(),

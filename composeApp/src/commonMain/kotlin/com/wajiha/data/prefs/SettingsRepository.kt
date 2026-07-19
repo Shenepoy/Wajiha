@@ -182,13 +182,11 @@ class SettingsRepository(
 
     suspend fun setNowPlayingDisplay(value: String) = setPref(NOW_PLAYING_DISPLAY, normalizeNowPlayingDisplay(value), "nowPlayingDisplay")
 
-    suspend fun setNowPlayingHeroBackground(value: Boolean) =
-        setPref(NOW_PLAYING_HERO_BACKGROUND, value, "nowPlayingHeroBackground")
+    suspend fun setNowPlayingHeroBackground(value: Boolean) = setPref(NOW_PLAYING_HERO_BACKGROUND, value, "nowPlayingHeroBackground")
 
     suspend fun setNowPlayingLogo(value: Boolean) = setPref(NOW_PLAYING_LOGO, value, "nowPlayingLogo")
 
-    suspend fun setGameGridHeroBackground(value: Boolean) =
-        setPref(GAME_GRID_HERO_BACKGROUND, value, "gameGridHeroBackground")
+    suspend fun setGameGridHeroBackground(value: Boolean) = setPref(GAME_GRID_HERO_BACKGROUND, value, "gameGridHeroBackground")
 
     suspend fun setGameDimEnabled(value: Boolean) = setPref(GAME_DIM_ENABLED, value, "gameDimEnabled")
 

@@ -799,6 +799,29 @@ class DualScreenStore {
     }
 
     /**
+     * SELECT / Settings role swap moves the menu to the other activity. Focus
+     * follows that menu even when a prior touch or L2 left a sticky owner behind.
+     */
+    fun onScreenRolesSwapped(menuOnPrimary: Boolean) {
+        if (_state.value == DualScreenState.SingleDisplay) return
+        gamesMenuOnPrimary = menuOnPrimary
+        stickyGamepadOwner = null
+        val menuOwner =
+            if (menuOnPrimary) {
+                GamepadOwner.Primary
+            } else {
+                GamepadOwner.Secondary
+            }
+        if (_gamepadOwner.value == menuOwner) {
+            // The destination composition is still being replaced; force its
+            // owner-focus effect to restore the semantic anchor after mounting.
+            _gamepadFocusEpoch.value = _gamepadFocusEpoch.value + 1L
+        } else {
+            setGamepadOwner(menuOwner)
+        }
+    }
+
+    /**
      * Explicit claim — touch / key on a display. Sticky until L2 toggles or
      * single-display clears it.
      */
