@@ -28,6 +28,8 @@ import com.wajiha.state.NowPlayingState
 import com.wajiha.state.SecondaryMode
 import com.wajiha.ui.components.gamepad.GamepadActionBarHeight
 import com.wajiha.ui.components.gamepad.GamepadFocusable
+import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
+import com.wajiha.ui.theme.WajihaAlphas
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 
@@ -90,13 +92,13 @@ private fun NowPlayingOverlayChip(
         shape = chipShape,
         modifier =
             modifier
-                .defaultMinSize(minHeight = WajihaSpacing.touchMin)
+                .defaultMinSize(minHeight = LocalSettingRowMinHeight.current)
                 .widthIn(max = 300.dp)
                 .clip(chipShape)
                 .background(scheme.surfaceContainerHigh)
                 .border(
-                    width = 1.dp,
-                    color = scheme.outline.copy(alpha = 0.3f),
+                    width = WajihaSpacing.folderEdge,
+                    color = scheme.outline.copy(alpha = WajihaAlphas.outlineSubtle),
                     shape = chipShape,
                 ).padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.sm),
     ) {

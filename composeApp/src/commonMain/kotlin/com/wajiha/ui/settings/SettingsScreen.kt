@@ -52,7 +52,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.db.RomFolderEntity
 import com.wajiha.data.prefs.AppSettings
@@ -99,6 +98,10 @@ import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
 import com.wajiha.ui.scraper.ScraperPageContent
 import com.wajiha.ui.scraper.ScraperViewModel
 import com.wajiha.ui.theme.FocusIndicatorDefaults
+import com.wajiha.ui.theme.WajihaAlphas
+import com.wajiha.ui.theme.WajihaColors
+import com.wajiha.ui.theme.WajihaElevation
+import com.wajiha.ui.theme.WajihaIconSize
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import com.wajiha.ui.theme.focusColorDisplayLabel
@@ -1794,7 +1797,10 @@ private fun SettingsFocusColorRow(
                     Text(
                         text = "↺",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFFFFC107).copy(alpha = 0.55f),
+                        color =
+                            WajihaColors.OverrideAmber.copy(
+                                alpha = WajihaAlphas.overrideAmberStrong,
+                            ),
                         fontWeight = FontWeight.Bold,
                         modifier =
                             Modifier.pointerInput(onReset) {
@@ -1806,10 +1812,16 @@ private fun SettingsFocusColorRow(
             Box(
                 modifier =
                     Modifier
-                        .size(18.dp)
+                        .size(WajihaIconSize.sm)
                         .clip(CircleShape)
                         .background(previewColor)
-                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f), CircleShape),
+                        .border(
+                            WajihaSpacing.folderEdge,
+                            MaterialTheme.colorScheme.outline.copy(
+                                alpha = WajihaAlphas.outlineSubtle,
+                            ),
+                            CircleShape,
+                        ),
             )
             Text(
                 text = selectedLabel,
@@ -1851,7 +1863,7 @@ private fun SettingsFocusColorRow(
                         .padding(top = WajihaSpacing.xs / 2),
                 shape = androidx.compose.ui.graphics.RectangleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 2.dp,
+                tonalElevation = WajihaElevation.low,
             ) {
                 Column(
                     modifier = Modifier.padding(WajihaSpacing.sm),
@@ -1936,7 +1948,7 @@ private fun FocusColorSwatch(
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.micro),
         modifier =
             Modifier
                 .wajihaFocusIndicator(highlighted = highlight, shape = CircleShape)
@@ -1965,16 +1977,18 @@ private fun FocusColorSwatch(
         Box(
             modifier =
                 Modifier
-                    .size(32.dp)
+                    .size(WajihaIconSize.xxl)
                     .clip(CircleShape)
                     .background(color)
                     .border(
-                        width = if (selected) 2.dp else 1.dp,
+                        width = if (selected) WajihaSpacing.micro else WajihaSpacing.folderEdge,
                         color =
                             if (selected) {
                                 MaterialTheme.colorScheme.primary
                             } else {
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                                MaterialTheme.colorScheme.outline.copy(
+                                    alpha = WajihaAlphas.outlineMuted,
+                                )
                             },
                         shape = CircleShape,
                     ),
@@ -2139,7 +2153,9 @@ private fun SettingsPermissionRow(
                                 if (granted) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)
+                                    MaterialTheme.colorScheme.outline.copy(
+                                        alpha = WajihaAlphas.outlineStrong,
+                                    )
                                 },
                             ),
                 )

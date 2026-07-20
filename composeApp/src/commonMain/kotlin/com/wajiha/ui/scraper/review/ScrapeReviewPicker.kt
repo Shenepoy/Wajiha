@@ -391,8 +391,8 @@ fun ScrapeReviewPicker(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                .padding(horizontal = WajihaSpacing.smPlus, vertical = WajihaSpacing.sm),
+                        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (!showPickerHere) {
@@ -441,7 +441,11 @@ fun ScrapeReviewPicker(
                                 Text(
                                     text = pickerCountLabel(state),
                                     style = MaterialTheme.typography.labelLarge,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = WajihaShapes.heroInnerCornerRadius,
+                                            vertical = WajihaSpacing.sm,
+                                        ),
                                 )
                             }
                         }
@@ -464,7 +468,11 @@ fun ScrapeReviewPicker(
                             err,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = WajihaSpacing.smPlus,
+                                    vertical = WajihaSpacing.micro,
+                                ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -586,13 +594,16 @@ fun ScrapeReviewSlotHero(
                             false
                         }
                     }
-                }.padding(horizontal = 12.dp, vertical = 10.dp),
+                }.padding(
+                    horizontal = WajihaShapes.heroInnerCornerRadius,
+                    vertical = WajihaSpacing.smPlus,
+                ),
     ) {
         // Title row — slot name (status bar is drawn by TopScreen)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             Surface(
                 shape = WajihaShapes.chip,
@@ -601,7 +612,11 @@ fun ScrapeReviewSlotHero(
                 Text(
                     text = slot?.label() ?: "Box art",
                     style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier =
+                        Modifier.padding(
+                            horizontal = WajihaShapes.heroInnerCornerRadius,
+                            vertical = WajihaSpacing.sm,
+                        ),
                 )
             }
             Spacer(modifier = Modifier.weight(1f))
@@ -633,7 +648,7 @@ fun ScrapeReviewSlotHero(
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(WajihaSpacing.sm))
 
         // Keep [contentFocusRequester] attached to exactly one focusable so L2
         // from LauncherHeroPane never hits an uninitialized FocusRequester.
@@ -692,12 +707,16 @@ fun ScrapeReviewSlotHero(
         Surface(
             shape = WajihaShapes.chip,
             color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier.padding(top = WajihaSpacing.sm),
         ) {
             Text(
                 text = if (slot != null) pickerCountLabel(state) else "—",
                 style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier =
+                    Modifier.padding(
+                        horizontal = WajihaShapes.heroInnerCornerRadius,
+                        vertical = WajihaSpacing.sm,
+                    ),
             )
         }
     }
@@ -717,15 +736,15 @@ private fun ReviewHeader(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.smHalf),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
         // Left cluster: Back | Game Name 🔍
         Row(
             modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.smHalf),
         ) {
             if (showBack) {
                 GamepadButton(
@@ -757,7 +776,11 @@ private fun ReviewHeader(
                 Text(
                     text = queueLabel,
                     style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    modifier =
+                        Modifier.padding(
+                            horizontal = WajihaSpacing.mdTight,
+                            vertical = WajihaSpacing.sm,
+                        ),
                 )
             }
         }
@@ -790,13 +813,13 @@ private fun ReviewSearchBar(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs)
                 .dismissKeyboardOnOutsideTap(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             GamepadSafeTextField(
@@ -844,7 +867,7 @@ private fun ReviewOverview(
 
     if (slots.size == 1) {
         val slot = slots.first()
-        Box(modifier = modifier.padding(10.dp)) {
+        Box(modifier = modifier.padding(WajihaSpacing.smPlus)) {
             OverviewTile(
                 slot = slot,
                 state = state,
@@ -861,12 +884,12 @@ private fun ReviewOverview(
 
     // Wireframe mosaic: left Icon/Boxart | center Metadata/Logo+Fanart/Banner | right Hero/Screenshots
     Row(
-        modifier = modifier.padding(10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.padding(WajihaSpacing.smPlus),
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
         Column(
             modifier = Modifier.weight(0.85f).fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             OverviewTile(
                 slot = ReviewSlot.Icon,
@@ -891,7 +914,7 @@ private fun ReviewOverview(
         }
         Column(
             modifier = Modifier.weight(1.25f).fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             OverviewTile(
                 slot = ReviewSlot.Metadata,
@@ -905,7 +928,7 @@ private fun ReviewOverview(
             )
             Row(
                 modifier = Modifier.weight(0.42f).fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
             ) {
                 OverviewTile(
                     slot = ReviewSlot.Logo,
@@ -941,7 +964,7 @@ private fun ReviewOverview(
         }
         Column(
             modifier = Modifier.weight(1.15f).fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             OverviewTile(
                 slot = ReviewSlot.Hero,
@@ -1013,10 +1036,13 @@ private fun OverviewTile(
                 .wajihaGamepadFocus()
                 .wajihaFocusIndicator(
                     highlighted = focused,
-                    shape = RoundedCornerShape(4.dp),
+                    shape = WajihaShapes.focus,
                     selected = focused,
-                ).border(if (focused) 2.dp else 1.dp, border, RoundedCornerShape(4.dp))
-                .clip(RoundedCornerShape(4.dp))
+                ).border(
+                    if (focused) WajihaSpacing.micro else WajihaSpacing.folderEdge,
+                    border,
+                    WajihaShapes.focus,
+                ).clip(WajihaShapes.focus)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .onPreviewKeyEvent { event ->
                     when {
@@ -1060,7 +1086,7 @@ private fun OverviewTile(
                     modifier =
                         Modifier
                             .fillMaxSize()
-                            .padding(10.dp),
+                            .padding(WajihaSpacing.smPlus),
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
@@ -1105,7 +1131,7 @@ private fun OverviewTile(
                         Brush.verticalGradient(
                             listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)),
                         ),
-                    ).padding(horizontal = 8.dp, vertical = 6.dp),
+                    ).padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.smHalf),
         ) {
             Text(
                 text =
@@ -1139,7 +1165,11 @@ internal fun SlotPicker(
                 it,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                modifier =
+                    Modifier.padding(
+                        horizontal = WajihaSpacing.smPlus,
+                        vertical = WajihaSpacing.xs,
+                    ),
             )
         }
         when (slot) {
@@ -1192,9 +1222,9 @@ private fun MetadataPickerList(
     }
     LazyColumn(
         state = listState,
-        modifier = modifier.padding(horizontal = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        contentPadding = PaddingValues(bottom = 8.dp, top = 4.dp),
+        modifier = modifier.padding(horizontal = WajihaSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.smHalf),
+        contentPadding = PaddingValues(bottom = WajihaSpacing.sm, top = WajihaSpacing.xs),
     ) {
         items(options, key = { it.key() }) { candidate ->
             CompactCandidateRow(
@@ -1262,8 +1292,8 @@ private fun MediaPickerGrid(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    .padding(horizontal = WajihaSpacing.smPlus, vertical = WajihaSpacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.smHalf),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             CompactChip(
@@ -1313,10 +1343,10 @@ private fun MediaPickerGrid(
                     Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 8.dp, top = 4.dp),
+                        .padding(horizontal = WajihaSpacing.sm),
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+                contentPadding = PaddingValues(bottom = WajihaSpacing.sm, top = WajihaSpacing.xs),
             ) {
                 itemsIndexed(options, key = { _, pair -> pair.second.url }) { index, (sourceId, media) ->
                     val isSelected =
@@ -1403,10 +1433,10 @@ private fun CompactCandidateRow(
                 .wajihaGamepadFocus()
                 .wajihaFocusIndicator(
                     highlighted = focused || selected,
-                    shape = RoundedCornerShape(4.dp),
+                    shape = WajihaShapes.focus,
                     selected = selected,
-                ).border(1.dp, border, RoundedCornerShape(4.dp))
-                .clip(RoundedCornerShape(4.dp))
+                ).border(WajihaSpacing.folderEdge, border, WajihaShapes.focus)
+                .clip(WajihaShapes.focus)
                 .onPreviewKeyEvent { event ->
                     if (GamepadKeys.isConfirm(event.type, event.key)) {
                         onSelect()
@@ -1415,9 +1445,9 @@ private fun CompactCandidateRow(
                         false
                     }
                 }.combinedClickable(onClick = onSelect)
-                .padding(8.dp),
+                .padding(WajihaSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.smPlus),
     ) {
         AsyncImage(
             model = candidate.thumbnailUrl ?: candidate.media.firstOrNull()?.url,
@@ -1425,7 +1455,7 @@ private fun CompactCandidateRow(
             contentScale = ContentScale.Crop,
             modifier =
                 Modifier
-                    .size(48.dp)
+                    .size(WajihaSpacing.touchMin)
                     .clip(RoundedCornerShape(3.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant),
         )
@@ -1490,16 +1520,7 @@ private fun scraperSourceDisplayName(sourceId: String): String =
         else -> sourceId
     }
 
-private fun scraperSourceBadgeColor(sourceId: String): Color =
-    when (sourceId) {
-        "steamgriddb" -> Color(0xFF395C6B)
-        "screenscraper" -> Color(0xFFC45C26)
-        "libretro" -> Color(0xFF3D5A80)
-        "ra" -> Color(0xFFB8860B)
-        "romm" -> Color(0xFF2E7D4F)
-        "local" -> Color(0xFF5C5C5C)
-        else -> Color(0xFF4A4A4A)
-    }
+private fun scraperSourceBadgeColor(sourceId: String): Color = ScrapeReviewSourceColors.forSource(sourceId)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1540,8 +1561,11 @@ private fun MediaThumb(
                     highlighted = focused || selected,
                     shape = RoundedCornerShape(3.dp),
                     selected = selected,
-                ).border(if (selected || focused) 2.dp else 1.dp, border, RoundedCornerShape(3.dp))
-                .clip(RoundedCornerShape(3.dp))
+                ).border(
+                    if (selected || focused) WajihaSpacing.micro else WajihaSpacing.folderEdge,
+                    border,
+                    RoundedCornerShape(3.dp),
+                ).clip(RoundedCornerShape(3.dp))
                 .onPreviewKeyEvent { event ->
                     if (GamepadKeys.isConfirm(event.type, event.key)) {
                         onClick()
@@ -1572,7 +1596,7 @@ private fun MediaThumb(
             modifier =
                 Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(4.dp),
+                    .padding(WajihaSpacing.xs),
         ) {
             Text(
                 text = scraperSourceBadgeLabel(sourceId),
@@ -1582,7 +1606,7 @@ private fun MediaThumb(
                     Modifier
                         .clip(RoundedCornerShape(3.dp))
                         .background(scraperSourceBadgeColor(sourceId).copy(alpha = 0.88f))
-                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                        .padding(horizontal = 5.dp, vertical = WajihaSpacing.micro),
             )
             if (focused && authorHint != null) {
                 Popup(
@@ -1591,9 +1615,9 @@ private fun MediaThumb(
                     properties = PopupProperties(focusable = false),
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(4.dp),
+                        shape = WajihaShapes.chip,
                         color = MaterialTheme.colorScheme.inverseSurface,
-                        tonalElevation = 4.dp,
+                        tonalElevation = WajihaSpacing.xs,
                     ) {
                         Text(
                             text = authorHint,
@@ -1653,7 +1677,7 @@ private fun CompactChip(
                         false
                     }
                 }.combinedClickable(onClick = onClick)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = WajihaSpacing.smPlus, vertical = WajihaSpacing.smHalf),
     )
 }
 
@@ -1667,8 +1691,8 @@ private fun CompactFilledButton(
     androidx.compose.material3.Button(
         onClick = onClick,
         enabled = enabled,
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-        modifier = modifier.height(36.dp),
+        contentPadding = PaddingValues(horizontal = WajihaSpacing.smPlus, vertical = 0.dp),
+        modifier = modifier.height(WajihaSpacing.actionBarHeight),
         colors = ButtonDefaults.buttonColors(),
     ) {
         Text(text, style = MaterialTheme.typography.labelMedium)

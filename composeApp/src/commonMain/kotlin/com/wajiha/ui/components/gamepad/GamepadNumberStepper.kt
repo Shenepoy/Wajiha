@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import com.wajiha.ui.theme.WajihaAlphas
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 
@@ -38,7 +38,8 @@ fun GamepadNumberStepper(
 ) {
     val canDecrease = enabled && value > range.first
     val canIncrease = enabled && value < range.last
-    val containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    val containerColor =
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = WajihaAlphas.surfaceMuted)
     val segmentShape = WajihaShapes.chip
 
     fun adjust(delta: Int) {
@@ -66,8 +67,8 @@ fun GamepadNumberStepper(
         Box(
             modifier =
                 Modifier
-                    .widthIn(min = 44.dp)
-                    .defaultMinSize(minHeight = WajihaSpacing.touchMin - WajihaSpacing.xs)
+                    .widthIn(min = SettingsCompactRowMinHeight)
+                    .defaultMinSize(minHeight = SettingsCompactRowMinHeight)
                     .padding(horizontal = WajihaSpacing.sm),
             contentAlignment = Alignment.Center,
         ) {
@@ -106,7 +107,7 @@ private fun StepperSegment(
 ) {
     val bg =
         if (enabled) {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = WajihaAlphas.outlineSubtle)
         } else {
             Color.Transparent
         }
@@ -114,13 +115,15 @@ private fun StepperSegment(
         if (enabled) {
             MaterialTheme.colorScheme.onSurface
         } else {
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = WajihaAlphas.outlineMuted)
         }
     Box(
         modifier =
             modifier
-                .defaultMinSize(minWidth = 36.dp, minHeight = WajihaSpacing.touchMin - WajihaSpacing.xs)
-                .clip(shape)
+                .defaultMinSize(
+                    minWidth = WajihaSpacing.contextMenuNestedRowHeight,
+                    minHeight = SettingsCompactRowMinHeight,
+                ).clip(shape)
                 .background(bg)
                 .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs / 2),
         contentAlignment = Alignment.Center,

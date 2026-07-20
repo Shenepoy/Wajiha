@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -58,7 +57,9 @@ import com.wajiha.ui.gamedetail.MetadataPanelVisibility
 import com.wajiha.ui.scraper.review.ScrapeReviewSlotHero
 import com.wajiha.ui.settings.SettingsFocusHero
 import com.wajiha.ui.settings.SettingsHeroDetailBody
+import com.wajiha.ui.theme.WajihaAlphas
 import com.wajiha.ui.theme.WajihaColors
+import com.wajiha.ui.theme.WajihaElevation
 import com.wajiha.ui.theme.WajihaMotion
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
@@ -192,7 +193,7 @@ private fun IdleHero() {
                 text = "Pick a game on the touch screen",
                 style = MaterialTheme.typography.bodyMedium,
                 color = scheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(top = WajihaSpacing.sm),
             )
         }
     }
@@ -241,7 +242,7 @@ private fun ContextHeroFrame(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 32.dp, vertical = 28.dp),
+                    .padding(horizontal = WajihaSpacing.xl, vertical = WajihaSpacing.lgPlus),
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
@@ -255,7 +256,7 @@ private fun ContextHeroFrame(
                     text = it,
                     style = MaterialTheme.typography.headlineSmall,
                     color = scheme.onBackground,
-                    modifier = Modifier.padding(top = 10.dp),
+                    modifier = Modifier.padding(top = WajihaSpacing.smPlus),
                 )
             }
             hint?.let {
@@ -263,7 +264,7 @@ private fun ContextHeroFrame(
                     text = it,
                     style = MaterialTheme.typography.bodyLarge,
                     color = scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(top = WajihaSpacing.md),
                 )
             }
         }
@@ -367,7 +368,9 @@ private fun GameDetailHero(
                                 Brush.horizontalGradient(
                                     colors =
                                         listOf(
-                                            scheme.background.copy(alpha = 0.55f),
+                                            scheme.background.copy(
+                                                alpha = WajihaAlphas.surfaceMuted,
+                                            ),
                                             scheme.background.copy(alpha = 0.92f),
                                         ),
                                 ),
@@ -376,12 +379,12 @@ private fun GameDetailHero(
             }
         }
         Row(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            modifier = Modifier.fillMaxSize().padding(WajihaSpacing.lg),
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.lg),
             verticalAlignment = Alignment.Top,
         ) {
             if (settings.topHeroCover) {
-                val coverShape = RoundedCornerShape(12.dp)
+                val coverShape = WajihaShapes.heroInner
                 Box(
                     modifier =
                         Modifier
@@ -391,8 +394,11 @@ private fun GameDetailHero(
                             .then(
                                 if (settings.topHeroCoverBorder) {
                                     Modifier.border(
-                                        width = 1.dp,
-                                        color = scheme.outline.copy(alpha = 0.35f),
+                                        width = WajihaSpacing.folderEdge,
+                                        color =
+                                            scheme.outline.copy(
+                                                alpha = WajihaAlphas.outlineSubtle,
+                                            ),
                                         shape = coverShape,
                                     )
                                 } else {
@@ -450,7 +456,7 @@ private fun GameDetailHero(
                             color = scheme.primary,
                             modifier =
                                 Modifier.padding(
-                                    top = if (settings.topHeroTitle) 6.dp else 0.dp,
+                                    top = if (settings.topHeroTitle) WajihaSpacing.smHalf else 0.dp,
                                 ),
                         )
                     }
@@ -460,21 +466,21 @@ private fun GameDetailHero(
                         text = "★ Favorite",
                         style = MaterialTheme.typography.labelMedium,
                         color = scheme.tertiary,
-                        modifier = Modifier.padding(top = 8.dp),
+                        modifier = Modifier.padding(top = WajihaSpacing.sm),
                     )
                 }
                 if (showFocusedHelp && focusedHero != null) {
                     Surface(
                         shape = WajihaShapes.dialog,
                         color = scheme.surfaceContainerLow.copy(alpha = 0.92f),
-                        tonalElevation = 2.dp,
-                        shadowElevation = 3.dp,
+                        tonalElevation = WajihaElevation.low,
+                        shadowElevation = WajihaElevation.menu,
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(top = 10.dp),
+                                .padding(top = WajihaSpacing.smPlus),
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column(modifier = Modifier.padding(WajihaSpacing.md)) {
                             SettingsHeroDetailBody(
                                 detail = focusedHero,
                                 showActions = showActions,
@@ -488,7 +494,7 @@ private fun GameDetailHero(
                         text = "Launch, emulator, and scraper on the bottom screen  ·  L1 / R1 switch tabs",
                         style = MaterialTheme.typography.labelMedium,
                         color = scheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp),
+                        modifier = Modifier.padding(top = WajihaSpacing.sm),
                     )
                 }
                 GameDetailMetadataPanel(
@@ -645,7 +651,9 @@ private fun GameHero(
                                 Brush.horizontalGradient(
                                     colors =
                                         listOf(
-                                            scheme.background.copy(alpha = 0.55f),
+                                            scheme.background.copy(
+                                                alpha = WajihaAlphas.surfaceMuted,
+                                            ),
                                             scheme.background.copy(alpha = 0.92f),
                                         ),
                                 ),
@@ -654,11 +662,11 @@ private fun GameHero(
             }
         }
         Row(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            modifier = Modifier.fillMaxSize().padding(WajihaSpacing.lg),
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.lg),
         ) {
             if (showCover) {
-                val coverShape = RoundedCornerShape(12.dp)
+                val coverShape = WajihaShapes.heroInner
                 Box(
                     modifier =
                         Modifier
@@ -668,8 +676,11 @@ private fun GameHero(
                             .then(
                                 if (settings.topHeroCoverBorder) {
                                     Modifier.border(
-                                        width = 1.dp,
-                                        color = scheme.outline.copy(alpha = 0.35f),
+                                        width = WajihaSpacing.folderEdge,
+                                        color =
+                                            scheme.outline.copy(
+                                                alpha = WajihaAlphas.outlineSubtle,
+                                            ),
                                         shape = coverShape,
                                     )
                                 } else {
@@ -769,7 +780,7 @@ private fun GameHeroMetadata(
         if (showPlatformRow) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.smPlus),
             ) {
                 if (settings.topHeroPlatformIcon) {
                     tile.iconPath?.let { icon ->
@@ -779,8 +790,8 @@ private fun GameHeroMetadata(
                             contentScale = ContentScale.Fit,
                             modifier =
                                 Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(8.dp)),
+                                    .size(WajihaSpacing.actionBarHeight)
+                                    .clip(WajihaShapes.tile),
                         )
                     }
                 }
@@ -802,7 +813,8 @@ private fun GameHeroMetadata(
                 color = scheme.onBackground,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = if (showPlatformRow) 4.dp else 0.dp),
+                modifier =
+                    Modifier.padding(top = if (showPlatformRow) WajihaSpacing.xs else 0.dp),
             )
         }
         if (settings.topHeroMetadata) {
@@ -819,7 +831,7 @@ private fun GameHeroMetadata(
                     text = meta,
                     style = MaterialTheme.typography.bodyLarge,
                     color = scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = WajihaSpacing.sm),
                 )
             }
         }

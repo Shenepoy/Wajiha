@@ -25,7 +25,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.dp
 import com.wajiha.input.FocusClaimSource
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.LocalFocusContinuityController
@@ -34,7 +33,9 @@ import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.UiSound
 import com.wajiha.ui.components.LocalUiFeedback
+import com.wajiha.ui.theme.WajihaIconSize
 import com.wajiha.ui.theme.WajihaShapes
+import com.wajiha.ui.theme.WajihaSpacing
 
 private const val DisabledContentAlpha = 0.38f
 
@@ -82,7 +83,11 @@ fun GamepadIconButton(
 ) {
     GamepadButtonScaffold(
         onClick = onClick,
-        modifier = modifier.defaultMinSize(minWidth = 44.dp, minHeight = 44.dp),
+        modifier =
+            modifier.defaultMinSize(
+                minWidth = SettingsCompactRowMinHeight,
+                minHeight = SettingsCompactRowMinHeight,
+            ),
         enabled = enabled,
         outlined = outlined,
         gamepadFocusable = gamepadFocusable,
@@ -90,12 +95,12 @@ fun GamepadIconButton(
         focusId = focusId ?: contentDescription,
         onFocusedChanged = onFocusedChanged,
         sound = sound,
-        contentPadding = PaddingValues(10.dp),
+        contentPadding = PaddingValues(WajihaSpacing.sm + WajihaSpacing.micro),
         content = {
             Icon(
                 imageVector = imageVector,
                 contentDescription = contentDescription,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(WajihaIconSize.md + WajihaSpacing.micro),
             )
         },
     )

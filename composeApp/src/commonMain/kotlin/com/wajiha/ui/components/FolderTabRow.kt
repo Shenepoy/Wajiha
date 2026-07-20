@@ -56,6 +56,11 @@ internal fun folderChromeOutlineColor(): Color =
         else -> MaterialTheme.colorScheme.outline
     }
 
+/** Soft outline for swatches / chips (1.dp + subtle outline alpha). */
+@Composable
+fun softOutlineBorder(alpha: Float = com.wajiha.ui.theme.WajihaAlphas.outlineSubtle): BorderStroke =
+    BorderStroke(WajihaSpacing.folderEdge, MaterialTheme.colorScheme.outline.copy(alpha = alpha))
+
 /**
  * Horizontal folder-style tabs where the selected tab visually connects to a
  * content panel below (manila-folder metaphor). Right-aligned within the row.

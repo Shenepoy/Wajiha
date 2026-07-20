@@ -77,16 +77,16 @@ import com.wajiha.platform.UiSound
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
+import com.wajiha.ui.components.WajihaFolderSettingChrome
 import com.wajiha.ui.components.WajihaLoadingState
 import com.wajiha.ui.components.WajihaScreen
-import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.GamepadFocusable
-import com.wajiha.ui.components.gamepad.GamepadForm
 import com.wajiha.ui.components.gamepad.GamepadList
 import com.wajiha.ui.components.gamepad.GamepadSafeTextField
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
+import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
 import com.wajiha.ui.components.gamepad.MultiChoiceOption
 import com.wajiha.ui.components.gamepad.SettingType
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
@@ -138,11 +138,13 @@ fun ScraperScreen(
         },
     ) {
         GamepadNavHost(controller = navController) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                WajihaToolbar(title = "Scraper", onBack = onBack)
-                GamepadForm(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    ScraperPageContent(viewModel)
-                }
+            WajihaFolderSettingChrome(
+                onBack = onBack,
+                tabs = listOf("Scraper"),
+                selectedIndex = 0,
+                onSelect = {},
+            ) {
+                ScraperPageContent(viewModel)
             }
         }
     }
@@ -311,7 +313,7 @@ private fun ScraperExpandableSection(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .defaultMinSize(minHeight = WajihaSpacing.touchMin),
+                    .defaultMinSize(minHeight = LocalSettingRowMinHeight.current),
         ) {
             Row(
                 modifier =

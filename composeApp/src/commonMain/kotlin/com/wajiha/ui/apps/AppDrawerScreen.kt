@@ -70,6 +70,7 @@ import com.wajiha.log.WajihaTags
 import com.wajiha.platform.LaunchableApp
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
+import com.wajiha.ui.components.WajihaFolderChromeMetrics
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadChip
@@ -622,7 +623,10 @@ fun AppDrawerScreen(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = WajihaSpacing.sm + WajihaSpacing.xs, vertical = WajihaSpacing.sm),
+                                .padding(
+                                    horizontal = WajihaFolderChromeMetrics.horizontalPadding,
+                                    vertical = WajihaFolderChromeMetrics.topPadding,
+                                ),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         GamepadButton(

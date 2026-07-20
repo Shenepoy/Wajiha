@@ -75,6 +75,10 @@ import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.ui.components.LocalUiFeedback
+import com.wajiha.ui.theme.WajihaAlphas
+import com.wajiha.ui.theme.WajihaColors
+import com.wajiha.ui.theme.WajihaElevation
+import com.wajiha.ui.theme.WajihaIconSize
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import org.jetbrains.compose.resources.DrawableResource
@@ -82,7 +86,6 @@ import org.jetbrains.compose.resources.painterResource
 
 /** Compact row height for multi-choice list items (denser than [SettingsCompactRowMinHeight]). */
 private val MultiChoiceItemMinHeight = 34.dp
-private val SettingExpansionIconSize = 20.dp
 
 @Composable
 internal fun SettingExpansionIcon(
@@ -100,8 +103,8 @@ internal fun SettingExpansionIcon(
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier =
             modifier
-                .padding(start = 2.dp, end = 4.dp)
-                .size(SettingExpansionIconSize),
+                .padding(start = WajihaSpacing.micro, end = WajihaSpacing.xs)
+                .size(WajihaIconSize.md),
     )
 }
 
@@ -720,7 +723,7 @@ private fun MultiChoiceSettingRow(
                 Image(
                     painter = painterResource(res),
                     contentDescription = null,
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(WajihaIconSize.md + WajihaSpacing.micro),
                     contentScale = ContentScale.Fit,
                 )
             }
@@ -791,12 +794,12 @@ private fun MultiChoicePickerPanel(
                 .padding(top = WajihaSpacing.xs / 2),
         shape = RectangleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 2.dp,
+        tonalElevation = WajihaElevation.low,
     ) {
         Column(
             modifier =
                 Modifier
-                    .padding(vertical = 2.dp)
+                    .padding(vertical = WajihaSpacing.micro)
                     .onPreviewKeyEvent { event ->
                         if (GamepadKeys.isY(event.type, event.key) && canReset) {
                             feedback.confirm()
@@ -865,7 +868,9 @@ private fun MultiChoiceListItem(
                         }
 
                         selected && option.enabled -> {
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                            MaterialTheme.colorScheme.primaryContainer.copy(
+                                alpha = WajihaAlphas.outlineSubtle,
+                            )
                         }
 
                         selected && !option.enabled -> {
@@ -918,7 +923,7 @@ private fun MultiChoiceListItem(
                     } else {
                         Modifier
                     },
-                ).padding(horizontal = WajihaSpacing.sm, vertical = 2.dp),
+                ).padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.micro),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
     ) {
@@ -929,7 +934,7 @@ private fun MultiChoiceListItem(
                 contentDescription = null,
                 modifier =
                     Modifier
-                        .size(28.dp)
+                        .size(WajihaIconSize.xl)
                         .then(if (option.enabled) Modifier else Modifier.alpha(disabledAlpha)),
                 contentScale = ContentScale.Fit,
             )
@@ -944,7 +949,7 @@ private fun MultiChoiceListItem(
                         selected -> MaterialTheme.colorScheme.primary
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(WajihaIconSize.md),
                 textAlign = TextAlign.Center,
             )
         }
@@ -1100,11 +1105,11 @@ private fun ResetGlyph(onClick: (() -> Unit)?) {
             ),
         label = "reset_rotation",
     )
-    val tint = Color(0xFFFFC107).copy(alpha = 0.35f)
+    val tint = WajihaColors.OverrideAmber.copy(alpha = WajihaAlphas.overrideAmber)
     Box(
         modifier =
             Modifier
-                .size(28.dp)
+                .size(WajihaIconSize.xl)
                 .rotate(rotation)
                 .pointerInput(onClick) {
                     detectTapGestures { onClick?.invoke() }

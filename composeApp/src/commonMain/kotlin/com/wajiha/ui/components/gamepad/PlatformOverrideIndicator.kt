@@ -6,7 +6,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -20,19 +19,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.wajiha.input.wajihaGamepadFocus
+import com.wajiha.ui.theme.WajihaColors
+import com.wajiha.ui.theme.WajihaElevation
+import com.wajiha.ui.theme.WajihaIconSize
+import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
-private val OverrideBadgeColor = Color(0xFFFFC107)
 private const val HintAutoDismissMs = 2_500L
 
 /**
@@ -57,9 +57,9 @@ fun PlatformOverrideIndicator(
     Box(
         modifier =
             modifier
-                .size(width = 12.dp, height = 5.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(OverrideBadgeColor.copy(alpha = 0.82f))
+                .size(width = WajihaSpacing.md - WajihaSpacing.xs, height = WajihaSpacing.xs + WajihaSpacing.folderEdge)
+                .clip(WajihaShapes.focus)
+                .background(WajihaColors.OverrideAmber.copy(alpha = 0.82f))
                 .focusable()
                 .wajihaGamepadFocus()
                 .onFocusChanged { state ->
@@ -75,14 +75,14 @@ fun PlatformOverrideIndicator(
     if (showHint) {
         Popup(
             alignment = Alignment.TopStart,
-            offset = IntOffset(0, with(density) { 18.dp.roundToPx() }),
+            offset = IntOffset(0, with(density) { WajihaIconSize.sm.roundToPx() }),
             onDismissRequest = { showHint = false },
             properties = PopupProperties(focusable = false),
         ) {
             Surface(
-                shape = RoundedCornerShape(6.dp),
+                shape = WajihaShapes.chip,
                 color = MaterialTheme.colorScheme.inverseSurface,
-                tonalElevation = 4.dp,
+                tonalElevation = WajihaElevation.overlay,
             ) {
                 Text(
                     text = hint,

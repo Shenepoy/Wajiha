@@ -37,8 +37,6 @@ import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 
-private val SessionOnTopGreen = Color(0xFF4CAF50)
-
 /** Session tile for the unified game grid — same [GamepadTile] shell and 3:4 aspect as game tiles. */
 @Composable
 fun SessionGridTile(
@@ -171,7 +169,7 @@ fun SessionGridTile(
                                 .padding(WajihaSpacing.sm)
                                 .size(10.dp)
                                 .clip(CircleShape)
-                                .background(SessionOnTopGreen),
+                                .background(WajihaColors.StatusGreen),
                     )
                 }
             }

@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
+import com.wajiha.ui.theme.WajihaAlphas
 import com.wajiha.ui.theme.WajihaSpacing
 import org.koin.compose.koinInject
 
@@ -44,7 +45,7 @@ fun WajihaSection(
 fun WajihaSectionDivider(modifier: Modifier = Modifier) {
     HorizontalDivider(
         modifier = modifier.padding(vertical = WajihaSpacing.sm),
-        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+        color = MaterialTheme.colorScheme.outline.copy(alpha = WajihaAlphas.outlineSubtle),
     )
 }
 
@@ -66,9 +67,12 @@ fun WajihaToolbar(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.sm),
+                .padding(
+                    horizontal = WajihaFolderChromeMetrics.horizontalPadding,
+                    vertical = WajihaFolderChromeMetrics.topPadding,
+                ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(WajihaFolderChromeMetrics.tabBackGap),
     ) {
         com.wajiha.ui.components.gamepad.GamepadButton(
             text = "Back",
@@ -99,7 +103,10 @@ fun WajihaPanel(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(WajihaSpacing.md),
+                .padding(
+                    horizontal = WajihaFolderChromeMetrics.horizontalPadding,
+                    vertical = WajihaFolderChromeMetrics.topPadding,
+                ),
     ) {
         content()
     }

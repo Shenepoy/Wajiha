@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import com.wajiha.ui.components.gamepad.GamepadButton
+import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
+import com.wajiha.ui.theme.WajihaAlphas
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
@@ -43,11 +45,12 @@ fun CriticalChangeActions(
             colors =
                 ButtonDefaults.outlinedButtonColors(
                     contentColor = WajihaColors.Tertiary,
-                    disabledContentColor = WajihaColors.Tertiary.copy(alpha = 0.4f),
+                    disabledContentColor =
+                        WajihaColors.Tertiary.copy(alpha = WajihaAlphas.outlineMuted),
                 ),
             modifier =
                 Modifier
-                    .defaultMinSize(minHeight = WajihaSpacing.touchMin)
+                    .defaultMinSize(minHeight = LocalSettingRowMinHeight.current)
                     .then(
                         if (revertFocusRequester != null) {
                             Modifier.focusRequester(revertFocusRequester)

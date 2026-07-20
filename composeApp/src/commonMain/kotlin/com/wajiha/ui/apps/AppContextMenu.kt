@@ -75,21 +75,19 @@ import com.wajiha.input.GamepadTextEditRegistry
 import com.wajiha.input.LocalFocusContinuityController
 import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.wajihaGamepadFocus
+import com.wajiha.ui.components.WajihaContextMenuMetrics
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
 import com.wajiha.ui.theme.FocusBorderStyle
 import com.wajiha.ui.theme.GamepadFocusChromeScope
 import com.wajiha.ui.theme.LocalFocusIndicatorStyle
 import com.wajiha.ui.theme.LocalGamepadFocusChromeScope
+import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
-private val ContextMenuWidth = 176.dp
-private val ContextMenuTitleGap = 4.dp
-private val ContextMenuRowHeight = 40.dp
-private val ContextMenuIconSlot = 18.dp
 private val ContextMenuMarqueeIdleMs = 1500
 private val ContextMenuMarqueePxPerSec = 40f
 
@@ -261,7 +259,7 @@ private fun AppContextMenuRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .defaultMinSize(minHeight = ContextMenuRowHeight)
+                .defaultMinSize(minHeight = WajihaContextMenuMetrics.rowHeight)
                 .clip(WajihaShapes.focus)
                 .wajihaFocusIndicator(highlighted = focused, shape = WajihaShapes.focus)
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
@@ -289,7 +287,7 @@ private fun AppContextMenuRow(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(ContextMenuIconSlot),
+            modifier = Modifier.size(WajihaContextMenuMetrics.iconSlot),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
@@ -309,9 +307,8 @@ private fun ContextMenuDimScrim(
     tileCutoutRoot: Rect?,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
-    scrimAlpha: Float = 0.48f,
 ) {
-    val scrimColor = Color.Black.copy(alpha = scrimAlpha)
+    val scrimColor = WajihaColors.MenuScrim
     val density = LocalDensity.current
     val focusStyle = LocalFocusIndicatorStyle.current
     val ringPadPx =
@@ -487,7 +484,7 @@ fun AppContextMenu(
                             if (menuSize.width > 0) {
                                 menuSize.width.toFloat()
                             } else {
-                                ContextMenuWidth.toPx()
+                                WajihaContextMenuMetrics.width.toPx()
                             }
                         val menuH =
                             if (menuSize.height > 0) {
@@ -563,7 +560,7 @@ fun AppContextMenu(
                         Modifier
                             .onSizeChanged { size ->
                                 if (size != IntSize.Zero) menuSize = size
-                            }.width(ContextMenuWidth),
+                            }.width(WajihaContextMenuMetrics.width),
                 ) {
                     Surface(
                         shape = WajihaShapes.chip,
@@ -581,7 +578,7 @@ fun AppContextMenu(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(ContextMenuTitleGap))
+                    Spacer(modifier = Modifier.height(WajihaContextMenuMetrics.titleGap))
 
                     Surface(
                         shape = WajihaShapes.chip,

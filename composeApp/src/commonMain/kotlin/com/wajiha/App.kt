@@ -34,7 +34,6 @@ import com.wajiha.ui.apps.AppDrawerScreen
 import com.wajiha.ui.components.WajihaFolderSettingChrome
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaSnackbarHost
-import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.quickSettingsGamepadHints
 import com.wajiha.ui.components.rememberWajihaSnackbarHostState
 import com.wajiha.ui.gamedetail.GameDetailScreen
@@ -616,14 +615,16 @@ fun App() {
                                     null
                                 },
                         ) {
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                WajihaToolbar(
-                                    title = "Now Running",
-                                    onBack = {
-                                        viewModel.playBack()
-                                        route = Route.Home
-                                    },
-                                )
+                            WajihaFolderSettingChrome(
+                                onBack = {
+                                    viewModel.playBack()
+                                    route = Route.Home
+                                },
+                                tabs = listOf("Now Running"),
+                                selectedIndex = 0,
+                                onSelect = {},
+                                scrollable = false,
+                            ) {
                                 NowPlayingPanel(
                                     state = nowPlaying,
                                     heroBackground = settings.nowPlayingHeroBackground,

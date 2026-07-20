@@ -18,7 +18,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.input.ControllerGlyphLabels
@@ -27,6 +26,7 @@ import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadTextEditRegistry
 import com.wajiha.ui.theme.WajihaColors
+import com.wajiha.ui.theme.WajihaIconSize
 import com.wajiha.ui.theme.WajihaSpacing
 import org.koin.compose.koinInject
 
@@ -41,10 +41,10 @@ enum class GamepadActionBarChrome {
     Overlay,
 }
 
-/** Fixed chrome height: one labelMedium line + Kenney glyph (~20dp). */
-val GamepadActionBarHeight = 36.dp
+/** Fixed chrome height: one labelMedium line + Kenney glyph. */
+val GamepadActionBarHeight = WajihaSpacing.actionBarHeight
 
-private val GlyphSize = 20.dp
+private val GlyphSize = WajihaIconSize.md
 
 /** L2 cross-display focus switch — injected by [com.wajiha.input.MirroredOrLocalGamepadActionBar]. */
 val FocusScreenGamepadHint = GamepadHint(GamepadHintButton.L2, "Focus")
@@ -245,7 +245,7 @@ private fun GamepadHintChip(
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
     ) {
         GamepadHintGlyph(
             button = hint.button,

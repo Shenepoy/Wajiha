@@ -11,6 +11,14 @@ object WajihaShapes {
     /** Content panels and popover surfaces. */
     val card = RoundedCornerShape(8.dp)
 
+    /** Dual-display / settings focus hero card. */
+    val heroCornerRadius = 18.dp
+    val hero = RoundedCornerShape(heroCornerRadius)
+
+    /** Inner hero / cover panels (slightly tighter than [hero]). */
+    val heroInnerCornerRadius = 12.dp
+    val heroInner = RoundedCornerShape(heroInnerCornerRadius)
+
     /** Chips, segmented pills, badges — boxy interactive controls. */
     val chip = RoundedCornerShape(4.dp)
 

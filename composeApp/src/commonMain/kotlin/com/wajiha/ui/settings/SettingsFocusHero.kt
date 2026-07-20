@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,7 +34,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -54,13 +52,14 @@ import com.wajiha.state.isSettingsHeroInteractive
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.WajihaSettingDivider
+import com.wajiha.ui.theme.WajihaAlphas
+import com.wajiha.ui.theme.WajihaColors
+import com.wajiha.ui.theme.WajihaElevation
+import com.wajiha.ui.theme.WajihaIconSize
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import com.wajiha.ui.theme.focusColorPreview
 import org.koin.compose.koinInject
-
-private val HeroCardShape = RoundedCornerShape(18.dp)
-private val HeroInnerShape = RoundedCornerShape(12.dp)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -146,7 +145,7 @@ private fun SettingsHeroStage(
                                 scheme.background,
                             ),
                     ),
-                ).padding(horizontal = 16.dp, vertical = 14.dp),
+                ).padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.mdTight),
     ) {
         content()
     }
@@ -174,16 +173,16 @@ private fun SettingsHeroCard(
                         Modifier
                     },
                 ),
-        shape = HeroCardShape,
+        shape = WajihaShapes.hero,
         color = scheme.surfaceContainerLow,
-        tonalElevation = 2.dp,
-        shadowElevation = 4.dp,
+        tonalElevation = WajihaElevation.low,
+        shadowElevation = WajihaElevation.overlay,
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier =
                     Modifier
-                        .width(4.dp)
+                        .width(WajihaSpacing.xs)
                         .fillMaxHeight()
                         .background(scheme.primary),
             )
@@ -192,7 +191,7 @@ private fun SettingsHeroCard(
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                        .padding(horizontal = WajihaSpacing.mdPlus, vertical = WajihaSpacing.md),
                 verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
                 content = content,
             )
@@ -300,7 +299,7 @@ private fun HeroHeader(
     if (platform != null) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.smPlus),
             modifier = Modifier.fillMaxWidth(),
         ) {
             StatusDot(active = platform.enabled)
@@ -344,18 +343,18 @@ private fun HeroHeader(
 private fun StatusDot(active: Boolean) {
     val color =
         if (active) {
-            Color(0xFF2E7D32)
+            WajihaColors.StatusGreenDeep
         } else {
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+            MaterialTheme.colorScheme.outline.copy(alpha = WajihaAlphas.surfaceMuted)
         }
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier.size(18.dp),
+        modifier = Modifier.size(WajihaIconSize.sm),
     ) {
         Box(
             modifier =
                 Modifier
-                    .size(16.dp)
+                    .size(WajihaIconSize.xs)
                     .clip(CircleShape)
                     .background(color.copy(alpha = 0.22f)),
         )
@@ -391,8 +390,8 @@ private fun HeroValueBlock(detail: SettingsHeroDetail) {
         } ?: return
 
     Surface(
-        shape = HeroInnerShape,
-        color = scheme.primaryContainer.copy(alpha = 0.55f),
+        shape = WajihaShapes.heroInner,
+        color = scheme.primaryContainer.copy(alpha = WajihaAlphas.surfaceMuted),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
@@ -400,7 +399,11 @@ private fun HeroValueBlock(detail: SettingsHeroDetail) {
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = scheme.onPrimaryContainer,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier =
+                Modifier.padding(
+                    horizontal = WajihaSpacing.mdTight,
+                    vertical = WajihaSpacing.smPlus,
+                ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -487,21 +490,25 @@ private fun PreviewChip(
         "focusColor" -> {
             val color = focusColorPreview(payload)
             Surface(
-                shape = HeroInnerShape,
+                shape = WajihaShapes.heroInner,
                 color = scheme.surfaceVariant.copy(alpha = 0.5f),
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = WajihaSpacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
                 ) {
                     Box(
                         modifier =
                             Modifier
-                                .size(24.dp)
+                                .size(WajihaIconSize.lg)
                                 .clip(CircleShape)
                                 .background(color)
-                                .border(1.dp, scheme.outline.copy(alpha = 0.35f), CircleShape),
+                                .border(
+                                    WajihaSpacing.folderEdge,
+                                    scheme.outline.copy(alpha = WajihaAlphas.outlineSubtle),
+                                    CircleShape,
+                                ),
                     )
                     Text(
                         text = "Focus color · $payload",
@@ -513,14 +520,14 @@ private fun PreviewChip(
 
         "theme", "glyphs" -> {
             Surface(
-                shape = HeroInnerShape,
+                shape = WajihaShapes.heroInner,
                 color = scheme.surfaceVariant.copy(alpha = 0.5f),
             ) {
                 Text(
                     text = "${kind.replaceFirstChar { it.uppercase() }} · $payload",
                     style = MaterialTheme.typography.labelLarge,
                     color = scheme.primary,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = WajihaSpacing.sm),
                 )
             }
         }
@@ -537,13 +544,13 @@ private fun PlatformMetaBlock(platform: SettingsHeroPlatformExtras) {
             ?.filter { it.isNotEmpty() }
             .orEmpty()
     Surface(
-        shape = HeroInnerShape,
+        shape = WajihaShapes.heroInner,
         color = scheme.surfaceVariant.copy(alpha = 0.42f),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = WajihaSpacing.mdTight, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             MetaLine(label = "ID", value = platform.platformId)
             platform.shortName
@@ -563,7 +570,7 @@ private fun PlatformMetaBlock(platform: SettingsHeroPlatformExtras) {
             if (platform.folderPaths.isNotEmpty()) {
                 HorizontalDivider(
                     color = scheme.outline.copy(alpha = 0.14f),
-                    modifier = Modifier.padding(vertical = 2.dp),
+                    modifier = Modifier.padding(vertical = WajihaSpacing.micro),
                 )
                 Text(
                     text = if (platform.folderPaths.size == 1) "Folder" else "Folders",
@@ -623,17 +630,17 @@ private fun PlatformBoxartRow(
 ) {
     val scheme = MaterialTheme.colorScheme
     Surface(
-        shape = HeroInnerShape,
-        color = scheme.surfaceVariant.copy(alpha = 0.35f),
+        shape = WajihaShapes.heroInner,
+        color = scheme.surfaceVariant.copy(alpha = WajihaAlphas.outlineSubtle),
         modifier = modifier,
     ) {
         Column(
-            modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(WajihaSpacing.smPlus),
+            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
             ) {
                 paths.take(6).forEach { path ->
                     AsyncImage(
@@ -683,8 +690,9 @@ private fun RoleCard(
 ) {
     Surface(
         modifier = modifier.height(64.dp),
-        shape = HeroInnerShape,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        shape = WajihaShapes.heroInner,
+        color =
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = WajihaAlphas.surfaceMuted),
     ) {
         Column(
             modifier = Modifier.padding(WajihaSpacing.sm),

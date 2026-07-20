@@ -76,6 +76,8 @@ import com.wajiha.ui.components.WajihaEmptyState
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadHintGlyph
 import com.wajiha.ui.components.gamepad.GamepadList
+import com.wajiha.ui.theme.WajihaAlphas
+import com.wajiha.ui.theme.WajihaIconSize
 import com.wajiha.ui.theme.WajihaMotion
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
@@ -86,8 +88,6 @@ import kotlin.time.ExperimentalTime
 
 private const val NotificationModalLayerId = "modal_system_notifications"
 private const val PeekDurationMs = 4_000L
-private val StatusSliverWidth = 8.dp
-private val StatusChipHeight = 28.dp
 private val NotificationPanelMaxHeight = 220.dp
 
 /**
@@ -215,12 +215,15 @@ private fun StatusBarSliver(onClick: () -> Unit) {
     Box(
         modifier =
             Modifier
-                .width(StatusSliverWidth)
-                .height(StatusChipHeight)
+                .width(WajihaSpacing.sm)
+                .height(WajihaIconSize.xl)
                 .clip(WajihaShapes.chip)
                 .background(scheme.surfaceContainerLow)
-                .border(1.dp, scheme.outline.copy(alpha = 0.35f), WajihaShapes.chip)
-                .pointerInput(onClick) {
+                .border(
+                    WajihaSpacing.folderEdge,
+                    scheme.outline.copy(alpha = WajihaAlphas.outlineSubtle),
+                    WajihaShapes.chip,
+                ).pointerInput(onClick) {
                     detectTapGestures { onClick() }
                 },
     )
@@ -243,8 +246,11 @@ private fun StatusBarChip(
             Modifier
                 .clip(WajihaShapes.chip)
                 .background(scheme.surfaceContainerLow)
-                .border(1.dp, scheme.outline.copy(alpha = 0.35f), WajihaShapes.chip)
-                .pointerInput(onClick) {
+                .border(
+                    WajihaSpacing.folderEdge,
+                    scheme.outline.copy(alpha = WajihaAlphas.outlineSubtle),
+                    WajihaShapes.chip,
+                ).pointerInput(onClick) {
                     detectTapGestures { onClick() }
                 }.padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
@@ -278,7 +284,7 @@ private fun StatusBarChip(
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.micro),
         ) {
             Icon(
                 imageVector =
@@ -355,8 +361,8 @@ private fun NotificationPanel(
                 Modifier
                     .fillMaxWidth()
                     .border(
-                        width = 1.dp,
-                        color = scheme.outline.copy(alpha = 0.2f),
+                        width = WajihaSpacing.folderEdge,
+                        color = scheme.outline.copy(alpha = WajihaAlphas.divider),
                         shape = WajihaShapes.card,
                     ),
             shape = WajihaShapes.card,
@@ -401,7 +407,7 @@ private fun NotificationPanel(
                             )
                             GamepadHintGlyph(
                                 button = GamepadHintButton.R2,
-                                size = 18.dp,
+                                size = WajihaIconSize.sm,
                             )
                         }
                     }
@@ -455,7 +461,7 @@ private fun NotificationRow(item: SystemNotification) {
             Modifier
                 .fillMaxWidth()
                 .clip(WajihaShapes.chip)
-                .background(scheme.surfaceVariant.copy(alpha = 0.55f))
+                .background(scheme.surfaceVariant.copy(alpha = WajihaAlphas.surfaceMuted))
                 .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
         verticalAlignment = Alignment.Top,
     ) {
@@ -463,7 +469,7 @@ private fun NotificationRow(item: SystemNotification) {
             modifier =
                 Modifier
                     .padding(top = 5.dp)
-                    .size(6.dp)
+                    .size(WajihaSpacing.smHalf)
                     .clip(WajihaShapes.pill)
                     .background(accent),
         )
@@ -533,8 +539,8 @@ private val StatusWifiIcon: ImageVector by lazy {
     ImageVector
         .Builder(
             name = "StatusWifi",
-            defaultWidth = 24.dp,
-            defaultHeight = 24.dp,
+            defaultWidth = WajihaIconSize.lg,
+            defaultHeight = WajihaIconSize.lg,
             viewportWidth = 24f,
             viewportHeight = 24f,
         ).apply {
@@ -579,8 +585,8 @@ private val StatusBluetoothIcon: ImageVector by lazy {
     ImageVector
         .Builder(
             name = "StatusBluetooth",
-            defaultWidth = 24.dp,
-            defaultHeight = 24.dp,
+            defaultWidth = WajihaIconSize.lg,
+            defaultHeight = WajihaIconSize.lg,
             viewportWidth = 24f,
             viewportHeight = 24f,
         ).apply {

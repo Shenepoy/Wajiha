@@ -53,6 +53,18 @@ object WajihaColors {
     val ScreenFrameLight = Color(0xFFD4DCE8)
     val HeroScrim = Color(0x99000000)
 
+    /** Context-menu dimmer (App / Session / Game) — not [HeroScrim]. */
+    val MenuScrim = Color(0x7A000000)
+
     // Bottom-of-tile label scrim (always over artwork → keep dark)
     val TileScrim = Color(0xCC0B101B)
+
+    /** Platform / setting override badge (Material Amber 500). */
+    val OverrideAmber = Color(0xFFFFC107)
+
+    /** Session “on top” / success status. */
+    val StatusGreen = Color(0xFF4CAF50)
+
+    /** Hero success / granted status (deeper green). */
+    val StatusGreenDeep = Color(0xFF2E7D32)
 }

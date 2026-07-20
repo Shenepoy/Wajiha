@@ -231,21 +231,21 @@ private fun WelcomeBeat(
             delay(28)
         }
     }
-    Spacer(modifier = Modifier.height(48.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.touchMin))
     Text(
         text = "Wajiha",
         style = MaterialTheme.typography.displayMedium,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary,
     )
-    Spacer(modifier = Modifier.height(20.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.mdPlus))
     Text(
         text = typed + if (typed.length < full.length) "|" else "",
         style = MaterialTheme.typography.titleLarge,
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth(),
     )
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(WajihaShapes.heroInnerCornerRadius))
     Text(
         text =
             if (singleScreen) {
@@ -259,7 +259,7 @@ private fun WelcomeBeat(
         textAlign = TextAlign.Center,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Spacer(modifier = Modifier.height(36.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.actionBarHeight))
     GamepadButton(
         text = "Let's go",
         onClick = onContinue,
@@ -276,17 +276,17 @@ private fun ThemeBeat(
 ) {
     BeatTitle("Choose your look")
     BeatBody("Dark feels like a handheld console. Light is closer to the classic 3DS home menu. You can change this anytime.")
-    Spacer(modifier = Modifier.height(20.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.mdPlus))
     ChoiceCard(
         title = "Dark",
         description = "Deep navy chrome — easy on OLED panels",
     ) { onPick("dark") }
-    Spacer(modifier = Modifier.height(10.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.smPlus))
     ChoiceCard(
         title = "Light",
         description = "Soft blue-greys — bright play sessions",
     ) { onPick("light") }
-    Spacer(modifier = Modifier.height(10.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.smPlus))
     ChoiceCard(
         title = "Follow system",
         description = "Match Android's light / dark setting",
@@ -344,10 +344,10 @@ private fun GrantAccessBeat(
                 "Android will bounce you to Settings — come back and they'll light up."
         },
     )
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.md))
     items.forEach { item ->
         GrantCard(item)
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(WajihaSpacing.sm))
     }
     BeatNav(onBack = onBack, onNext = onContinue, nextLabel = if (granted > 0) "Continue" else "Continue anyway")
 }
@@ -362,14 +362,14 @@ private fun DisplayLayoutBeat(
         "Wajiha can use both screens on clamshell handhelds, or combine everything " +
             "on the main display. Change anytime in Settings → Screens.",
     )
-    Spacer(modifier = Modifier.height(20.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.mdPlus))
     ChoiceCard(
         title = "Dual screens",
         description =
             "Art on one display, browse and launch on the other. " +
                 "Best on AYN Thor and clamshell handhelds.",
     ) { onPick(false) }
-    Spacer(modifier = Modifier.height(10.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.smPlus))
     ChoiceCard(
         title = "Single screen",
         description =
@@ -411,7 +411,7 @@ private fun HomeBeat(
             }
         },
     )
-    Spacer(modifier = Modifier.height(20.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.mdPlus))
     if (isDefault) {
         StatusPill("Default home set")
     } else {
@@ -445,13 +445,13 @@ private fun AddGamesBeat(
                 "It scans in the background — neat box art comes later in Scraper."
         },
     )
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.md))
     GamepadButton(
         text = "Choose a platform",
         onClick = onAddPlatform,
         modifier = Modifier.fillMaxWidth().widthIn(max = 360.dp),
     )
-    Spacer(modifier = Modifier.height(8.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.sm))
     Text(
         text = "You’ll pick from the full catalog, then set emulator and folders.",
         style = MaterialTheme.typography.labelSmall,
@@ -459,7 +459,7 @@ private fun AddGamesBeat(
         textAlign = TextAlign.Center,
     )
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = WajihaSpacing.mdPlus),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -469,7 +469,7 @@ private fun AddGamesBeat(
             GamepadButton(
                 text = if (folderCount > 0) "Continue" else "Continue anyway",
                 onClick = onContinue,
-                modifier = Modifier.padding(start = 4.dp),
+                modifier = Modifier.padding(start = WajihaSpacing.xs),
             )
         }
     }
@@ -486,7 +486,7 @@ private fun DoneBeat(
         style = MaterialTheme.typography.headlineMedium,
         fontWeight = FontWeight.Bold,
     )
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(WajihaShapes.heroInnerCornerRadius))
     Text(
         text =
             if (singleScreen) {
@@ -504,7 +504,7 @@ private fun DoneBeat(
         textAlign = TextAlign.Center,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(WajihaSpacing.xl))
     GamepadButton(
         text = "Show me around",
         onClick = onFinished,
@@ -531,7 +531,7 @@ private fun BeatBody(text: String) {
         style = MaterialTheme.typography.bodyMedium,
         textAlign = TextAlign.Center,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 10.dp),
+        modifier = Modifier.padding(top = WajihaSpacing.smPlus),
     )
 }
 
@@ -542,7 +542,7 @@ private fun BeatNav(
     nextLabel: String,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = WajihaSpacing.lg),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -568,13 +568,19 @@ private fun ChoiceCard(
         shape = WajihaShapes.card,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
+        Column(
+            modifier =
+                Modifier.padding(
+                    horizontal = WajihaShapes.heroCornerRadius,
+                    vertical = WajihaSpacing.mdTight,
+                ),
+        ) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = WajihaSpacing.xs),
             )
         }
     }
@@ -600,13 +606,19 @@ private fun GrantCard(item: GrantItem) {
             },
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = WajihaSpacing.md,
+                        vertical = WajihaShapes.heroInnerCornerRadius,
+                    ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier =
                     Modifier
-                        .size(12.dp)
+                        .size(WajihaShapes.heroInnerCornerRadius)
                         .clip(CircleShape)
                         .background(
                             if (item.granted) {
@@ -616,7 +628,12 @@ private fun GrantCard(item: GrantItem) {
                             },
                         ),
             )
-            Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Column(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .padding(horizontal = WajihaShapes.heroInnerCornerRadius),
+            ) {
                 Text(item.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                 Text(
                     text = item.description,
@@ -648,7 +665,11 @@ private fun StatusPill(text: String) {
             text = text,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier =
+                Modifier.padding(
+                    horizontal = WajihaSpacing.md,
+                    vertical = WajihaSpacing.sm,
+                ),
         )
     }
 }
