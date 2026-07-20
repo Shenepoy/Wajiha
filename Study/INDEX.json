@@ -1,6 +1,6 @@
 {
   "purpose": "Machine-readable index of Study corpus for Wajiha emulation launcher",
-  "updated": "2026-07-08",
+  "updated": "2026-07-20",
   "wajiha": {
     "root": "../",
     "stack": "Kotlin Multiplatform, Compose Multiplatform, Gradle",
@@ -83,6 +83,20 @@
       "emulatorConfig": "assets/emuladores_default.json",
       "consoleCount": 173,
       "doc": "docs/09-iisu-apk.md"
+    },
+    {
+      "id": "lawnchair",
+      "path": "lawnchair/",
+      "type": "open_source",
+      "license": "Apache-2.0 (shape sources may carry GPL-3 headers — do not copy)",
+      "stack": ["Kotlin", "Launcher3", "Compose preferences"],
+      "package": "app.lawnchair",
+      "note": "Icon pack discovery, appfilter, shape UX reference; gitignored local clone",
+      "remote": "https://github.com/LawnchairLauncher/lawnchair",
+      "branch": "15-dev",
+      "dualDisplay": false,
+      "homeLauncher": true,
+      "doc": "docs/10-lawnchair-icons.md"
     }
   ],
   "crossCuttingDocs": [
@@ -91,6 +105,7 @@
     "docs/06-emulator-launch-patterns.md",
     "docs/07-dual-display-handhelds.md",
     "docs/08-platform-json-schema.md",
-    "docs/09-iisu-apk.md"
+    "docs/09-iisu-apk.md",
+    "docs/10-lawnchair-icons.md"
   ]
 }

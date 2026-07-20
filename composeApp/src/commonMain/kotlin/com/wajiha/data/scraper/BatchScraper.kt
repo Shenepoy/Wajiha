@@ -187,11 +187,21 @@ class BatchScraper(
     /**
      * Preflight: returns an error message if batch should not start, else null.
      */
-    suspend fun preflightMessage(platformId: String? = null): String? {
+    suspend fun preflightMessage(
+        platformId: String? = null,
+        policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps,
+    ): String? {
         val settings = settingsRepository.current()
-        val effective = if (platformId != null) settings.forPlatform(platformId) else settings
+        val platformSettings = if (platformId != null) settings.forPlatform(platformId) else settings
+        val effective =
+            policy.sourceId?.let { platformSettings.copy(enabledSources = listOf(it)) }
+                ?: platformSettings
         if (!engine.hasConfiguredSources(effective)) {
-            return "No scraper sources configured — enable and sign in under Sources / Accounts"
+            return if (policy.sourceId != null) {
+                "Selected scraper is not configured — check Sources / Accounts"
+            } else {
+                "No scraper sources configured — enable and sign in under Sources / Accounts"
+            }
         }
         if (_progress.value.running) {
             return "A scrape is already running"

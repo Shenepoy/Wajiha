@@ -13,6 +13,7 @@ Read this index first, then the docs under `docs/`. For machine-readable metadat
 | `RetroHrai-v0.5.1.apk` | Closed source APK | Dissected → `_extracted/retrohrai/` | [docs/04-retrohrai-apk.md](./docs/04-retrohrai-apk.md) |
 | `cocoon-beta-2-2.apk` | Closed source APK (beta) | Dissected → `_extracted/cocoon/` | [docs/05-cocoon-apk.md](./docs/05-cocoon-apk.md) |
 | `iiSU-Alpha-0.0.7.3.apk` | Closed source APK (alpha) | Dissected → `_extracted/iisu/` | [docs/09-iisu-apk.md](./docs/09-iisu-apk.md) |
+| `lawnchair/` | Open source (Apache 2.0) | Icon packs / shapes reference | [docs/10-lawnchair-icons.md](./docs/10-lawnchair-icons.md) |
 
 ## Recommended reading order
 
@@ -35,6 +36,7 @@ Ignored locally (see root `.gitignore`):
 | `_extracted/` | APK unzip output (regenerate with commands below) |
 | `neostation-frontend/` | Full GPL clone — re-clone when needed |
 | `Daijishou/` | Assets repo (~6.5 GB themes) — `git clone` locally |
+| `lawnchair/` | Full launcher clone — icon-pack reference only |
 
 After cloning Wajiha, populate references locally:
 
@@ -44,6 +46,10 @@ git clone https://github.com/misobadev/neostation-frontend.git Study/neostation-
 
 # Optional: Daijishō platform packs
 git clone https://github.com/TapiocaFox/Daijishou.git Study/Daijishou
+
+# Optional: Lawnchair icon-pack / shape reference
+git clone --depth 1 --branch 15-dev \
+  https://github.com/LawnchairLauncher/lawnchair.git Study/lawnchair
 
 # APKs: obtain separately and place in Study/
 ```

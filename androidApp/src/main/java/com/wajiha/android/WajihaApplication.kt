@@ -21,6 +21,10 @@ import com.wajiha.android.detect.RomPathMatcher
 import com.wajiha.android.detect.probes.AetherSx2RomPathProbe
 import com.wajiha.android.detect.probes.RetroArchRomPathProbe
 import com.wajiha.android.display.DisplayCoordinator
+import com.wajiha.android.display.SecondaryDisplayHost
+import com.wajiha.android.icons.AndroidIconPackActions
+import com.wajiha.android.icons.IconBitmapCache
+import com.wajiha.android.icons.IconResolver
 import com.wajiha.android.launch.GameLauncher
 import com.wajiha.android.launch.PlaySessionTracker
 import com.wajiha.android.library.RomFileDeleter
@@ -47,6 +51,7 @@ import com.wajiha.platform.AndroidMediaStorage
 import com.wajiha.platform.AppActions
 import com.wajiha.platform.ContentRomHasher
 import com.wajiha.platform.EsDeLocalMediaFiles
+import com.wajiha.platform.IconPackActions
 import com.wajiha.platform.LibraryActions
 import com.wajiha.platform.RomHasher
 import com.wajiha.platform.RomScanner
@@ -131,7 +136,8 @@ class WajihaApplication :
                 single { RomFolderManager(this@WajihaApplication, get(), get()) }
                 single { PlaySessionTracker(get(), get()) }
                 single { GameLauncher(this@WajihaApplication, get(), get(), get(), get(), get(), get()) }
-                single { DisplayCoordinator(this@WajihaApplication, get()) }
+                single { SecondaryDisplayHost() }
+                single { DisplayCoordinator(this@WajihaApplication, get(), get()) }
                 single(named("applicationScope")) { appScope }
                 single {
                     com.wajiha.android.input.GamepadDeviceRegistry(
@@ -186,7 +192,11 @@ class WajihaApplication :
                     )
                 }
                 single { RomFileDeleter(this@WajihaApplication) }
-                single { AndroidAppActions(this@WajihaApplication, get(), get(), get(), get(), get()) } binds
+                single { IconBitmapCache(this@WajihaApplication) }
+                single { IconResolver(this@WajihaApplication, get(), get()) }
+                single { AndroidIconPackActions(this@WajihaApplication, get()) } binds
+                    arrayOf(IconPackActions::class)
+                single { AndroidAppActions(this@WajihaApplication, get(), get(), get(), get(), get(), get()) } binds
                     arrayOf(AppActions::class)
                 single { AndroidLibraryActions(this@WajihaApplication, get(), get()) } binds
                     arrayOf(LibraryActions::class)

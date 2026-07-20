@@ -6,6 +6,7 @@ import com.wajiha.platform.AppActions
 import com.wajiha.platform.UiSound
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
+import com.wajiha.state.MenuDestination
 import com.wajiha.state.SystemNotificationStore
 
 /** Shared L2/R2 side effects for digital keys and analog axes. */
@@ -54,7 +55,32 @@ class LauncherTriggerActions(
         return true
     }
 
-    /** Start → open Settings on the display that currently owns the menu. */
+    /**
+     * L3 (left stick click) → Apps on the display that currently owns the menu.
+     */
+    fun onL3(label: String): Boolean {
+        val dualState = store.state.value
+        if (dualState == DualScreenState.GameRunning ||
+            dualState == DualScreenState.BlackoutSecondary
+        ) {
+            return false
+        }
+        val applied = store.requestOpenApps()
+        WajihaLog.i(
+            WajihaTags.GAMEPAD,
+            if (applied) {
+                "map: L3($label) → open Apps"
+            } else {
+                "map: L3($label) dropped (buffer full)"
+            },
+        )
+        return true
+    }
+
+    /**
+     * Start → Apps options while the menu is on Apps; otherwise Settings on the
+     * display that currently owns the menu (main grid).
+     */
     fun onStart(label: String): Boolean {
         val dualState = store.state.value
         if (dualState == DualScreenState.GameRunning ||
@@ -62,16 +88,21 @@ class LauncherTriggerActions(
         ) {
             return false
         }
-        val applied = store.requestOpenSettings()
+        val onApps = store.menuRoute.value.destination == MenuDestination.Apps
+        val applied = store.requestStartAction()
         WajihaLog.i(
             WajihaTags.GAMEPAD,
             if (applied) {
-                "map: Start($label) → open Settings"
+                if (onApps) {
+                    "map: Start($label) → open Apps options"
+                } else {
+                    "map: Start($label) → open Settings"
+                }
             } else {
-                "map: Start($label) open Settings dropped (buffer full)"
+                "map: Start($label) dropped (buffer full)"
             },
         )
-        // Sound plays in the menu-owner collector (same as the Settings chrome button).
+        // Sound plays in the menu-owner / Apps collector.
         return true
     }
 }

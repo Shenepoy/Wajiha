@@ -8,11 +8,14 @@ import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.PlatformRepository
+import com.wajiha.platform.IconPackActions
+import com.wajiha.platform.IconPackInfo
 import com.wajiha.platform.LibraryActions
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingDisplayMode
 import com.wajiha.state.SecondaryMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -28,10 +31,24 @@ class SettingsViewModel(
     private val platformRepository: PlatformRepository,
     private val libraryActions: LibraryActions,
     private val dualScreenStore: DualScreenStore,
+    private val iconPackActions: IconPackActions,
 ) : ViewModel() {
     val settings: StateFlow<AppSettings> =
         settingsRepository.settings
             .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
+
+    private val _iconPacks = MutableStateFlow<List<IconPackInfo>>(emptyList())
+    val iconPacks: StateFlow<List<IconPackInfo>> = _iconPacks
+
+    init {
+        refreshIconPacks()
+    }
+
+    fun refreshIconPacks() {
+        viewModelScope.launch {
+            _iconPacks.value = iconPackActions.installedPacks()
+        }
+    }
 
     /** False until DataStore has emitted; avoids flashing onboarding at start. */
     val settingsLoaded: StateFlow<Boolean> =
@@ -202,6 +219,80 @@ class SettingsViewModel(
 
     fun setTheme(theme: String) {
         viewModelScope.launch { settingsRepository.setTheme(theme) }
+    }
+
+    fun setIconPackPackage(packageName: String) {
+        viewModelScope.launch { settingsRepository.setIconPackPackage(packageName) }
+    }
+
+    fun setIconShape(shape: String) {
+        viewModelScope.launch { settingsRepository.setIconShape(shape) }
+    }
+
+    fun setAppDrawerColumns(columns: Int) {
+        viewModelScope.launch { settingsRepository.setAppDrawerColumns(columns) }
+    }
+
+    fun setAppDrawerRows(rows: Int) {
+        viewModelScope.launch { settingsRepository.setAppDrawerRows(rows) }
+    }
+
+    fun setAppDrawerIconSize(size: String) {
+        viewModelScope.launch { settingsRepository.setAppDrawerIconSize(size) }
+    }
+
+    fun setAppDrawerOrientation(orientation: String) {
+        viewModelScope.launch { settingsRepository.setAppDrawerOrientation(orientation) }
+    }
+
+    fun setAppDrawerScrollMode(mode: String) {
+        viewModelScope.launch { settingsRepository.setAppDrawerScrollMode(mode) }
+    }
+
+    fun setAppDrawerShowLabels(show: Boolean) {
+        viewModelScope.launch { settingsRepository.setAppDrawerShowLabels(show) }
+    }
+
+    fun setAppDrawerSecondaryColumns(columns: Int) {
+        viewModelScope.launch { settingsRepository.setAppDrawerSecondaryColumns(columns) }
+    }
+
+    fun setAppDrawerSecondaryRows(rows: Int) {
+        viewModelScope.launch { settingsRepository.setAppDrawerSecondaryRows(rows) }
+    }
+
+    fun setAppDrawerSecondaryIconSize(size: String) {
+        viewModelScope.launch { settingsRepository.setAppDrawerSecondaryIconSize(size) }
+    }
+
+    fun setAppDrawerSecondaryOrientation(orientation: String) {
+        viewModelScope.launch { settingsRepository.setAppDrawerSecondaryOrientation(orientation) }
+    }
+
+    fun setAppDrawerSecondaryScrollMode(mode: String) {
+        viewModelScope.launch { settingsRepository.setAppDrawerSecondaryScrollMode(mode) }
+    }
+
+    fun setAppDrawerSecondaryShowLabels(show: Boolean) {
+        viewModelScope.launch { settingsRepository.setAppDrawerSecondaryShowLabels(show) }
+    }
+
+    fun addAppDrawerFavorite(packageName: String) {
+        viewModelScope.launch { settingsRepository.addAppDrawerFavorite(packageName) }
+    }
+
+    fun removeAppDrawerFavorite(packageName: String) {
+        viewModelScope.launch { settingsRepository.removeAppDrawerFavorite(packageName) }
+    }
+
+    fun moveAppDrawerFavorite(
+        packageName: String,
+        delta: Int,
+        installedPackages: Collection<String>,
+    ) {
+        viewModelScope.launch {
+            settingsRepository.moveAppDrawerFavorite(packageName, delta, installedPackages)
+        }
     }
 
     fun setFocusBorderStyle(style: String) {

@@ -317,8 +317,8 @@ private fun ScraperExpandableSection(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .clip(WajihaShapes.focus)
                         .wajihaFocusIndicator(highlighted = headerHighlight)
+                        .clip(WajihaShapes.focus)
                         .focusRequester(headerFocusRequester)
                         .then(
                             if (!useCustomNav) {
@@ -437,8 +437,8 @@ private fun ScraperAccountSubsection(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .clip(WajihaShapes.focus)
                     .wajihaFocusIndicator(highlighted = headerHighlight)
+                    .clip(WajihaShapes.focus)
                     .focusRequester(headerFocusRequester)
                     .then(
                         if (!useCustomNav) {
@@ -549,9 +549,7 @@ private fun ScraperAccountsSection(viewModel: ScraperViewModel) {
         if ("screenscraper" in enabled) {
             ScraperAccountSubsection(
                 title = "ScreenScraper",
-                configured =
-                    settings.screenScraperUser.isNotBlank() &&
-                        settings.screenScraperPassword.isNotBlank(),
+                configured = viewModel.isScreenScraperConfigured(settings),
                 sourceId = "screenscraper",
                 onTest = { viewModel.testSourceCredentials("screenscraper") },
                 viewModel = viewModel,
@@ -562,19 +560,19 @@ private fun ScraperAccountsSection(viewModel: ScraperViewModel) {
                 CompactCredentialField("Password", settings.screenScraperPassword, secret = true) { v ->
                     viewModel.update { it.copy(screenScraperPassword = v) }
                 }
-                CompactCredentialField("Dev ID (optional)", settings.screenScraperDevId) { v ->
+                CompactCredentialField("Dev ID (or built in)", settings.screenScraperDevId) { v ->
                     viewModel.update { it.copy(screenScraperDevId = v) }
                 }
                 CompactCredentialField(
-                    "Dev password (optional)",
+                    "Dev password (or built in)",
                     settings.screenScraperDevPassword,
                     secret = true,
                 ) { v ->
                     viewModel.update { it.copy(screenScraperDevPassword = v) }
                 }
                 Text(
-                    "SS API needs a developer app pair. Leave Dev fields blank to omit them — " +
-                        "your user login alone is not enough for ScreenScraper.",
+                    "ScreenScraper requires a developer app pair on every request. " +
+                        "Leave these fields blank only when this build includes that pair.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1321,6 +1319,19 @@ private fun isPlatformSourceOverridden(
     return (sourceId in platformSources) != (sourceId in globalSources)
 }
 
+private const val AllScraperSources = "all"
+
+private val scraperRunSourceOptions =
+    listOf(
+        MultiChoiceOption(AllScraperSources, "All enabled", "Use the configured source priority."),
+        MultiChoiceOption("screenscraper", "ScreenScraper", "Metadata and media from ScreenScraper."),
+        MultiChoiceOption("steamgriddb", "SteamGridDB", "Community artwork from SteamGridDB."),
+        MultiChoiceOption("libretro", "Libretro", "No-account thumbnail library."),
+        MultiChoiceOption("ra", "RetroAchievements", "Achievement-linked game artwork."),
+        MultiChoiceOption("romm", "RomM", "Metadata and media from your RomM server."),
+        MultiChoiceOption("local", "Local media", "Match artwork already stored on this device."),
+    )
+
 @Composable
 private fun ScraperBatchBlock(
     viewModel: ScraperViewModel,
@@ -1330,10 +1341,16 @@ private fun ScraperBatchBlock(
     val inUsePlatforms by viewModel.inUsePlatforms.collectAsState()
     val batchFeedback by viewModel.batchFeedback.collectAsState()
     val apiLogs by viewModel.apiLogs.collectAsState()
-    val sourcesReady = viewModel.hasConfiguredSources(null)
     var issuesExpanded by remember { mutableStateOf(false) }
     var showApiLogs by remember { mutableStateOf(false) }
     var mode by remember { mutableStateOf(ScrapeUiMode.FillGaps) }
+    var selectedSource by remember { mutableStateOf(AllScraperSources) }
+    val selectedSourceId = selectedSource.takeUnless { it == AllScraperSources }
+    val selectedSourceLabel =
+        scraperRunSourceOptions.firstOrNull { it.value == selectedSource }?.label
+            ?: "All enabled"
+    val sourcesReady = viewModel.hasConfiguredSources(null, selectedSourceId)
+    val runPolicy = mode.toPolicy().copy(sourceId = selectedSourceId)
 
     ScrapeApiLogsDialog(
         visible = showApiLogs,
@@ -1399,6 +1416,19 @@ private fun ScraperBatchBlock(
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                GamepadSettingRow(
+                    label = "Scraper",
+                    description =
+                        if (selectedSourceId == null) {
+                            "Use every source enabled under Sources."
+                        } else {
+                            "Use only $selectedSourceLabel for this run."
+                        },
+                    type = SettingType.MultiChoice,
+                    multiChoiceOptions = scraperRunSourceOptions,
+                    selected = selectedSource,
+                    onSelect = { selectedSource = it },
+                )
                 ScrapeModeSelector(
                     selected = mode,
                     onSelect = { mode = it },
@@ -1409,7 +1439,7 @@ private fun ScraperBatchBlock(
                         },
                     onAction = {
                         viewModel.dismissBatchFeedback()
-                        viewModel.startBatch(null, mode.toPolicy())
+                        viewModel.startBatch(null, runPolicy)
                     },
                     showReview = false,
                     firstFocusRequester = firstFocusRequester,
@@ -1480,9 +1510,11 @@ private fun ScraperBatchBlock(
                                 else -> "Fill gaps"
                             },
                         onClick = {
-                            viewModel.startBatch(platform.id, mode.toPolicy())
+                            viewModel.startBatch(platform.id, runPolicy)
                         },
-                        enabled = !progress.running && sourcesReady,
+                        enabled =
+                            !progress.running &&
+                                viewModel.hasConfiguredSources(platform.id, selectedSourceId),
                         outlined = true,
                     )
                 }

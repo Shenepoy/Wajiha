@@ -246,3 +246,36 @@ fun WajihaMultiChoiceSetting(
         onFocusedChanged = onFocusedChanged,
     )
 }
+
+/**
+ * Continuous 0..1 (or custom range) slider row for System / Quick Settings.
+ * Left/Right nudge; no Y-reset (hardware values have no launcher default).
+ */
+@Composable
+fun WajihaSliderSetting(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    description: String? = null,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    steps: Int = 0,
+    valueLabel: String? = null,
+    focusId: Any? = null,
+    focusRequester: FocusRequester? = null,
+    onFocusedChanged: ((Boolean) -> Unit)? = null,
+) {
+    GamepadSlider(
+        label = label,
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        valueRange = valueRange,
+        steps = steps,
+        valueLabel = valueLabel,
+        description = description,
+        focusId = focusId,
+        focusRequester = focusRequester,
+        onFocusedChanged = onFocusedChanged,
+    )
+}

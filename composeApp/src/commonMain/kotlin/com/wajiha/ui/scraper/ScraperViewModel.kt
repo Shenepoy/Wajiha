@@ -70,6 +70,8 @@ class ScraperViewModel(
 
     fun clearApiLogs() = ScrapeApiLog.clear()
 
+    fun isScreenScraperConfigured(settings: ScraperSettings): Boolean = credentialValidator.isScreenScraperConfigured(settings)
+
     init {
         // Show the persisted snapshot (last run / interrupted run) after restart
         viewModelScope.launch { batchScraper.restoreIfIdle() }
@@ -390,9 +392,15 @@ class ScraperViewModel(
 
     fun resumeBatch() = batchScraper.resume()
 
-    fun hasConfiguredSources(platformId: String? = null): Boolean {
+    fun hasConfiguredSources(
+        platformId: String? = null,
+        sourceId: String? = null,
+    ): Boolean {
         val s = settings.value
-        val effective = if (platformId != null) s.forPlatform(platformId) else s
+        val platformSettings = if (platformId != null) s.forPlatform(platformId) else s
+        val effective =
+            sourceId?.let { platformSettings.copy(enabledSources = listOf(it)) }
+                ?: platformSettings
         return engine.hasConfiguredSources(effective)
     }
 

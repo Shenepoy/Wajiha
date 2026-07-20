@@ -1,9 +1,7 @@
 package com.wajiha.ui.settings
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -19,15 +17,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
@@ -37,19 +32,17 @@ import com.wajiha.input.requestContentFocus
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
-import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.WajihaEmptyState
+import com.wajiha.ui.components.WajihaFolderSettingChrome
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadList
 import com.wajiha.ui.components.gamepad.GamepadSearchField
-import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
 import com.wajiha.ui.components.gamepad.ProvideSettingsDensity
 import com.wajiha.ui.components.gamepad.WajihaActionSetting
 import com.wajiha.ui.components.gamepad.WajihaSettingBlurb
-import com.wajiha.ui.components.gamepad.WajihaSettingPanel
 import com.wajiha.ui.components.gamepad.withoutDualScreenChrome
 import com.wajiha.ui.theme.WajihaSpacing
 import org.koin.compose.koinInject
@@ -180,129 +173,80 @@ fun PlatformPickerScreen(
                     )
                 }
 
-                Column(
+                WajihaFolderSettingChrome(
+                    tabs = filterLabels,
+                    selectedIndex = selectedFilterIndex,
+                    onSelect = ::selectFilter,
+                    onBack = onBack.takeIf { isDual },
+                    scrollable = false,
                     modifier =
                         Modifier
                             .weight(1f)
-                            .fillMaxWidth()
-                            .padding(horizontal = WajihaSpacing.md),
+                            .fillMaxWidth(),
                 ) {
-                    if (isDual) {
-                        Row(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .zIndex(1f)
-                                    .padding(top = WajihaSpacing.sm),
-                            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-                            verticalAlignment = Alignment.Bottom,
-                        ) {
-                            GamepadButton(
-                                text = "Back",
-                                onClick = onBack,
-                                outlined = true,
-                                gamepadFocusable = false,
-                                sound = null,
+                    WajihaSettingBlurb(
+                        "Choose a system, then select the folder that contains its games.",
+                    )
+                    GamepadSearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = "Search systems",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        text = if (filtered.size == 1) "1 system" else "${filtered.size} systems",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = WajihaSpacing.xs),
+                    )
+                    GamepadList(
+                        items = filtered,
+                        key = { it.id },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(0.dp),
+                        emptyContent = {
+                            PlatformCatalogEmptyState(
+                                catalogEmpty = allPlatforms.isEmpty(),
+                                query = query,
+                                focusRequester = sectionFocus,
+                                onClear = {
+                                    query = ""
+                                    selectFilter(PlatformCatalogFilter.All.ordinal)
+                                },
                             )
-                            FolderTabRow(
-                                tabs = filterLabels,
-                                selectedIndex = selectedFilterIndex,
-                                onSelect = ::selectFilter,
-                                minHeight = LocalSettingRowMinHeight.current,
-                                modifier =
-                                    Modifier
-                                        .weight(1f)
-                                        .focusProperties { canFocus = false },
-                            )
-                        }
-                    } else {
-                        FolderTabRow(
-                            tabs = filterLabels,
-                            selectedIndex = selectedFilterIndex,
-                            onSelect = ::selectFilter,
-                            minHeight = LocalSettingRowMinHeight.current,
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .zIndex(1f)
-                                    .focusProperties { canFocus = false }
-                                    .padding(top = WajihaSpacing.sm),
-                        )
-                    }
-
-                    WajihaSettingPanel(
-                        folderPanel = true,
-                        scrollable = false,
-                        modifier =
-                            Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .padding(bottom = WajihaSpacing.md),
-                    ) {
-                        WajihaSettingBlurb(
-                            "Choose a system, then select the folder that contains its games.",
-                        )
-                        GamepadSearchField(
-                            value = query,
-                            onValueChange = { query = it },
-                            label = "Search systems",
+                        },
+                    ) { platform ->
+                        val alreadyInUse = platform.id in inUseIds
+                        WajihaActionSetting(
+                            label = platform.name,
+                            labelMeta =
+                                buildString {
+                                    append(platform.shortName.uppercase())
+                                    if (alreadyInUse) append(" · in library")
+                                },
+                            actionLabel = if (alreadyInUse) "Open" else "Set up",
+                            onClick = { onPick(platform.id) },
+                            focusRequester =
+                                if (platform == filtered.firstOrNull()) sectionFocus else null,
+                            onFocusedChanged = { focused ->
+                                if (focused) {
+                                    publishSettingsHero(
+                                        store = dualStore,
+                                        detail =
+                                            pickerRowHeroDetail(
+                                                name = platform.name,
+                                                alreadyInUse = alreadyInUse,
+                                                actionsEnabled = settings.settingsHeroActions,
+                                            ),
+                                        onPrimaryAction = { onPick(platform.id) },
+                                    )
+                                } else {
+                                    clearSettingsHero(dualStore)
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Text(
-                            text = if (filtered.size == 1) "1 system" else "${filtered.size} systems",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = WajihaSpacing.xs),
-                        )
-                        GamepadList(
-                            items = filtered,
-                            key = { it.id },
-                            modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(0.dp),
-                            emptyContent = {
-                                PlatformCatalogEmptyState(
-                                    catalogEmpty = allPlatforms.isEmpty(),
-                                    query = query,
-                                    focusRequester = sectionFocus,
-                                    onClear = {
-                                        query = ""
-                                        selectFilter(PlatformCatalogFilter.All.ordinal)
-                                    },
-                                )
-                            },
-                        ) { platform ->
-                            val alreadyInUse = platform.id in inUseIds
-                            WajihaActionSetting(
-                                label = platform.name,
-                                labelMeta =
-                                    buildString {
-                                        append(platform.shortName.uppercase())
-                                        if (alreadyInUse) append(" · in library")
-                                    },
-                                actionLabel = if (alreadyInUse) "Open" else "Set up",
-                                onClick = { onPick(platform.id) },
-                                focusRequester =
-                                    if (platform == filtered.firstOrNull()) sectionFocus else null,
-                                onFocusedChanged = { focused ->
-                                    if (focused) {
-                                        publishSettingsHero(
-                                            store = dualStore,
-                                            detail =
-                                                pickerRowHeroDetail(
-                                                    name = platform.name,
-                                                    alreadyInUse = alreadyInUse,
-                                                    actionsEnabled = settings.settingsHeroActions,
-                                                ),
-                                            onPrimaryAction = { onPick(platform.id) },
-                                        )
-                                    } else {
-                                        clearSettingsHero(dualStore)
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
                     }
                 }
             }

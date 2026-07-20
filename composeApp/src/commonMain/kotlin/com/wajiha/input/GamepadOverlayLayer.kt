@@ -41,7 +41,7 @@ fun GamepadOverlayLayer(
 
     Box(
         modifier =
-            Modifier
+            modifier
                 .dismissKeyboardOnOutsideTap()
                 .onPreviewKeyEvent { event ->
                     when {

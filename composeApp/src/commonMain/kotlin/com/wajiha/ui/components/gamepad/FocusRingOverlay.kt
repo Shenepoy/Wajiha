@@ -71,6 +71,13 @@ class FocusRingOverlayState {
         // here caused one-frame ring loss during lazy-item and modal handoffs.
     }
 
+    fun dispose(token: Any) {
+        clear(token)
+        if (retainedEntry?.token === token) {
+            retainedEntry = null
+        }
+    }
+
     fun register(anchor: FocusAnchor) {
         controller?.register(anchor)
     }
@@ -84,10 +91,13 @@ data class FocusRingOverlayEntry(
     val token: Any,
     val anchor: FocusAnchor? = null,
     val boundsInRoot: Rect,
+    val viewportBoundsInRoot: Rect? = null,
     val color: Color,
     val thickness: Dp,
     val borderStyle: FocusBorderStyle,
     val shape: Shape,
+    val placementOutside: Boolean = true,
+    val compact: Boolean = false,
 )
 
 val LocalFocusRingOverlay = compositionLocalOf<FocusRingOverlayState?> { null }
@@ -110,14 +120,22 @@ fun FocusRingOverlayHost(
     val entry = state.entry
     val borderStyle = entry?.borderStyle
 
-    val pulseAlpha = animatedPulseAlpha(enabled = borderStyle == FocusBorderStyle.Pulsing)
+    val pulseAlpha =
+        animatedPulseAlpha(
+            enabled =
+                borderStyle == FocusBorderStyle.Pulsing ||
+                    borderStyle == FocusBorderStyle.SoftPulse ||
+                    borderStyle == FocusBorderStyle.Aura,
+        )
     val marchPhase =
         animatedMarchPhase(
             enabled = borderStyle == FocusBorderStyle.MarchingAnts,
         )
     val gradientPhase =
         animatedGradientPhase(
-            enabled = borderStyle == FocusBorderStyle.GradientPulse,
+            enabled =
+                borderStyle == FocusBorderStyle.GradientPulse ||
+                    borderStyle == FocusBorderStyle.SoftPulse,
         )
 
     Box(
@@ -131,6 +149,10 @@ fun FocusRingOverlayHost(
                     val hostBounds = host.boundsInRoot()
                     val item = current.boundsInRoot
                     if (item.width <= 0f || item.height <= 0f) return@drawWithContent
+                    val viewport = current.viewportBoundsInRoot
+                    // Soft cull: hide only when fully outside the settings viewport so
+                    // partially scrolled rows keep a visible Outside ring (no hard cut-off).
+                    if (viewport != null && !item.overlaps(viewport)) return@drawWithContent
                     drawFocusChrome(
                         itemTopLeft =
                             Offset(
@@ -142,10 +164,11 @@ fun FocusRingOverlayHost(
                         thickness = current.thickness,
                         borderStyle = current.borderStyle,
                         shape = current.shape,
-                        placementOutside = true,
+                        placementOutside = current.placementOutside,
                         pulseAlpha = pulseAlpha,
                         marchPhase = marchPhase,
                         gradientPhase = gradientPhase,
+                        compact = current.compact,
                     )
                 },
     ) {
@@ -160,10 +183,13 @@ fun FocusRingOverlayRegistrationEffect(
     anchor: FocusAnchor? = null,
     active: Boolean,
     boundsInRoot: Rect?,
+    viewportBoundsInRoot: Rect? = null,
     color: Color,
     thickness: Dp,
     borderStyle: FocusBorderStyle,
     shape: Shape,
+    placementOutside: Boolean = true,
+    compact: Boolean = false,
 ) {
     DisposableEffect(state, token, anchor, active) {
         if (active && anchor != null) {
@@ -173,7 +199,7 @@ fun FocusRingOverlayRegistrationEffect(
             if (active && anchor != null) {
                 state.unregister(anchor)
             }
-            state.clear(token)
+            state.dispose(token)
         }
     }
     SideEffect {
@@ -183,10 +209,13 @@ fun FocusRingOverlayRegistrationEffect(
                     token = token,
                     anchor = anchor,
                     boundsInRoot = boundsInRoot,
+                    viewportBoundsInRoot = viewportBoundsInRoot,
                     color = color,
                     thickness = thickness,
                     borderStyle = borderStyle,
                     shape = shape,
+                    placementOutside = placementOutside,
+                    compact = compact,
                 ),
             )
         } else {

@@ -6,6 +6,8 @@ data class LaunchableApp(
     val packageName: String,
     val label: String,
     val icon: ImageBitmap? = null,
+    /** Launcher activity class name for icon-pack appfilter lookup (not used for launch). */
+    val activityName: String = "",
 )
 
 enum class UiSound { Navigate, Open, Back, Launch }
@@ -62,7 +64,7 @@ interface LibraryActions {
 
     /**
      * Starts a batch scrape job (all platforms when null).
-     * @param mode `fill_gaps` (default) or `force`
+     * @param mode `fill_gaps`/`force`, optionally suffixed with `:<sourceId>`.
      * @return null if enqueued, or a short reason if blocked / already running.
      */
     suspend fun startScrape(

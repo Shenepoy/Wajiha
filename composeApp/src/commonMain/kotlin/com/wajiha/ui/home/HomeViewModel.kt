@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.wajiha.data.db.GameEntity
 import com.wajiha.data.db.GameMediaEntity
 import com.wajiha.data.db.PlatformEntity
+import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.PlatformRepository
 import com.wajiha.platform.AppActions
@@ -16,7 +17,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -44,10 +47,20 @@ class HomeViewModel(
     private val platformRepository: PlatformRepository,
     private val appActions: AppActions,
     val dualScreenStore: DualScreenStore,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
     private val selectedPlatformId = MutableStateFlow<String?>(null)
     private val launchError = MutableStateFlow<String?>(null)
     private var lastLaunchAtMs = 0L
+
+    init {
+        viewModelScope.launch {
+            settingsRepository.settings
+                .map { it.iconPackPackage to it.iconShape }
+                .distinctUntilChanged()
+                .collect { loadApps() }
+        }
+    }
 
     /** Ignore duplicate confirm/tap within the launch window (tap + A double-fire). */
     private fun tryBeginLaunch(): Boolean {

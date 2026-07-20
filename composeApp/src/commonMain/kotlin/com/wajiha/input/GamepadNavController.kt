@@ -14,6 +14,8 @@ private data class NavSlot(
     val enabled: Boolean,
     val onEnterEdit: (() -> Boolean)?,
     val onExitEdit: (() -> Boolean)?,
+    val onAdjustLeft: (() -> Boolean)?,
+    val onAdjustRight: (() -> Boolean)?,
 )
 
 /**
@@ -25,6 +27,7 @@ class GamepadNavController(
     private val onBack: (() -> Boolean)? = null,
 ) {
     private val slots = mutableListOf<NavSlot>()
+    private val backHandlers = linkedMapOf<Any, () -> Boolean>()
     var zoneId: String = ""
     var active: Boolean = true
 
@@ -34,9 +37,20 @@ class GamepadNavController(
         enabled: Boolean = true,
         onEnterEdit: (() -> Boolean)? = null,
         onExitEdit: (() -> Boolean)? = null,
+        onAdjustLeft: (() -> Boolean)? = null,
+        onAdjustRight: (() -> Boolean)? = null,
     ): Int {
         val index = slots.indexOfFirst { it.id == id }
-        val slot = NavSlot(id, onActivate, enabled, onEnterEdit, onExitEdit)
+        val slot =
+            NavSlot(
+                id = id,
+                onActivate = onActivate,
+                enabled = enabled,
+                onEnterEdit = onEnterEdit,
+                onExitEdit = onExitEdit,
+                onAdjustLeft = onAdjustLeft,
+                onAdjustRight = onAdjustRight,
+            )
         if (index >= 0) {
             slots[index] = slot
             focusState.itemCount = slots.count { it.enabled }
@@ -52,6 +66,18 @@ class GamepadNavController(
         slots.removeAll { it.id == id }
         focusState.itemCount = slots.count { it.enabled }
         focusState.clampIndex()
+    }
+
+    fun registerBackHandler(
+        id: Any,
+        handler: () -> Boolean,
+    ) {
+        backHandlers.remove(id)
+        backHandlers[id] = handler
+    }
+
+    fun unregisterBackHandler(id: Any) {
+        backHandlers.remove(id)
     }
 
     fun slotIndex(id: Any): Int {
@@ -94,6 +120,9 @@ class GamepadNavController(
             exitEdit()
             return true
         }
+        if (backHandlers.values.lastOrNull()?.invoke() == true) {
+            return true
+        }
         return onBack?.invoke() == true
     }
 
@@ -131,13 +160,35 @@ class GamepadNavController(
         }
 
         return when {
-            GamepadKeys.isConfirm(event.type, event.key) -> activate()
-            GamepadKeys.isBack(event.type, event.key) -> back()
-            event.key == Key.DirectionUp -> focusState.moveUp()
-            event.key == Key.DirectionDown -> focusState.moveDown()
-            event.key == Key.DirectionLeft -> focusState.moveLeft()
-            event.key == Key.DirectionRight -> focusState.moveRight()
-            else -> false
+            GamepadKeys.isConfirm(event.type, event.key) -> {
+                activate()
+            }
+
+            GamepadKeys.isBack(event.type, event.key) -> {
+                back()
+            }
+
+            event.key == Key.DirectionUp -> {
+                focusState.moveUp()
+            }
+
+            event.key == Key.DirectionDown -> {
+                focusState.moveDown()
+            }
+
+            event.key == Key.DirectionLeft -> {
+                enabledSlotAt(focusState.focusedIndex)?.onAdjustLeft?.invoke()
+                    ?: focusState.moveLeft()
+            }
+
+            event.key == Key.DirectionRight -> {
+                enabledSlotAt(focusState.focusedIndex)?.onAdjustRight?.invoke()
+                    ?: focusState.moveRight()
+            }
+
+            else -> {
+                false
+            }
         }
     }
 

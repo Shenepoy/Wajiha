@@ -88,13 +88,13 @@ fun GamepadChip(
         modifier =
             modifier
                 .focusRequester(resolvedFocusRequester)
-                .clip(WajihaShapes.chip)
-                .wajihaPressedFeedback(interactionSource, WajihaShapes.chip)
                 .wajihaFocusIndicator(
                     highlighted = !useCustomNav && focused,
                     shape = WajihaShapes.chip,
                     focusAnchor = anchor,
-                ).then(
+                ).clip(WajihaShapes.chip)
+                .wajihaPressedFeedback(interactionSource, WajihaShapes.chip)
+                .then(
                     if (!useCustomNav) {
                         Modifier
                             .onFocusChanged {

@@ -5,9 +5,11 @@ alwaysApply: true
 
 # Wajiha UI library
 
-- Prefer `com.wajiha.ui.components` and `com.wajiha.ui.components.gamepad` for screens and settings chrome.
-- Prefer `GamepadSettingRow` + `SettingType` (including `Action`), public `Wajiha*Setting` wrappers, `GamepadSettingTrailingActions`, gamepad buttons/chips/fields/slider/list, folder tabs, screen/toolbar/panel, and shared hint helpers.
-- When a pattern repeats across screens, extend the library instead of one-off Material preference chrome or custom focus rings.
-- Material `Switch` / `Slider` only inside library wrappers (e.g. toggle/number rows).
-- **X is contextual**: home/session grid → Menu; settings `Action` rows → secondary (e.g. Edit); never assume one global X meaning.
-- Exceptions: `GamepadTile`, system overlays, and anything under `Study/`.
+- Inspect `com.wajiha.ui.components` and `.gamepad` before building UI. Refine an existing primitive when behavior fits; add a shared primitive only for a proven reusable gap. Do not create parallel settings APIs, one-off Material preference chrome, custom focus rings, or duplicate gamepad key handling.
+- Canonical settings composition: `WajihaScreen` → `WajihaFolderSettingChrome` (Settings gutters via `WajihaFolderChromeMetrics`) → section content with public `Wajiha*Setting`/field/action components → shared hints and hero publication. Do not hand-roll Back + `FolderTabRow` + `WajihaSettingPanel` or use `md` horizontal padding for folder windows.
+- Prefer `GamepadSettingRow` and public `Wajiha*Setting` wrappers, including expandable, color-choice, value, dual-action, field-message, trailing-action, and focus-restoration APIs. Use `GamepadButton`, `GamepadChip`, `GamepadSafeTextField`, wrapped Switch/Slider controls, and shared empty/loading/error/dialog components instead of raw equivalents. Chrome min height is `SettingsCompactRowMinHeight` / `LocalSettingRowMinHeight` (44.dp) — Back, folder tabs, and setting rows share that standard.
+- Preserve interaction semantics: A primary; X contextual secondary (for example Menu, Edit, or Remove); Y reset only when supported and non-default; B exits edit/collapses before back; L1/R1 changes sections. Touch gets deliberate one-tap parity without duplicate nested actions.
+- Text fields follow `Idle` → `Selected` → `Editing`: navigation selects without opening the IME, touch or A explicitly edits, and B exits editing while restoring the navigation anchor. Recomposition, filtering, validation, and value updates must not steal focus.
+- Explain disabled controls, restore focus after dialogs/navigation, and define whether each row publishes dual-display hero state or intentionally does not. Defaults, overrides, reset visibility, parsing, persistence, and destructive confirmation must match the model/repository contract.
+- Exceptions: `GamepadTile`, system overlays, context menus, onboarding/review workflows with an intentional separate UI family, and anything under `Study/`.
+- Before handoff: search for an existing primitive, avoid parallel APIs, verify defaults/reset/persistence, run formatting/build checks, and test affected gamepad and dual-display flows on Thor.

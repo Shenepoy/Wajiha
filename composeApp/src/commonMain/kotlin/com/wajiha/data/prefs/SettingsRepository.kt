@@ -74,6 +74,39 @@ data class AppSettings(
      */
     val settingsHeroActions: Boolean = false,
     val theme: String = "dark",
+    /** Icon pack package name; empty = system icons. */
+    val iconPackPackage: String = IconAppearancePreferences.SYSTEM_PACK,
+    /** Apps drawer icon clip: system / circle / squircle / rounded_square / square. */
+    val iconShape: String = IconAppearancePreferences.DEFAULT_SHAPE,
+    /** Primary (top) Apps drawer columns. Clamped per screen at layout time. */
+    val appDrawerColumns: Int = AppDrawerGridPreferences.DEFAULT_COLUMNS,
+    /** Primary (top) Apps drawer target visible rows. */
+    val appDrawerRows: Int = AppDrawerGridPreferences.DEFAULT_ROWS,
+    /** Primary (top) Apps drawer icon size tier: small / medium / large. */
+    val appDrawerIconSize: String = AppDrawerGridPreferences.DEFAULT_ICON_SIZE,
+    /** Primary (top) Apps drawer scroll axis: vertical / horizontal. */
+    val appDrawerOrientation: String = AppDrawerGridPreferences.DEFAULT_ORIENTATION,
+    /** Primary (top) Apps drawer scroll mode: continuous / pages. */
+    val appDrawerScrollMode: String = AppDrawerGridPreferences.DEFAULT_SCROLL_MODE,
+    /** Primary (top) Apps drawer: show app name under icon. */
+    val appDrawerShowLabels: Boolean = AppDrawerGridPreferences.DEFAULT_SHOW_LABELS,
+    /** Secondary (bottom) Apps drawer columns. */
+    val appDrawerSecondaryColumns: Int = AppDrawerGridPreferences.DEFAULT_COLUMNS,
+    /** Secondary (bottom) Apps drawer target visible rows. */
+    val appDrawerSecondaryRows: Int = AppDrawerGridPreferences.DEFAULT_ROWS,
+    /** Secondary (bottom) Apps drawer icon size tier. */
+    val appDrawerSecondaryIconSize: String = AppDrawerGridPreferences.DEFAULT_ICON_SIZE,
+    /** Secondary (bottom) Apps drawer scroll axis. */
+    val appDrawerSecondaryOrientation: String = AppDrawerGridPreferences.DEFAULT_ORIENTATION,
+    /** Secondary (bottom) Apps drawer scroll mode. */
+    val appDrawerSecondaryScrollMode: String = AppDrawerGridPreferences.DEFAULT_SCROLL_MODE,
+    /** Secondary (bottom) Apps drawer: show app name under icon. */
+    val appDrawerSecondaryShowLabels: Boolean = AppDrawerGridPreferences.DEFAULT_SHOW_LABELS,
+    /**
+     * Shared Apps drawer favorites: ordered package names (first = leftmost/top).
+     * Missing/uninstalled packages are skipped when sorting and pruned on reorder.
+     */
+    val appDrawerFavoritePackages: List<String> = emptyList(),
     /** FocusBorderStyle name (Solid, Dotted, …, Neon). */
     val focusBorderStyle: String = "Solid",
     /** Focus ring color preset (theme, white, yellow, cyan, red, …) or custom #RRGGBB hex. */
@@ -142,6 +175,42 @@ class SettingsRepository(
                 settingsHeroHelp = prefs[SETTINGS_HERO_HELP] ?: true,
                 settingsHeroActions = prefs[SETTINGS_HERO_ACTIONS] ?: false,
                 theme = prefs[THEME] ?: "dark",
+                iconPackPackage = IconAppearancePreferences.normalizePackPackage(prefs[ICON_PACK_PACKAGE]),
+                iconShape = IconAppearancePreferences.normalizeShape(prefs[ICON_SHAPE]),
+                appDrawerColumns = AppDrawerGridPreferences.normalizeColumns(prefs[APP_DRAWER_COLUMNS]),
+                appDrawerRows = AppDrawerGridPreferences.normalizeRows(prefs[APP_DRAWER_ROWS]),
+                appDrawerIconSize = AppDrawerGridPreferences.normalizeIconSize(prefs[APP_DRAWER_ICON_SIZE]),
+                appDrawerOrientation = AppDrawerGridPreferences.normalizeOrientation(prefs[APP_DRAWER_ORIENTATION]),
+                appDrawerScrollMode = AppDrawerGridPreferences.normalizeScrollMode(prefs[APP_DRAWER_SCROLL_MODE]),
+                appDrawerShowLabels = prefs[APP_DRAWER_SHOW_LABELS] ?: AppDrawerGridPreferences.DEFAULT_SHOW_LABELS,
+                // Missing secondary keys inherit the primary values so existing installs
+                // keep one shared look until each screen is customized.
+                appDrawerSecondaryColumns =
+                    AppDrawerGridPreferences.normalizeColumns(
+                        prefs[APP_DRAWER_SECONDARY_COLUMNS] ?: prefs[APP_DRAWER_COLUMNS],
+                    ),
+                appDrawerSecondaryRows =
+                    AppDrawerGridPreferences.normalizeRows(
+                        prefs[APP_DRAWER_SECONDARY_ROWS] ?: prefs[APP_DRAWER_ROWS],
+                    ),
+                appDrawerSecondaryIconSize =
+                    AppDrawerGridPreferences.normalizeIconSize(
+                        prefs[APP_DRAWER_SECONDARY_ICON_SIZE] ?: prefs[APP_DRAWER_ICON_SIZE],
+                    ),
+                appDrawerSecondaryOrientation =
+                    AppDrawerGridPreferences.normalizeOrientation(
+                        prefs[APP_DRAWER_SECONDARY_ORIENTATION] ?: prefs[APP_DRAWER_ORIENTATION],
+                    ),
+                appDrawerSecondaryScrollMode =
+                    AppDrawerGridPreferences.normalizeScrollMode(
+                        prefs[APP_DRAWER_SECONDARY_SCROLL_MODE] ?: prefs[APP_DRAWER_SCROLL_MODE],
+                    ),
+                appDrawerSecondaryShowLabels =
+                    prefs[APP_DRAWER_SECONDARY_SHOW_LABELS]
+                        ?: prefs[APP_DRAWER_SHOW_LABELS]
+                        ?: AppDrawerGridPreferences.DEFAULT_SHOW_LABELS,
+                appDrawerFavoritePackages =
+                    AppDrawerGridPreferences.parseFavoritePackages(prefs[APP_DRAWER_FAVORITE_PACKAGES]),
                 focusBorderStyle = normalizeFocusBorderStyle(prefs[FOCUS_BORDER_STYLE]),
                 focusColor = normalizeFocusColor(prefs[FOCUS_COLOR]),
                 focusThickness = normalizeFocusThickness(prefs[FOCUS_THICKNESS]),
@@ -232,6 +301,126 @@ class SettingsRepository(
     }
 
     suspend fun setTheme(value: String) = setPref(THEME, value, "theme")
+
+    suspend fun setIconPackPackage(value: String) =
+        setPref(ICON_PACK_PACKAGE, IconAppearancePreferences.normalizePackPackage(value), "iconPackPackage")
+
+    suspend fun setIconShape(value: String) = setPref(ICON_SHAPE, IconAppearancePreferences.normalizeShape(value), "iconShape")
+
+    suspend fun setAppDrawerColumns(value: Int) =
+        setPref(APP_DRAWER_COLUMNS, AppDrawerGridPreferences.normalizeColumns(value), "appDrawerColumns")
+
+    suspend fun setAppDrawerRows(value: Int) = setPref(APP_DRAWER_ROWS, AppDrawerGridPreferences.normalizeRows(value), "appDrawerRows")
+
+    suspend fun setAppDrawerIconSize(value: String) =
+        setPref(APP_DRAWER_ICON_SIZE, AppDrawerGridPreferences.normalizeIconSize(value), "appDrawerIconSize")
+
+    suspend fun setAppDrawerOrientation(value: String) =
+        setPref(APP_DRAWER_ORIENTATION, AppDrawerGridPreferences.normalizeOrientation(value), "appDrawerOrientation")
+
+    suspend fun setAppDrawerScrollMode(value: String) =
+        setPref(APP_DRAWER_SCROLL_MODE, AppDrawerGridPreferences.normalizeScrollMode(value), "appDrawerScrollMode")
+
+    suspend fun setAppDrawerShowLabels(value: Boolean) = setPref(APP_DRAWER_SHOW_LABELS, value, "appDrawerShowLabels")
+
+    suspend fun setAppDrawerSecondaryColumns(value: Int) =
+        setPref(
+            APP_DRAWER_SECONDARY_COLUMNS,
+            AppDrawerGridPreferences.normalizeColumns(value),
+            "appDrawerSecondaryColumns",
+        )
+
+    suspend fun setAppDrawerSecondaryRows(value: Int) =
+        setPref(
+            APP_DRAWER_SECONDARY_ROWS,
+            AppDrawerGridPreferences.normalizeRows(value),
+            "appDrawerSecondaryRows",
+        )
+
+    suspend fun setAppDrawerSecondaryIconSize(value: String) =
+        setPref(
+            APP_DRAWER_SECONDARY_ICON_SIZE,
+            AppDrawerGridPreferences.normalizeIconSize(value),
+            "appDrawerSecondaryIconSize",
+        )
+
+    suspend fun setAppDrawerSecondaryOrientation(value: String) =
+        setPref(
+            APP_DRAWER_SECONDARY_ORIENTATION,
+            AppDrawerGridPreferences.normalizeOrientation(value),
+            "appDrawerSecondaryOrientation",
+        )
+
+    suspend fun setAppDrawerSecondaryScrollMode(value: String) =
+        setPref(
+            APP_DRAWER_SECONDARY_SCROLL_MODE,
+            AppDrawerGridPreferences.normalizeScrollMode(value),
+            "appDrawerSecondaryScrollMode",
+        )
+
+    suspend fun setAppDrawerSecondaryShowLabels(value: Boolean) =
+        setPref(APP_DRAWER_SECONDARY_SHOW_LABELS, value, "appDrawerSecondaryShowLabels")
+
+    suspend fun setAppDrawerFavoritePackages(packages: List<String>) {
+        dataStore.edit {
+            it[APP_DRAWER_FAVORITE_PACKAGES] =
+                AppDrawerGridPreferences.serializeFavoritePackages(packages)
+        }
+        WajihaLog.setting("appDrawerFavoritePackages", packages.size)
+    }
+
+    suspend fun addAppDrawerFavorite(packageName: String) {
+        val pkg = packageName.trim()
+        if (pkg.isEmpty()) return
+        dataStore.edit { prefs ->
+            val current =
+                AppDrawerGridPreferences.parseFavoritePackages(prefs[APP_DRAWER_FAVORITE_PACKAGES])
+            if (pkg !in current) {
+                prefs[APP_DRAWER_FAVORITE_PACKAGES] =
+                    AppDrawerGridPreferences.serializeFavoritePackages(current + pkg)
+            }
+        }
+        WajihaLog.setting("appDrawerFavoritePackages", "add:$pkg")
+    }
+
+    suspend fun removeAppDrawerFavorite(packageName: String) {
+        val pkg = packageName.trim()
+        if (pkg.isEmpty()) return
+        dataStore.edit { prefs ->
+            val current =
+                AppDrawerGridPreferences.parseFavoritePackages(prefs[APP_DRAWER_FAVORITE_PACKAGES])
+            prefs[APP_DRAWER_FAVORITE_PACKAGES] =
+                AppDrawerGridPreferences.serializeFavoritePackages(current.filterNot { it == pkg })
+        }
+        WajihaLog.setting("appDrawerFavoritePackages", "remove:$pkg")
+    }
+
+    /**
+     * Reorder a favorite among currently installed favorites.
+     * [installedPackages] prunes stale entries and defines the move neighborhood.
+     */
+    suspend fun moveAppDrawerFavorite(
+        packageName: String,
+        delta: Int,
+        installedPackages: Collection<String>,
+    ) {
+        val pkg = packageName.trim()
+        if (pkg.isEmpty() || delta == 0) return
+        dataStore.edit { prefs ->
+            val current =
+                AppDrawerGridPreferences.parseFavoritePackages(prefs[APP_DRAWER_FAVORITE_PACKAGES])
+            val moved =
+                AppDrawerGridPreferences.moveFavoriteAmongVisible(
+                    favoritePackages = current,
+                    packageName = pkg,
+                    delta = delta,
+                    installedPackages = installedPackages,
+                ) ?: return@edit
+            prefs[APP_DRAWER_FAVORITE_PACKAGES] =
+                AppDrawerGridPreferences.serializeFavoritePackages(moved)
+        }
+        WajihaLog.setting("appDrawerFavoritePackages", "move:$pkg:$delta")
+    }
 
     suspend fun setFocusBorderStyle(value: String) = setPref(FOCUS_BORDER_STYLE, normalizeFocusBorderStyle(value), "focusBorderStyle")
 
@@ -440,6 +629,21 @@ class SettingsRepository(
         val SETTINGS_HERO_HELP = booleanPreferencesKey("settings_hero_help")
         val SETTINGS_HERO_ACTIONS = booleanPreferencesKey("settings_hero_actions")
         val THEME = stringPreferencesKey("theme")
+        private val ICON_PACK_PACKAGE = stringPreferencesKey("icon_pack_package")
+        private val ICON_SHAPE = stringPreferencesKey("icon_shape")
+        private val APP_DRAWER_COLUMNS = intPreferencesKey("app_drawer_columns")
+        private val APP_DRAWER_ROWS = intPreferencesKey("app_drawer_rows")
+        private val APP_DRAWER_ICON_SIZE = stringPreferencesKey("app_drawer_icon_size")
+        private val APP_DRAWER_ORIENTATION = stringPreferencesKey("app_drawer_orientation")
+        private val APP_DRAWER_SCROLL_MODE = stringPreferencesKey("app_drawer_scroll_mode")
+        private val APP_DRAWER_SHOW_LABELS = booleanPreferencesKey("app_drawer_show_labels")
+        private val APP_DRAWER_SECONDARY_COLUMNS = intPreferencesKey("app_drawer_secondary_columns")
+        private val APP_DRAWER_SECONDARY_ROWS = intPreferencesKey("app_drawer_secondary_rows")
+        private val APP_DRAWER_SECONDARY_ICON_SIZE = stringPreferencesKey("app_drawer_secondary_icon_size")
+        private val APP_DRAWER_SECONDARY_ORIENTATION = stringPreferencesKey("app_drawer_secondary_orientation")
+        private val APP_DRAWER_SECONDARY_SCROLL_MODE = stringPreferencesKey("app_drawer_secondary_scroll_mode")
+        private val APP_DRAWER_SECONDARY_SHOW_LABELS = booleanPreferencesKey("app_drawer_secondary_show_labels")
+        private val APP_DRAWER_FAVORITE_PACKAGES = stringPreferencesKey("app_drawer_favorite_packages")
         private val FOCUS_BORDER_STYLE = stringPreferencesKey("focus_border_style")
         private val FOCUS_COLOR = stringPreferencesKey("focus_color")
         private val FOCUS_THICKNESS = intPreferencesKey("focus_thickness")
@@ -474,8 +678,10 @@ object FocusIndicatorPreferenceValues {
             "Dashed",
             "MarchingAnts",
             "Pulsing",
+            "SoftPulse",
             "Double",
             "Glow",
+            "Aura",
             "CornerBrackets",
             "GradientPulse",
             "Neon",

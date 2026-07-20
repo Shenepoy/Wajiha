@@ -74,6 +74,9 @@ class MainActivity : ComponentActivity() {
             WajihaLog.i(WajihaTags.DISPLAY, "onCreate: redirecting — skipping UI setup")
             return
         }
+        if (displayId == Display.DEFAULT_DISPLAY) {
+            primaryTaskId = taskId
+        }
 
         displayCoordinator.start()
         gamepadKeyRouter.attach(GamepadOwner.Primary, this)
@@ -138,6 +141,9 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val displayId = display?.displayId ?: Display.DEFAULT_DISPLAY
+        if (displayId == Display.DEFAULT_DISPLAY) {
+            primaryTaskId = taskId
+        }
         WajihaLog.i(
             WajihaTags.DISPLAY,
             "onNewIntent: displayId=$displayId taskId=$taskId " +
@@ -151,12 +157,15 @@ class MainActivity : ComponentActivity() {
         if (intent.hasCategory(Intent.CATEGORY_HOME) &&
             (display?.displayId ?: Display.DEFAULT_DISPLAY) == Display.DEFAULT_DISPLAY
         ) {
-            displayCoordinator.scheduleSecondaryHome(this)
+            displayCoordinator.requestSecondaryAvailability("primary-home-intent")
         }
     }
 
     override fun onResume() {
         super.onResume()
+        if ((display?.displayId ?: Display.DEFAULT_DISPLAY) == Display.DEFAULT_DISPLAY) {
+            primaryTaskId = taskId
+        }
         hideSystemStatusBar()
         WajihaLog.i(
             WajihaLogKind.WINDOW,
@@ -173,8 +182,7 @@ class MainActivity : ComponentActivity() {
         // screen elsewhere). Secondary must not run before focusPrimary or
         // display 4 steals topDisplayFocusedRootTask on Thor drawer launch.
         if ((display?.displayId ?: Display.DEFAULT_DISPLAY) == Display.DEFAULT_DISPLAY) {
-            displayCoordinator.onPrimaryMainResumed()
-            displayCoordinator.scheduleSecondaryHome(this)
+            displayCoordinator.requestSecondaryAvailability("primary-resume")
         }
     }
 
@@ -185,13 +193,18 @@ class MainActivity : ComponentActivity() {
             "MainActivity.onPause: displayId=${display?.displayId} taskId=$taskId",
         )
         gamepadGate.onLauncherBackgrounded()
-        if ((display?.displayId ?: Display.DEFAULT_DISPLAY) == Display.DEFAULT_DISPLAY) {
-            displayCoordinator.onPrimaryMainStopped()
-        }
     }
 
     override fun onDestroy() {
         gamepadKeyRouter.detach(GamepadOwner.Primary, this)
+        if (primaryTaskId == taskId) {
+            primaryTaskId = null
+        }
         super.onDestroy()
+    }
+
+    companion object {
+        @Volatile
+        internal var primaryTaskId: Int? = null
     }
 }

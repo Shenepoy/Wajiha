@@ -69,3 +69,39 @@ fun HttpRequestBuilder.screenScraperParams(
     settings: ScraperSettings,
     buildCreds: ScreenScraperDevCredentials,
 ) = screenScraperParams(settings, buildCreds.devId, buildCreds.devPassword)
+
+/**
+ * ScreenScraper returns API failures as either JSON containing `error` or
+ * French/English plain text, often with HTTP 200.
+ */
+internal fun screenScraperApiError(body: String): String? {
+    val normalized = body.trim().lowercase()
+    val isError =
+        "\"error\"" in normalized ||
+            normalized.startsWith("erreur") ||
+            normalized.startsWith("error")
+    if (!isError) return null
+    return when {
+        "quota" in normalized || "maximum threads" in normalized || "maxthreads" in normalized -> {
+            "ScreenScraper quota exceeded"
+        }
+
+        "développeur" in normalized ||
+            "developpeur" in normalized ||
+            "developer" in normalized ||
+            "devid" in normalized -> {
+            "ScreenScraper developer credentials rejected"
+        }
+
+        "login" in normalized ||
+            "password" in normalized ||
+            "user" in normalized ||
+            "ssid" in normalized -> {
+            "ScreenScraper username or password rejected"
+        }
+
+        else -> {
+            "ScreenScraper API error"
+        }
+    }
+}

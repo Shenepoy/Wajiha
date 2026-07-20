@@ -34,6 +34,7 @@ Do **not** assume iOS/desktop parity for launcher features; Android is the prima
 | iiSU emulator JSON (173 consoles) | `Study/_extracted/iisu/assets/emuladores_default.json` |
 | Widget grid + smart folders | Cocoon APK Room schema (`folders`, `widgets`, `grid_positions`) |
 | RetroAchievements | All study apps integrate RA; NeoStation has fullest open-source implementation |
+| Icon packs / appfilter / shapes | `lawnchair/` + `docs/10-lawnchair-icons.md` (Apache; reimplement GPL-header shape files) |
 
 ## Wajiha module map
 

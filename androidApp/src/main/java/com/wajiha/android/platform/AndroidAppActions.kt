@@ -2,13 +2,10 @@ package com.wajiha.android.platform
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.media.AudioAttributes
 import android.media.SoundPool
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.graphics.drawable.toBitmap
 import com.wajiha.android.display.DisplayCoordinator
+import com.wajiha.android.icons.IconResolver
 import com.wajiha.android.launch.GameLauncher
 import com.wajiha.android.launch.LaunchResult
 import com.wajiha.android.library.RomFileDeleter
@@ -33,6 +30,7 @@ class AndroidAppActions(
     private val monitor: ForegroundAppMonitor,
     private val gameRepository: GameRepository,
     private val romFileDeleter: RomFileDeleter,
+    private val iconResolver: IconResolver,
 ) : AppActions {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -80,6 +78,8 @@ class AndroidAppActions(
     override suspend fun installedApps(): List<LaunchableApp> =
         withContext(Dispatchers.IO) {
             val pm = context.packageManager
+            val appearance = iconResolver.currentAppearance()
+            val sizePx = iconResolver.iconSizePx()
             val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
             pm
                 .queryIntentActivities(intent, 0)
@@ -87,14 +87,23 @@ class AndroidAppActions(
                 .filter { it.activityInfo.packageName != context.packageName }
                 .distinctBy { it.activityInfo.packageName }
                 .map { info ->
+                    val packageName = info.activityInfo.packageName
                     val label = info.loadLabel(pm).toString()
+                    val launchActivity =
+                        pm
+                            .getLaunchIntentForPackage(packageName)
+                            ?.component
+                            ?.className
+                            ?: info.activityInfo.name
                     val icon =
-                        try {
-                            info.loadIcon(pm).toBitmap(96, 96, Bitmap.Config.ARGB_8888).asImageBitmap()
-                        } catch (_: Exception) {
-                            null
-                        }
-                    LaunchableApp(info.activityInfo.packageName, label, icon)
+                        iconResolver.resolveAppIcon(
+                            info,
+                            launchActivity,
+                            appearance.packPackage,
+                            appearance.shapeId,
+                            sizePx,
+                        )
+                    LaunchableApp(packageName, label, icon, launchActivity)
                 }.sortedBy { it.label.lowercase() }
                 .toList()
         }

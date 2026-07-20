@@ -14,6 +14,9 @@ enum class GamepadHintButton {
     L1R1,
     L2,
     R2,
+
+    /** Left stick click (L3). */
+    L3,
     Select,
     Start,
     DpadUpDown,
@@ -258,6 +261,7 @@ object ControllerGlyphLabels {
             GamepadHintButton.L1R1 -> "LB/RB"
             GamepadHintButton.L2 -> "LT"
             GamepadHintButton.R2 -> "RT"
+            GamepadHintButton.L3 -> "LS"
             GamepadHintButton.Select -> "View"
             GamepadHintButton.Start -> "Menu"
             GamepadHintButton.DpadUpDown -> "Up/Down"
@@ -279,6 +283,7 @@ object ControllerGlyphLabels {
             GamepadHintButton.L1R1 -> "L1/R1"
             GamepadHintButton.L2 -> "L2"
             GamepadHintButton.R2 -> "R2"
+            GamepadHintButton.L3 -> "L3"
             GamepadHintButton.Select -> "Create"
             GamepadHintButton.Start -> "Options"
             GamepadHintButton.DpadUpDown -> "Up/Down"
@@ -299,6 +304,7 @@ object ControllerGlyphLabels {
             GamepadHintButton.L1R1 -> "L/R"
             GamepadHintButton.L2 -> "ZL"
             GamepadHintButton.R2 -> "ZR"
+            GamepadHintButton.L3 -> "LSL"
             GamepadHintButton.Select -> "-"
             GamepadHintButton.Start -> "+"
             GamepadHintButton.DpadUpDown -> "Up/Down"
@@ -318,6 +324,7 @@ object ControllerGlyphLabels {
             GamepadHintButton.L1R1 -> "L1/R1"
             GamepadHintButton.L2 -> "L2"
             GamepadHintButton.R2 -> "R2"
+            GamepadHintButton.L3 -> "L3"
             GamepadHintButton.Select -> "View"
             GamepadHintButton.Start -> "⋯"
             GamepadHintButton.DpadUpDown -> "Up/Down"

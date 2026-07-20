@@ -22,13 +22,11 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.db.RomFolderEntity
 import com.wajiha.data.prefs.AppSettings
@@ -44,9 +42,9 @@ import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.SettingsHeroAction
 import com.wajiha.state.SettingsHeroOption
-import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.WajihaEmptyState
+import com.wajiha.ui.components.WajihaFolderSettingChrome
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadButton
@@ -54,13 +52,11 @@ import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.GamepadFormField
 import com.wajiha.ui.components.gamepad.GamepadSafeTextField
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
-import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
 import com.wajiha.ui.components.gamepad.ProvideSettingsDensity
 import com.wajiha.ui.components.gamepad.SettingSectionFocusRestorer
 import com.wajiha.ui.components.gamepad.SettingType
 import com.wajiha.ui.components.gamepad.WajihaSettingBlurb
 import com.wajiha.ui.components.gamepad.WajihaSettingDivider
-import com.wajiha.ui.components.gamepad.WajihaSettingPanel
 import com.wajiha.ui.components.gamepad.WajihaToggleSetting
 import com.wajiha.ui.components.gamepad.gameDetailGamepadHints
 import com.wajiha.ui.scraper.PlatformScraperSettingsSection
@@ -223,113 +219,64 @@ fun PlatformSettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    Column(
+                    WajihaFolderSettingChrome(
+                        tabs = tabs.map { it.label },
+                        selectedIndex = selectedTabIndex,
+                        onSelect = ::selectTab,
+                        onBack = onBack.takeIf { dualDisplay },
+                        focusRestorer = sectionFocusRestorer,
                         modifier =
                             Modifier
                                 .weight(1f)
-                                .fillMaxWidth()
-                                .padding(horizontal = WajihaSpacing.md),
+                                .fillMaxWidth(),
                     ) {
-                        if (dualDisplay) {
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .zIndex(1f)
-                                        .padding(top = WajihaSpacing.sm),
-                                verticalAlignment = Alignment.Bottom,
-                                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-                            ) {
-                                GamepadButton(
-                                    text = "Back",
-                                    onClick = onBack,
-                                    outlined = true,
-                                    gamepadFocusable = false,
-                                    sound = null,
-                                )
-                                FolderTabRow(
-                                    tabs = tabs.map { it.label },
-                                    selectedIndex = selectedTabIndex,
-                                    onSelect = ::selectTab,
-                                    minHeight = LocalSettingRowMinHeight.current,
-                                    modifier =
-                                        Modifier
-                                            .weight(1f)
-                                            .focusProperties { canFocus = false },
+                        when (tabs[selectedTabIndex]) {
+                            PlatformSettingsTab.General -> {
+                                PlatformGeneralTabContent(
+                                    platform = platform,
+                                    viewModel = viewModel,
+                                    dualStore = dualStore,
+                                    firstFocusRequester = sectionFocus,
                                 )
                             }
-                        } else {
-                            FolderTabRow(
-                                tabs = tabs.map { it.label },
-                                selectedIndex = selectedTabIndex,
-                                onSelect = ::selectTab,
-                                minHeight = LocalSettingRowMinHeight.current,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .zIndex(1f)
-                                        .focusProperties { canFocus = false }
-                                        .padding(top = WajihaSpacing.sm),
-                            )
-                        }
 
-                        WajihaSettingPanel(
-                            folderPanel = true,
-                            focusRestorer = sectionFocusRestorer,
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .padding(bottom = WajihaSpacing.md),
-                        ) {
-                            when (tabs[selectedTabIndex]) {
-                                PlatformSettingsTab.General -> {
-                                    PlatformGeneralTabContent(
-                                        platform = platform,
-                                        viewModel = viewModel,
-                                        dualStore = dualStore,
-                                        firstFocusRequester = sectionFocus,
-                                    )
-                                }
+                            PlatformSettingsTab.Emulator -> {
+                                PlatformEmulatorTabContent(
+                                    platform = platform,
+                                    state = state,
+                                    systemControls = systemControls,
+                                    viewModel = viewModel,
+                                    dualStore = dualStore,
+                                    settingsHeroActions = settings.settingsHeroActions,
+                                    firstFocusRequester = sectionFocus,
+                                )
+                            }
 
-                                PlatformSettingsTab.Emulator -> {
-                                    PlatformEmulatorTabContent(
-                                        platform = platform,
-                                        state = state,
-                                        systemControls = systemControls,
-                                        viewModel = viewModel,
-                                        dualStore = dualStore,
-                                        settingsHeroActions = settings.settingsHeroActions,
-                                        firstFocusRequester = sectionFocus,
-                                    )
-                                }
+                            PlatformSettingsTab.Folders -> {
+                                PlatformFoldersTabContent(
+                                    state = state,
+                                    viewModel = viewModel,
+                                    dualStore = dualStore,
+                                    settingsHeroActions = settings.settingsHeroActions,
+                                    firstFocusRequester = sectionFocus,
+                                )
+                            }
 
-                                PlatformSettingsTab.Folders -> {
-                                    PlatformFoldersTabContent(
-                                        state = state,
-                                        viewModel = viewModel,
-                                        dualStore = dualStore,
-                                        settingsHeroActions = settings.settingsHeroActions,
-                                        firstFocusRequester = sectionFocus,
-                                    )
-                                }
+                            PlatformSettingsTab.Scraper -> {
+                                PlatformScraperTabContent(
+                                    platform = platform,
+                                    viewModel = viewModel,
+                                    scraperViewModel = scraperViewModel,
+                                    firstFocusRequester = sectionFocus,
+                                )
+                            }
 
-                                PlatformSettingsTab.Scraper -> {
-                                    PlatformScraperTabContent(
-                                        platform = platform,
-                                        viewModel = viewModel,
-                                        scraperViewModel = scraperViewModel,
-                                        firstFocusRequester = sectionFocus,
-                                    )
-                                }
-
-                                PlatformSettingsTab.Info -> {
-                                    PlatformInfoTabContent(
-                                        platform = platform,
-                                        state = state,
-                                        firstFocusRequester = sectionFocus,
-                                    )
-                                }
+                            PlatformSettingsTab.Info -> {
+                                PlatformInfoTabContent(
+                                    platform = platform,
+                                    state = state,
+                                    firstFocusRequester = sectionFocus,
+                                )
                             }
                         }
                     }

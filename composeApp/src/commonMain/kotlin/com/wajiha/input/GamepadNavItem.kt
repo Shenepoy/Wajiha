@@ -1,19 +1,20 @@
 package com.wajiha.input
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
 import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.showGamepadChrome
@@ -30,7 +31,11 @@ fun GamepadNavItem(
     itemId: Any? = null,
     onEnterEdit: (() -> Boolean)? = null,
     onExitEdit: (() -> Boolean)? = null,
+    onAdjustLeft: (() -> Boolean)? = null,
+    onAdjustRight: (() -> Boolean)? = null,
     onFocus: (() -> Unit)? = null,
+    /** When false, content owns focus chrome (avoids double rings). */
+    drawChrome: Boolean = true,
     content: @Composable (highlighted: Boolean) -> Unit,
 ) {
     val controller = LocalGamepadNavController.current
@@ -43,8 +48,25 @@ fun GamepadNavItem(
         }
 
     if (controller != null) {
-        DisposableEffect(id, enabled, onActivate, onEnterEdit, onExitEdit, anchor) {
-            controller.register(id, onActivate, enabled, onEnterEdit, onExitEdit)
+        DisposableEffect(
+            id,
+            enabled,
+            onActivate,
+            onEnterEdit,
+            onExitEdit,
+            onAdjustLeft,
+            onAdjustRight,
+            anchor,
+        ) {
+            controller.register(
+                id = id,
+                onActivate = onActivate,
+                enabled = enabled,
+                onEnterEdit = onEnterEdit,
+                onExitEdit = onExitEdit,
+                onAdjustLeft = onAdjustLeft,
+                onAdjustRight = onAdjustRight,
+            )
             if (enabled && anchor != null) {
                 continuity?.register(anchor)
             }
@@ -55,8 +77,6 @@ fun GamepadNavItem(
                 }
             }
         }
-        // Observe index changes so highlight updates on D-pad moves.
-        val focusedIndex = controller.focusState.focusedIndex
         val highlighted = controller.isSlotFocused(id)
         if (onFocus != null) {
             androidx.compose.runtime.LaunchedEffect(highlighted) {
@@ -72,6 +92,8 @@ fun GamepadNavItem(
         NavItemChrome(
             modifier = modifier,
             showChrome = showChrome,
+            drawChrome = drawChrome,
+            focusAnchor = anchor,
             onActivate = onActivate,
             enabled = enabled,
             onTouchFocus = {
@@ -97,33 +119,46 @@ fun GamepadNavItem(
 @Composable
 private fun NavItemChrome(
     showChrome: Boolean,
+    drawChrome: Boolean,
+    focusAnchor: FocusAnchor?,
     onActivate: () -> Unit,
     enabled: Boolean,
     onTouchFocus: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val scale = if (showChrome) WajihaFocus.selectedScale else 1f
+    val scale by animateFloatAsState(
+        targetValue = if (showChrome) WajihaFocus.selectedScale else 1f,
+        animationSpec =
+            spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMedium,
+            ),
+        label = "nav_item_focus_scale",
+    )
     Box(
         modifier =
             modifier
-                .scale(scale)
-                .clip(WajihaShapes.focus)
-                .then(
-                    if (showChrome) {
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }.then(
+                    if (drawChrome && showChrome) {
                         Modifier
-                            .background(
-                                color = WajihaFocus.selectedBackground(),
+                            .wajihaFocusIndicator(
+                                highlighted = true,
                                 shape = WajihaShapes.focus,
-                            ).border(
-                                width = WajihaFocus.selectedBorderWidth,
-                                color = WajihaFocus.selectedBorderColor(),
+                                selected = true,
+                                focusAnchor = focusAnchor,
+                            ).background(
+                                color = WajihaFocus.selectedBackground(),
                                 shape = WajihaShapes.focus,
                             )
                     } else {
                         Modifier
                     },
-                ).pointerInput(onActivate, onTouchFocus, enabled) {
+                ).clip(WajihaShapes.focus)
+                .pointerInput(onActivate, onTouchFocus, enabled) {
                     if (enabled) {
                         detectTapGestures {
                             onTouchFocus()

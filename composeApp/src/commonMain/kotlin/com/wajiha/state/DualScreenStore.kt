@@ -125,8 +125,33 @@ class DualScreenStore {
     private val _openSettings = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val openSettingsRequests = _openSettings.asSharedFlow()
 
+    /** Menu owner navigates to Apps when this fires (L3). */
+    private val _openApps = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val openAppsRequests = _openApps.asSharedFlow()
+
+    /** Apps drawer opens its compact options panel when this fires (Start on Apps). */
+    private val _openAppsOptions = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val openAppsOptionsRequests = _openAppsOptions.asSharedFlow()
+
     /** @return true when the request was accepted into the channel. */
     fun requestOpenSettings(): Boolean = _openSettings.tryEmit(Unit)
+
+    /** @return true when the request was accepted into the channel. */
+    fun requestOpenApps(): Boolean = _openApps.tryEmit(Unit)
+
+    /** @return true when the request was accepted into the channel. */
+    fun requestOpenAppsOptions(): Boolean = _openAppsOptions.tryEmit(Unit)
+
+    /**
+     * Start button: open Apps options while the menu is on Apps; otherwise open
+     * global Settings (main grid / other destinations).
+     */
+    fun requestStartAction(): Boolean =
+        if (_menuRoute.value.destination == MenuDestination.Apps) {
+            requestOpenAppsOptions()
+        } else {
+            requestOpenSettings()
+        }
 
     /**
      * Now Playing UI state: only non-null when the featured session is foreground on
@@ -170,6 +195,9 @@ class DualScreenStore {
      */
     private val _menuRoute = MutableStateFlow(MenuRouteSnapshot())
     val menuRoute: StateFlow<MenuRouteSnapshot> = _menuRoute.asStateFlow()
+    private val _secondaryNavigation = MutableStateFlow(SecondaryNavigationState())
+    val secondaryNavigation: StateFlow<SecondaryNavigationState> =
+        _secondaryNavigation.asStateFlow()
     private val _appsHeroCount = MutableStateFlow(0)
     private val _appsHeroFocusedLabel = MutableStateFlow<String?>(null)
     private val _systemHeroSnapshot = MutableStateFlow(HeroContext.System())
@@ -697,6 +725,10 @@ class DualScreenStore {
         _menuRoute.value = snapshot
     }
 
+    fun updateSecondaryNavigation(transform: (SecondaryNavigationState) -> SecondaryNavigationState) {
+        _secondaryNavigation.update(transform)
+    }
+
     fun setSettingsSectionLabel(label: String?) {
         _settingsSectionLabel.value = label
     }
@@ -801,11 +833,18 @@ class DualScreenStore {
     /**
      * SELECT / Settings role swap moves the menu to the other activity. Focus
      * follows that menu even when a prior touch or L2 left a sticky owner behind.
+     *
+     * When the secondary gains the menu, apply [menuRoute] to secondary nav/mode
+     * **before** the swap pref recomposes UI so AppDock/Settings are not painted
+     * as a one-frame GameGrid flash.
      */
     fun onScreenRolesSwapped(menuOnPrimary: Boolean) {
         if (_state.value == DualScreenState.SingleDisplay) return
         gamesMenuOnPrimary = menuOnPrimary
         stickyGamepadOwner = null
+        if (!menuOnPrimary) {
+            adoptMenuSnapshotOntoSecondary(_menuRoute.value)
+        }
         val menuOwner =
             if (menuOnPrimary) {
                 GamepadOwner.Primary
@@ -818,6 +857,43 @@ class DualScreenStore {
             _gamepadFocusEpoch.value = _gamepadFocusEpoch.value + 1L
         } else {
             setGamepadOwner(menuOwner)
+        }
+    }
+
+    /** Apply shared menu snapshot to secondary navigation + mode (idempotent). */
+    fun adoptMenuSnapshotOntoSecondary(snap: MenuRouteSnapshot = _menuRoute.value) {
+        val adoptedRoute =
+            when (snap.destination) {
+                MenuDestination.Home,
+                MenuDestination.Apps,
+                MenuDestination.System,
+                MenuDestination.NowRunning,
+                -> SecondaryRoute.Modes
+
+                MenuDestination.Settings -> SecondaryRoute.Settings
+
+                MenuDestination.PlatformPicker -> SecondaryRoute.PlatformPicker
+
+                MenuDestination.PlatformDetail -> SecondaryRoute.PlatformDetail
+
+                MenuDestination.Scraper -> SecondaryRoute.Scraper
+
+                MenuDestination.GameDetail -> SecondaryRoute.GameDetail
+            }
+        updateSecondaryNavigation {
+            it.copy(
+                route = adoptedRoute,
+                platformDetailId = snap.platformDetailId,
+                platformDetailFromPicker = snap.platformDetailFromPicker,
+                gameDetailId = snap.gameDetailId,
+            )
+        }
+        when (snap.destination) {
+            MenuDestination.Home -> setSecondaryMode(SecondaryMode.GameGrid)
+            MenuDestination.Apps -> setSecondaryMode(SecondaryMode.AppDock)
+            MenuDestination.System -> setSecondaryMode(SecondaryMode.QuickSettings)
+            MenuDestination.NowRunning -> setSecondaryMode(SecondaryMode.NowPlaying)
+            else -> Unit
         }
     }
 

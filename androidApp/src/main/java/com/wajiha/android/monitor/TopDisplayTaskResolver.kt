@@ -45,6 +45,32 @@ internal object TopDisplayTaskResolver {
             }?.let { taskId(it) }
     }
 
+    fun taskIdForActivityClassOnDisplay(
+        context: Context,
+        activityClass: Class<*>,
+        displayId: Int,
+    ): Int? {
+        val name = activityClass.name
+        return tasksStrictlyOnDisplay(context, displayId)
+            .firstOrNull { task ->
+                task.topActivity?.className == name || task.baseActivity?.className == name
+            }?.let { taskId(it) }
+    }
+
+    fun isPackageOnDisplay(
+        context: Context,
+        packageName: String,
+        displayId: Int,
+    ): Boolean =
+        tasksStrictlyOnDisplay(context, displayId).any { task ->
+            taskPackage(task) == packageName
+        }
+
+    fun topPackageOnDisplay(
+        context: Context,
+        displayId: Int,
+    ): String? = tasksStrictlyOnDisplay(context, displayId).firstOrNull()?.let(::taskPackage)
+
     /** All packages with a running task (any visibility / display). */
     fun packagesWithTasks(context: Context): Set<String> =
         (tasksOnDisplay(context) + allRunningTasks(context))
@@ -101,6 +127,15 @@ internal object TopDisplayTaskResolver {
         return allRunningTasks(context)
     }
 
+    private fun tasksStrictlyOnDisplay(
+        context: Context,
+        displayId: Int,
+    ): List<ActivityManager.RunningTaskInfo> {
+        val fromAtm = queryViaActivityTaskManager(displayId)
+        if (fromAtm.isNotEmpty()) return fromAtm
+        return allRunningTasks(context).filter { task -> taskDisplayId(task) == displayId }
+    }
+
     @Suppress("DEPRECATION")
     fun allRunningTasks(context: Context): List<ActivityManager.RunningTaskInfo> =
         try {
@@ -133,6 +168,15 @@ internal object TopDisplayTaskResolver {
 
     private fun taskPackage(task: ActivityManager.RunningTaskInfo): String? =
         task.topActivity?.packageName ?: task.baseActivity?.packageName
+
+    private fun taskDisplayId(task: ActivityManager.RunningTaskInfo): Int? =
+        try {
+            val field = task.javaClass.superclass.getDeclaredField("displayId")
+            field.isAccessible = true
+            field.getInt(task)
+        } catch (_: Exception) {
+            null
+        }
 
     @Suppress("DEPRECATION")
     private fun taskId(task: ActivityManager.RunningTaskInfo): Int =

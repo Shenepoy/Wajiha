@@ -32,34 +32,42 @@ fun GamepadSettingTrailingActions(
         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        HintCornerButton(
+        GamepadHintCornerButton(
             text = secondaryLabel,
             onClick = onSecondaryClick,
             hint = secondaryHint,
             showHint = showHints,
+            gamepadFocusable = false,
         )
-        HintCornerButton(
+        GamepadHintCornerButton(
             text = primaryLabel,
             onClick = onPrimaryClick,
             hint = primaryHint,
             showHint = showHints,
+            gamepadFocusable = false,
         )
     }
 }
 
+/** [GamepadButton] with an optional [GamepadHintGlyph] in the bottom-right corner. */
 @Composable
-private fun HintCornerButton(
+fun GamepadHintCornerButton(
     text: String,
     onClick: () -> Unit,
     hint: GamepadHintButton,
-    showHint: Boolean,
+    modifier: Modifier = Modifier,
+    showHint: Boolean = true,
+    outlined: Boolean = true,
+    gamepadFocusable: Boolean = true,
+    focusId: Any? = null,
 ) {
-    Box {
+    Box(modifier = modifier) {
         GamepadButton(
             text = text,
             onClick = onClick,
-            outlined = true,
-            gamepadFocusable = false,
+            outlined = outlined,
+            gamepadFocusable = gamepadFocusable,
+            focusId = focusId,
         )
         if (showHint) {
             GamepadHintGlyph(

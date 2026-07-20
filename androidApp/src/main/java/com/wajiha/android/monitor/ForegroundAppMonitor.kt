@@ -250,6 +250,16 @@ class ForegroundAppMonitor(
         }
     }
 
+    /** Bottom HOME resumed; refresh app data without running primary focus/session logic. */
+    fun onSecondaryLauncherForegrounded() {
+        scope.launch {
+            refreshKnownPackages()
+            if (hasUsageAccess()) {
+                refreshRunningApps(force = false)
+            }
+        }
+    }
+
     private fun poll() {
         try {
             queryLatestForegroundPackage()?.let { pkg ->
@@ -259,6 +269,7 @@ class ForegroundAppMonitor(
             }
             refreshTopDisplayForeground()
             if (store.hasActiveSessions()) {
+                displayCoordinator.probeSecondaryHome("active-session-poll")
                 // Throttle UsageStats refresh (10s) even while active — force only on resume.
                 refreshRunningApps(force = false)
                 enforceMemoryGuard(trigger = "poll")

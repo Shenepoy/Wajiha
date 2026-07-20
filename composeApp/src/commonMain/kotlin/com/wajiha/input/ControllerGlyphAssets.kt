@@ -32,6 +32,8 @@ import wajiha.composeapp.generated.resources.kenney_ps_square_color
 import wajiha.composeapp.generated.resources.kenney_ps_square_color_outline
 import wajiha.composeapp.generated.resources.kenney_ps_square_dark
 import wajiha.composeapp.generated.resources.kenney_ps_square_white
+import wajiha.composeapp.generated.resources.kenney_ps_stick_l_press_dark
+import wajiha.composeapp.generated.resources.kenney_ps_stick_l_press_white
 import wajiha.composeapp.generated.resources.kenney_ps_triangle_color
 import wajiha.composeapp.generated.resources.kenney_ps_triangle_color_outline
 import wajiha.composeapp.generated.resources.kenney_ps_triangle_dark
@@ -60,6 +62,8 @@ import wajiha.composeapp.generated.resources.kenney_steam_rb_dark
 import wajiha.composeapp.generated.resources.kenney_steam_rb_white
 import wajiha.composeapp.generated.resources.kenney_steam_rt_dark
 import wajiha.composeapp.generated.resources.kenney_steam_rt_white
+import wajiha.composeapp.generated.resources.kenney_steam_stick_l_press_dark
+import wajiha.composeapp.generated.resources.kenney_steam_stick_l_press_white
 import wajiha.composeapp.generated.resources.kenney_steam_view_dark
 import wajiha.composeapp.generated.resources.kenney_steam_view_white
 import wajiha.composeapp.generated.resources.kenney_steam_x_color
@@ -90,6 +94,8 @@ import wajiha.composeapp.generated.resources.kenney_steamdeck_r1_dark
 import wajiha.composeapp.generated.resources.kenney_steamdeck_r1_white
 import wajiha.composeapp.generated.resources.kenney_steamdeck_r2_dark
 import wajiha.composeapp.generated.resources.kenney_steamdeck_r2_white
+import wajiha.composeapp.generated.resources.kenney_steamdeck_stick_l_press_dark
+import wajiha.composeapp.generated.resources.kenney_steamdeck_stick_l_press_white
 import wajiha.composeapp.generated.resources.kenney_steamdeck_view_dark
 import wajiha.composeapp.generated.resources.kenney_steamdeck_view_white
 import wajiha.composeapp.generated.resources.kenney_steamdeck_x_dark
@@ -114,6 +120,8 @@ import wajiha.composeapp.generated.resources.kenney_switch_plus_dark
 import wajiha.composeapp.generated.resources.kenney_switch_plus_white
 import wajiha.composeapp.generated.resources.kenney_switch_r_dark
 import wajiha.composeapp.generated.resources.kenney_switch_r_white
+import wajiha.composeapp.generated.resources.kenney_switch_stick_l_press_dark
+import wajiha.composeapp.generated.resources.kenney_switch_stick_l_press_white
 import wajiha.composeapp.generated.resources.kenney_switch_x_dark
 import wajiha.composeapp.generated.resources.kenney_switch_x_white
 import wajiha.composeapp.generated.resources.kenney_switch_y_dark
@@ -146,6 +154,8 @@ import wajiha.composeapp.generated.resources.kenney_xbox_rb_dark
 import wajiha.composeapp.generated.resources.kenney_xbox_rb_white
 import wajiha.composeapp.generated.resources.kenney_xbox_rt_dark
 import wajiha.composeapp.generated.resources.kenney_xbox_rt_white
+import wajiha.composeapp.generated.resources.kenney_xbox_stick_l_press_dark
+import wajiha.composeapp.generated.resources.kenney_xbox_stick_l_press_white
 import wajiha.composeapp.generated.resources.kenney_xbox_view_dark
 import wajiha.composeapp.generated.resources.kenney_xbox_view_white
 import wajiha.composeapp.generated.resources.kenney_xbox_x_color
@@ -293,6 +303,16 @@ object ControllerGlyphAssets {
                 listOf(other(Res.drawable.kenney_xbox_menu_white, Res.drawable.kenney_xbox_menu_dark, otherStyle))
             }
 
+            GamepadHintButton.L3 -> {
+                listOf(
+                    other(
+                        Res.drawable.kenney_xbox_stick_l_press_white,
+                        Res.drawable.kenney_xbox_stick_l_press_dark,
+                        otherStyle,
+                    ),
+                )
+            }
+
             GamepadHintButton.DpadUpDown -> {
                 listOf(
                     other(
@@ -407,6 +427,16 @@ object ControllerGlyphAssets {
 
             GamepadHintButton.Start -> {
                 listOf(other(Res.drawable.kenney_ps_options_white, Res.drawable.kenney_ps_options_dark, otherStyle))
+            }
+
+            GamepadHintButton.L3 -> {
+                listOf(
+                    other(
+                        Res.drawable.kenney_ps_stick_l_press_white,
+                        Res.drawable.kenney_ps_stick_l_press_dark,
+                        otherStyle,
+                    ),
+                )
             }
 
             GamepadHintButton.DpadUpDown -> {
@@ -528,6 +558,16 @@ object ControllerGlyphAssets {
             GamepadHintButton.Start -> {
                 listOf(
                     other(Res.drawable.kenney_switch_plus_white, Res.drawable.kenney_switch_plus_dark, otherStyle),
+                )
+            }
+
+            GamepadHintButton.L3 -> {
+                listOf(
+                    other(
+                        Res.drawable.kenney_switch_stick_l_press_white,
+                        Res.drawable.kenney_switch_stick_l_press_dark,
+                        otherStyle,
+                    ),
                 )
             }
 
@@ -668,6 +708,16 @@ object ControllerGlyphAssets {
                 )
             }
 
+            GamepadHintButton.L3 -> {
+                listOf(
+                    other(
+                        Res.drawable.kenney_steamdeck_stick_l_press_white,
+                        Res.drawable.kenney_steamdeck_stick_l_press_dark,
+                        otherStyle,
+                    ),
+                )
+            }
+
             GamepadHintButton.DpadUpDown -> {
                 listOf(
                     other(
@@ -783,6 +833,16 @@ object ControllerGlyphAssets {
             GamepadHintButton.Start -> {
                 listOf(
                     other(Res.drawable.kenney_steam_options_white, Res.drawable.kenney_steam_options_dark, otherStyle),
+                )
+            }
+
+            GamepadHintButton.L3 -> {
+                listOf(
+                    other(
+                        Res.drawable.kenney_steam_stick_l_press_white,
+                        Res.drawable.kenney_steam_stick_l_press_dark,
+                        otherStyle,
+                    ),
                 )
             }
 

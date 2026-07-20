@@ -6,10 +6,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,7 +30,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
@@ -42,10 +40,8 @@ import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.requestContentFocus
-import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.AppActions
 import com.wajiha.platform.SystemControls
-import com.wajiha.platform.UiSound
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
@@ -53,10 +49,11 @@ import com.wajiha.state.LauncherPanel
 import com.wajiha.state.MenuDestination
 import com.wajiha.state.MenuRouteSnapshot
 import com.wajiha.state.SecondaryMode
+import com.wajiha.state.SecondaryRoute
 import com.wajiha.ui.apps.AppDrawerScreen
 import com.wajiha.ui.components.LocalUiFeedback
+import com.wajiha.ui.components.WajihaFolderSettingChrome
 import com.wajiha.ui.components.WajihaScreen
-import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.quickSettingsGamepadHints
 import com.wajiha.ui.components.gamepad.runningAppsGamepadHints
 import com.wajiha.ui.components.gamepad.secondaryModeTabGamepadHints
@@ -66,7 +63,6 @@ import com.wajiha.ui.home.HomeViewModel
 import com.wajiha.ui.navigation.LauncherHeroPane
 import com.wajiha.ui.navigation.heroOnSecondary
 import com.wajiha.ui.navigation.menuOnSecondary
-import com.wajiha.ui.ra.AchievementsPanel
 import com.wajiha.ui.running.RunningAppsPanel
 import com.wajiha.ui.scraper.ScraperScreen
 import com.wajiha.ui.scraper.ScraperViewModel
@@ -84,16 +80,8 @@ import kotlinx.coroutines.delay
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
-
-private enum class SecondaryRoute {
-    Modes,
-    Settings,
-    PlatformPicker,
-    PlatformDetail,
-    Scraper,
-    GameDetail,
-}
 
 /**
  * Root of the secondary-display experience (AYN Thor bottom screen).
@@ -142,70 +130,32 @@ fun SecondaryApp() {
         val apps by viewModel.apps.collectAsState()
         val backToGrid = { store.setSecondaryMode(SecondaryMode.GameGrid) }
 
-        var route by remember { mutableStateOf(SecondaryRoute.Modes) }
-        var platformDetailId by remember { mutableStateOf<String?>(null) }
-        var platformDetailFromPicker by remember { mutableStateOf(false) }
-        var gameDetailId by remember { mutableStateOf<Long?>(null) }
+        val navigation by store.secondaryNavigation.collectAsState()
+        val route = navigation.route
+        val platformDetailId = navigation.platformDetailId
+        val platformDetailFromPicker = navigation.platformDetailFromPicker
+        val gameDetailId = navigation.gameDetailId
         val secondaryDisplayId by store.secondaryDisplayId.collectAsState()
 
         val openGameDetail: (Long) -> Unit = { id ->
-            gameDetailId = id
+            store.updateSecondaryNavigation {
+                it.copy(route = SecondaryRoute.GameDetail, gameDetailId = id)
+            }
             viewModel.playOpen()
             store.setGameDetailGameId(id)
-            route = SecondaryRoute.GameDetail
         }
 
-        // SELECT swap: adopt shared menu snapshot when this display gains the
-        // menu; only clear local route when becoming hero (leave snapshot).
-        LaunchedEffect(secondaryShowsMenu) {
+        // SELECT swap: DualScreenStore.onScreenRolesSwapped adopts the snapshot
+        // onto secondary mode/nav before the swap pref recomposes. Keep an
+        // ownership-edge backup here for any path that flips roles without that
+        // call; clear local route when becoming hero (leave snapshot).
+        var prevSecondaryShowsMenu by remember { mutableStateOf(secondaryShowsMenu) }
+        if (prevSecondaryShowsMenu != secondaryShowsMenu) {
+            prevSecondaryShowsMenu = secondaryShowsMenu
             if (secondaryShowsMenu) {
-                val snap = store.menuRoute.value
-                platformDetailId = snap.platformDetailId
-                platformDetailFromPicker = snap.platformDetailFromPicker
-                gameDetailId = snap.gameDetailId
-                when (snap.destination) {
-                    MenuDestination.Home -> {
-                        route = SecondaryRoute.Modes
-                        store.setSecondaryMode(SecondaryMode.GameGrid)
-                    }
-
-                    MenuDestination.Settings -> {
-                        route = SecondaryRoute.Settings
-                    }
-
-                    MenuDestination.PlatformPicker -> {
-                        route = SecondaryRoute.PlatformPicker
-                    }
-
-                    MenuDestination.PlatformDetail -> {
-                        route = SecondaryRoute.PlatformDetail
-                    }
-
-                    MenuDestination.Scraper -> {
-                        route = SecondaryRoute.Scraper
-                    }
-
-                    MenuDestination.Apps -> {
-                        route = SecondaryRoute.Modes
-                        store.setSecondaryMode(SecondaryMode.AppDock)
-                    }
-
-                    MenuDestination.System -> {
-                        route = SecondaryRoute.Modes
-                        store.setSecondaryMode(SecondaryMode.QuickSettings)
-                    }
-
-                    MenuDestination.GameDetail -> {
-                        route = SecondaryRoute.GameDetail
-                    }
-
-                    MenuDestination.NowRunning -> {
-                        route = SecondaryRoute.Modes
-                        store.setSecondaryMode(SecondaryMode.NowPlaying)
-                    }
-                }
+                store.adoptMenuSnapshotOntoSecondary()
             } else if (route != SecondaryRoute.Modes) {
-                route = SecondaryRoute.Modes
+                store.updateSecondaryNavigation { it.copy(route = SecondaryRoute.Modes) }
             }
         }
 
@@ -213,7 +163,16 @@ fun SecondaryApp() {
             if (!secondaryShowsMenu) return@LaunchedEffect
             store.openSettingsRequests.collect {
                 viewModel.playOpen()
-                route = SecondaryRoute.Settings
+                store.updateSecondaryNavigation { it.copy(route = SecondaryRoute.Settings) }
+            }
+        }
+
+        LaunchedEffect(secondaryShowsMenu) {
+            if (!secondaryShowsMenu) return@LaunchedEffect
+            store.openAppsRequests.collect {
+                viewModel.playOpen()
+                store.updateSecondaryNavigation { it.copy(route = SecondaryRoute.Modes) }
+                store.setSecondaryMode(SecondaryMode.AppDock)
             }
         }
 
@@ -312,33 +271,43 @@ fun SecondaryApp() {
             when (route) {
                 SecondaryRoute.GameDetail -> {
                     store.setGameDetailGameId(null)
-                    route = SecondaryRoute.Modes
+                    store.updateSecondaryNavigation {
+                        it.copy(route = SecondaryRoute.Modes, gameDetailId = null)
+                    }
                 }
 
                 SecondaryRoute.Scraper -> {
-                    route =
-                        if (platformDetailId != null) {
-                            SecondaryRoute.PlatformDetail
-                        } else {
-                            SecondaryRoute.Settings
-                        }
+                    store.updateSecondaryNavigation {
+                        it.copy(
+                            route =
+                                if (platformDetailId != null) {
+                                    SecondaryRoute.PlatformDetail
+                                } else {
+                                    SecondaryRoute.Settings
+                                },
+                        )
+                    }
                 }
 
                 SecondaryRoute.PlatformDetail -> {
-                    route =
-                        if (platformDetailFromPicker) {
-                            SecondaryRoute.PlatformPicker
-                        } else {
-                            SecondaryRoute.Settings
-                        }
+                    store.updateSecondaryNavigation {
+                        it.copy(
+                            route =
+                                if (platformDetailFromPicker) {
+                                    SecondaryRoute.PlatformPicker
+                                } else {
+                                    SecondaryRoute.Settings
+                                },
+                        )
+                    }
                 }
 
                 SecondaryRoute.PlatformPicker -> {
-                    route = SecondaryRoute.Settings
+                    store.updateSecondaryNavigation { it.copy(route = SecondaryRoute.Settings) }
                 }
 
                 SecondaryRoute.Settings -> {
-                    route = SecondaryRoute.Modes
+                    store.updateSecondaryNavigation { it.copy(route = SecondaryRoute.Modes) }
                 }
 
                 else -> {
@@ -355,17 +324,25 @@ fun SecondaryApp() {
                             settingsViewModel = settingsViewModel,
                             onBack = {
                                 viewModel.playBack()
-                                route = SecondaryRoute.Modes
+                                store.updateSecondaryNavigation {
+                                    it.copy(route = SecondaryRoute.Modes)
+                                }
                             },
                             onAddPlatform = {
                                 viewModel.playOpen()
-                                route = SecondaryRoute.PlatformPicker
+                                store.updateSecondaryNavigation {
+                                    it.copy(route = SecondaryRoute.PlatformPicker)
+                                }
                             },
                             onOpenPlatform = { id ->
-                                platformDetailId = id
-                                platformDetailFromPicker = false
+                                store.updateSecondaryNavigation {
+                                    it.copy(
+                                        route = SecondaryRoute.PlatformDetail,
+                                        platformDetailId = id,
+                                        platformDetailFromPicker = false,
+                                    )
+                                }
                                 viewModel.playOpen()
-                                route = SecondaryRoute.PlatformDetail
                             },
                             onSectionChange = store::setSettingsSectionLabel,
                             gamepadOwner = GamepadOwner.Secondary,
@@ -381,13 +358,19 @@ fun SecondaryApp() {
                             settingsViewModel = settingsViewModel,
                             onBack = {
                                 viewModel.playBack()
-                                route = SecondaryRoute.Settings
+                                store.updateSecondaryNavigation {
+                                    it.copy(route = SecondaryRoute.Settings)
+                                }
                             },
                             onPick = { id ->
-                                platformDetailId = id
-                                platformDetailFromPicker = true
+                                store.updateSecondaryNavigation {
+                                    it.copy(
+                                        route = SecondaryRoute.PlatformDetail,
+                                        platformDetailId = id,
+                                        platformDetailFromPicker = true,
+                                    )
+                                }
                                 viewModel.playOpen()
-                                route = SecondaryRoute.PlatformDetail
                             },
                             gamepadOwner = GamepadOwner.Secondary,
                             onClaimGamepad = store::claimGamepad,
@@ -402,7 +385,9 @@ fun SecondaryApp() {
                 SecondaryRoute.PlatformDetail -> {
                     val id = platformDetailId
                     if (id == null) {
-                        route = SecondaryRoute.Settings
+                        store.updateSecondaryNavigation {
+                            it.copy(route = SecondaryRoute.Settings)
+                        }
                     } else {
                         SecondarySurface(store = store) {
                             PlatformSettingsScreen(
@@ -415,12 +400,16 @@ fun SecondaryApp() {
                                     },
                                 onBack = {
                                     viewModel.playBack()
-                                    route =
-                                        if (platformDetailFromPicker) {
-                                            SecondaryRoute.PlatformPicker
-                                        } else {
-                                            SecondaryRoute.Settings
-                                        }
+                                    store.updateSecondaryNavigation {
+                                        it.copy(
+                                            route =
+                                                if (platformDetailFromPicker) {
+                                                    SecondaryRoute.PlatformPicker
+                                                } else {
+                                                    SecondaryRoute.Settings
+                                                },
+                                        )
+                                    }
                                 },
                                 gamepadOwner = GamepadOwner.Secondary,
                                 onClaimGamepad = store::claimGamepad,
@@ -439,12 +428,16 @@ fun SecondaryApp() {
                             viewModel = koinInject<ScraperViewModel>(),
                             onBack = {
                                 viewModel.playBack()
-                                route =
-                                    if (platformDetailId != null) {
-                                        SecondaryRoute.PlatformDetail
-                                    } else {
-                                        SecondaryRoute.Settings
-                                    }
+                                store.updateSecondaryNavigation {
+                                    it.copy(
+                                        route =
+                                            if (platformDetailId != null) {
+                                                SecondaryRoute.PlatformDetail
+                                            } else {
+                                                SecondaryRoute.Settings
+                                            },
+                                    )
+                                }
                             },
                             gamepadOwner = GamepadOwner.Secondary,
                             onClaimGamepad = store::claimGamepad,
@@ -459,7 +452,9 @@ fun SecondaryApp() {
                 SecondaryRoute.GameDetail -> {
                     val id = gameDetailId
                     if (id == null) {
-                        route = SecondaryRoute.Modes
+                        store.updateSecondaryNavigation {
+                            it.copy(route = SecondaryRoute.Modes)
+                        }
                     } else {
                         SecondarySurface(store = store) {
                             GameDetailScreen(
@@ -471,7 +466,9 @@ fun SecondaryApp() {
                                 onBack = {
                                     viewModel.playBack()
                                     store.setGameDetailGameId(null)
-                                    route = SecondaryRoute.Modes
+                                    store.updateSecondaryNavigation {
+                                        it.copy(route = SecondaryRoute.Modes, gameDetailId = null)
+                                    }
                                 },
                             )
                         }
@@ -532,9 +529,11 @@ fun SecondaryApp() {
                                 BlackoutScreen(onTap = backToGrid)
                             }
 
-                            SecondaryMode.NowPlaying -> {
+                            SecondaryMode.NowPlaying,
+                            SecondaryMode.Achievements,
+                            -> {
                                 SecondaryModeFrame(
-                                    current = animatedMode,
+                                    current = SecondaryMode.NowPlaying,
                                     store = store,
                                     sessionActive = sessionActive,
                                     backgroundContent =
@@ -543,12 +542,13 @@ fun SecondaryApp() {
                                         } else {
                                             null
                                         },
-                                ) {
+                                ) { _ ->
                                     NowPlayingPanel(
                                         state = nowPlaying,
                                         heroBackground = settings.nowPlayingHeroBackground,
                                         useLogo = settings.nowPlayingLogo,
                                         backgroundInParent = true,
+                                        modifier = Modifier.fillMaxSize(),
                                     )
                                 }
                             }
@@ -574,12 +574,16 @@ fun SecondaryApp() {
                                     onOpenApps = { store.setSecondaryMode(SecondaryMode.AppDock) },
                                     onOpenSettings = {
                                         viewModel.playOpen()
-                                        route = SecondaryRoute.Settings
+                                        store.updateSecondaryNavigation {
+                                            it.copy(route = SecondaryRoute.Settings)
+                                        }
                                     },
                                     onOpenSystem = { store.setSecondaryMode(SecondaryMode.QuickSettings) },
                                     onAddGames = {
                                         viewModel.playOpen()
-                                        route = SecondaryRoute.PlatformPicker
+                                        store.updateSecondaryNavigation {
+                                            it.copy(route = SecondaryRoute.PlatformPicker)
+                                        }
                                     },
                                     gamepadOwner = GamepadOwner.Secondary,
                                     onClaimGamepad = store::claimGamepad,
@@ -609,6 +613,29 @@ fun SecondaryApp() {
                                     dualDisplay = true,
                                     gamepadOwner = GamepadOwner.Secondary,
                                     onClaimGamepad = store::claimGamepad,
+                                    iconShape = settings.iconShape,
+                                    gridColumns = settings.appDrawerSecondaryColumns,
+                                    gridRows = settings.appDrawerSecondaryRows,
+                                    iconSizePreference = settings.appDrawerSecondaryIconSize,
+                                    gridOrientation = settings.appDrawerSecondaryOrientation,
+                                    gridScrollMode = settings.appDrawerSecondaryScrollMode,
+                                    showAppLabels = settings.appDrawerSecondaryShowLabels,
+                                    favoritePackages = settings.appDrawerFavoritePackages,
+                                    onGridColumnsChange = settingsViewModel::setAppDrawerSecondaryColumns,
+                                    onGridRowsChange = settingsViewModel::setAppDrawerSecondaryRows,
+                                    onIconSizeChange = settingsViewModel::setAppDrawerSecondaryIconSize,
+                                    onGridOrientationChange = settingsViewModel::setAppDrawerSecondaryOrientation,
+                                    onGridScrollModeChange = settingsViewModel::setAppDrawerSecondaryScrollMode,
+                                    onShowAppLabelsChange = settingsViewModel::setAppDrawerSecondaryShowLabels,
+                                    onAddFavorite = settingsViewModel::addAppDrawerFavorite,
+                                    onRemoveFavorite = settingsViewModel::removeAppDrawerFavorite,
+                                    onMoveFavorite = { pkg, delta ->
+                                        settingsViewModel.moveAppDrawerFavorite(
+                                            packageName = pkg,
+                                            delta = delta,
+                                            installedPackages = apps.map { it.packageName },
+                                        )
+                                    },
                                 )
                             }
 
@@ -617,8 +644,8 @@ fun SecondaryApp() {
                                     current = animatedMode,
                                     store = store,
                                     sessionActive = sessionActive,
-                                ) {
-                                    RunningAppsPanel(showGamepadHints = false)
+                                ) { contentFocus ->
+                                    RunningAppsPanel(initialFocusRequester = contentFocus)
                                 }
                             }
 
@@ -627,48 +654,36 @@ fun SecondaryApp() {
                                     current = animatedMode,
                                     store = store,
                                     sessionActive = sessionActive,
-                                ) {
-                                    QuickSettingsPanel(showGamepadHints = false)
-                                }
-                            }
-
-                            SecondaryMode.Achievements -> {
-                                SecondaryModeFrame(
-                                    current = animatedMode,
-                                    store = store,
-                                    sessionActive = sessionActive,
-                                ) {
-                                    AchievementsPanel(showGamepadHints = false)
+                                ) { contentFocus ->
+                                    QuickSettingsPanel(initialFocusRequester = contentFocus)
                                 }
                             }
 
                             SecondaryMode.Clock -> {
-                                val clockFocus = remember { FocusRequester() }
+                                val backToClockGrid = { store.setSecondaryMode(SecondaryMode.GameGrid) }
                                 WajihaScreen(
                                     layerId = "secondary_clock",
+                                    onBack = backToClockGrid,
                                     showActionBar = true,
                                     gamepadHints =
                                         listOf(
-                                            GamepadHint(GamepadHintButton.B, "Games"),
+                                            GamepadHint(GamepadHintButton.B, "Back"),
                                             GamepadHint(GamepadHintButton.L2, "Focus screen"),
                                         ),
                                     gamepadOwner = GamepadOwner.Secondary,
                                     onClaimGamepad = store::claimGamepad,
-                                    onOwnerGainedFocus = { clockFocus.requestContentFocus() },
                                 ) {
-                                    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(horizontal = WajihaSpacing.xs),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            GamepadChip(
-                                                label = "< Games",
-                                                selected = false,
-                                                onClick = { store.setSecondaryMode(SecondaryMode.GameGrid) },
-                                                sound = UiSound.Back,
-                                                focusRequester = clockFocus,
-                                            )
-                                        }
+                                    WajihaFolderSettingChrome(
+                                        onBack = backToClockGrid,
+                                        tabs = listOf("Clock"),
+                                        selectedIndex = 0,
+                                        onSelect = {},
+                                        scrollable = false,
+                                        modifier =
+                                            Modifier
+                                                .fillMaxSize()
+                                                .background(MaterialTheme.colorScheme.background),
+                                    ) {
                                         ClockScreen()
                                     }
                                 }
@@ -681,7 +696,7 @@ fun SecondaryApp() {
     }
 }
 
-/** Header with back-to-grid plus tabs so every mode stays reachable. */
+/** Folder chrome + L1/R1 tabs for secondary System / Running / Now Running. */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun SecondaryModeFrame(
@@ -689,7 +704,7 @@ private fun SecondaryModeFrame(
     store: DualScreenStore,
     sessionActive: Boolean,
     backgroundContent: (@Composable () -> Unit)? = null,
-    content: @Composable () -> Unit,
+    content: @Composable ColumnScope.(contentFocus: FocusRequester) -> Unit,
 ) {
     val tabs =
         buildList {
@@ -698,10 +713,10 @@ private fun SecondaryModeFrame(
             }
             add(SecondaryMode.RunningApps to "Running")
             add(SecondaryMode.QuickSettings to "System")
-            add(SecondaryMode.Achievements to "Trophies")
         }
     val currentIndex = tabs.indexOfFirst { it.first == current }.coerceAtLeast(0)
     val feedback = LocalUiFeedback.current
+    val backToGrid = { store.setSecondaryMode(SecondaryMode.GameGrid) }
 
     fun selectTab(index: Int) {
         feedback.tabSelect(currentIndex, index)
@@ -710,30 +725,12 @@ private fun SecondaryModeFrame(
 
     val modeHints =
         when (current) {
-            SecondaryMode.NowPlaying -> {
-                listOf(
-                    GamepadHint(GamepadHintButton.B, "Games"),
-                    GamepadHint(GamepadHintButton.L1R1, "Tab"),
-                )
-            }
-
             SecondaryMode.RunningApps -> {
                 runningAppsGamepadHints + GamepadHint(GamepadHintButton.L1R1, "Tab")
             }
 
             SecondaryMode.QuickSettings -> {
-                quickSettingsGamepadHints +
-                    listOf(
-                        GamepadHint(GamepadHintButton.B, "Games"),
-                        GamepadHint(GamepadHintButton.L1R1, "Tab"),
-                    )
-            }
-
-            SecondaryMode.Achievements -> {
-                listOf(
-                    GamepadHint(GamepadHintButton.B, "Games"),
-                    GamepadHint(GamepadHintButton.L1R1, "Tab"),
-                )
+                quickSettingsGamepadHints + GamepadHint(GamepadHintButton.L1R1, "Tab")
             }
 
             else -> {
@@ -743,6 +740,7 @@ private fun SecondaryModeFrame(
     val contentFocus = remember { FocusRequester() }
     WajihaScreen(
         layerId = "secondary_mode_${current.name}",
+        onBack = backToGrid,
         showActionBar = true,
         gamepadHints = modeHints + GamepadHint(GamepadHintButton.L2, "Focus screen"),
         gamepadOwner = GamepadOwner.Secondary,
@@ -767,7 +765,12 @@ private fun SecondaryModeFrame(
             }
         },
     ) {
-        Column(
+        WajihaFolderSettingChrome(
+            onBack = backToGrid,
+            tabs = tabs.map { it.second },
+            selectedIndex = currentIndex,
+            onSelect = ::selectTab,
+            scrollable = current == SecondaryMode.QuickSettings,
             modifier =
                 Modifier
                     .fillMaxSize()
@@ -779,38 +782,7 @@ private fun SecondaryModeFrame(
                         },
                     ),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = WajihaSpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
-            ) {
-                GamepadChip(
-                    label = "< Games",
-                    selected = false,
-                    onClick = { store.setSecondaryMode(SecondaryMode.GameGrid) },
-                    sound = UiSound.Back,
-                    gamepadFocusable = false,
-                )
-                tabs.forEachIndexed { index, (mode, label) ->
-                    GamepadChip(
-                        label = label,
-                        selected = mode == current,
-                        onClick = { selectTab(index) },
-                        sound = UiSound.Navigate,
-                        soundWhenUnselected = true,
-                        gamepadFocusable = false,
-                    )
-                }
-            }
-            Box(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .focusRequester(contentFocus)
-                        .wajihaGamepadFocus(),
-            ) {
-                content()
-            }
+            content(contentFocus)
         }
     }
 }
@@ -827,34 +799,37 @@ private fun BlackoutScreen(onTap: () -> Unit) {
     )
 }
 
-@OptIn(kotlin.time.ExperimentalTime::class)
+@OptIn(ExperimentalTime::class)
 @Composable
 private fun ClockScreen() {
-    var now by androidx.compose.runtime.remember {
-        androidx.compose.runtime.mutableStateOf(currentTimeText())
-    }
-    androidx.compose.runtime.LaunchedEffect(Unit) {
+    var now by remember { mutableStateOf(currentTimeText()) }
+    LaunchedEffect(Unit) {
         while (true) {
             now = currentTimeText()
-            kotlinx.coroutines.delay(1000)
+            val dateTime =
+                Clock.System
+                    .now()
+                    .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+            val msIntoMinute = dateTime.second * 1000 + dateTime.nanosecond / 1_000_000
+            delay((60_000 - msIntoMinute).coerceAtLeast(1).milliseconds)
         }
     }
     Box(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = now,
             style = MaterialTheme.typography.displayLarge,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
 
-@OptIn(kotlin.time.ExperimentalTime::class)
+@OptIn(ExperimentalTime::class)
 private fun currentTimeText(): String {
     val dateTime =
-        kotlin.time.Clock.System
+        Clock.System
             .now()
             .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
     val h = dateTime.hour.toString().padStart(2, '0')

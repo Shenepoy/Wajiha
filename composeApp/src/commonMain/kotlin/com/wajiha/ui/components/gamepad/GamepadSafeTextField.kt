@@ -1,6 +1,5 @@
 package com.wajiha.ui.components.gamepad
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -30,7 +29,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadTextEditRegistry
 import com.wajiha.input.LocalGamepadNavController
-import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 
@@ -96,20 +94,8 @@ fun GamepadSafeTextField(
         }
     }
 
-    val fieldModifier =
-        modifier
-            .clip(WajihaShapes.focus)
-            .then(
-                if (highlighted) {
-                    Modifier.border(
-                        width = WajihaFocus.borderWidth,
-                        color = WajihaFocus.borderColor(),
-                        shape = WajihaShapes.focus,
-                    )
-                } else {
-                    Modifier
-                },
-            )
+    // Nav chrome owns the focus ring under custom nav; clip content only.
+    val fieldModifier = modifier.clip(WajihaShapes.focus)
 
     if (useCustomNav) {
         com.wajiha.input.GamepadNavItem(
@@ -247,6 +233,7 @@ private fun LegacyGamepadSafeTextField(
     modifier: Modifier = Modifier,
 ) {
     var editing by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val focusRequester =
@@ -288,7 +275,10 @@ private fun LegacyGamepadSafeTextField(
             },
         modifier =
             modifier
-                .focusRequester(focusRequester)
+                .wajihaFocusIndicator(
+                    highlighted = focused,
+                    shape = WajihaShapes.focus,
+                ).focusRequester(focusRequester)
                 .onPreviewKeyEvent { event ->
                     if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) {
                         return@onPreviewKeyEvent false
@@ -344,6 +334,7 @@ private fun LegacyGamepadSafeTextField(
                         }
                     }
                 }.onFocusChanged { state ->
+                    focused = state.isFocused
                     if (state.isFocused && !editing) {
                         keyboard?.hide()
                     }

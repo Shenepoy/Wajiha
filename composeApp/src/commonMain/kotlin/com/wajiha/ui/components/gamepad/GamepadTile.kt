@@ -1,5 +1,8 @@
 package com.wajiha.ui.components.gamepad
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -13,10 +16,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import com.wajiha.input.FocusClaimSource
 import com.wajiha.input.LocalFocusContinuityController
@@ -80,12 +83,22 @@ fun GamepadTile(
                     }
             )
     val navChrome = showGamepadChrome(navHighlighted)
-    val scale =
-        when {
-            navChrome -> WajihaFocus.selectedScale
-            showGamepadChrome(rawHighlight) -> 1.05f
-            else -> 1f
+    // Keep grid pop subtle — 1.05 scaled tiles collide with neighbors and clip edges.
+    val targetScale =
+        if (navChrome || showGamepadChrome(rawHighlight)) {
+            WajihaFocus.selectedScale
+        } else {
+            1f
         }
+    val scale by animateFloatAsState(
+        targetValue = targetScale,
+        animationSpec =
+            spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMedium,
+            ),
+        label = "gamepad_tile_focus_scale",
+    )
 
     fun claimFocusFromTouch() {
         if (useCustomNav) return
@@ -104,19 +117,20 @@ fun GamepadTile(
         modifier =
             modifier
                 .defaultMinSize(minWidth = WajihaSpacing.touchMin, minHeight = WajihaSpacing.touchMin)
-                .scale(scale)
-                .clip(WajihaShapes.tile)
-                .then(
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }.then(
                     if (navChrome) {
                         Modifier
-                            .background(
-                                color = WajihaFocus.selectedBackground(),
-                                shape = WajihaShapes.tile,
-                            ).wajihaFocusIndicator(
+                            .wajihaFocusIndicator(
                                 highlighted = true,
                                 shape = WajihaShapes.tile,
                                 selected = true,
                                 focusAnchor = anchor,
+                            ).background(
+                                color = WajihaFocus.selectedBackground(),
+                                shape = WajihaShapes.tile,
                             )
                     } else {
                         Modifier.wajihaFocusIndicator(
@@ -126,7 +140,8 @@ fun GamepadTile(
                             focusAnchor = anchor,
                         )
                     },
-                ).then(
+                ).clip(WajihaShapes.tile)
+                .then(
                     if (!useCustomNav) {
                         Modifier
                             .focusRequester(requester)

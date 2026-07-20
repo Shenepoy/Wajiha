@@ -9,7 +9,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.wajiha.android.display.DisplayCoordinator
+import com.wajiha.android.display.SecondaryDisplayHost
+import com.wajiha.android.display.SecondaryRenderSurface
 import com.wajiha.android.input.GamepadGate
 import com.wajiha.android.input.GamepadKeyRouter
 import com.wajiha.android.input.TriggerAxisHandler
@@ -34,10 +38,11 @@ import java.util.concurrent.ConcurrentHashMap
  * launches it explicitly.
  *
  * On Thor, bottom-screen HOME is routed to Launcher3's established SECONDARY_HOME
- * task; [DisplayCoordinator.scheduleSecondaryHomeReclaim] fights that from here.
+ * task; [DisplayCoordinator] restores this task with bounded recovery.
  */
 class SecondaryHomeActivity : ComponentActivity() {
     private val displayCoordinator: DisplayCoordinator by inject()
+    private val secondaryDisplayHost: SecondaryDisplayHost by inject()
     private val dualScreenStore: DualScreenStore by inject()
     private val gamepadKeyRouter: GamepadKeyRouter by inject()
     private val triggerAxisHandler: TriggerAxisHandler by inject()
@@ -78,39 +83,37 @@ class SecondaryHomeActivity : ComponentActivity() {
         if (displayId != null) {
             registerTask(displayId, taskId)
         }
+        displayCoordinator.handleSecondaryHomeIntent(this, intent)
         instanceRef = WeakReference(this)
+        secondaryDisplayHost.attach(
+            activity = this,
+            gamepadKeyRouter = gamepadKeyRouter,
+            triggerAxisHandler = triggerAxisHandler,
+            gamepadGate = gamepadGate,
+        )
         gamepadKeyRouter.attach(GamepadOwner.Secondary, this)
         // Home surface: BACK must never dismiss it (in-app screens register
         // their own Compose BackHandlers on top of this).
         onBackPressedDispatcher.addCallback(this) { }
         hideSystemStatusBar()
         setContent {
-            SecondaryApp()
+            val renderSurface by secondaryDisplayHost.surface.collectAsState()
+            if (renderSurface == SecondaryRenderSurface.Activity) {
+                SecondaryApp()
+            }
         }
         window.decorView.post {
             triggerAxisHandler.installOn(this, gamepadGate)
         }
     }
 
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode == KeyEvent.KEYCODE_HOME) {
-            val displayId = display?.displayId
-            if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
-                WajihaLog.i(
-                    WajihaTags.DISPLAY,
-                    "dispatchKeyEvent: HOME consumed on displayId=$displayId",
-                )
-                displayCoordinator.beginFastSecondaryReclaim(displayId)
-            }
-            return true
-        }
-        return dispatchLauncherKeyEvent(
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        dispatchLauncherKeyEvent(
             owner = GamepadOwner.Secondary,
             event = event,
             gamepadGate = gamepadGate,
             gamepadKeyRouter = gamepadKeyRouter,
         ) { super.dispatchKeyEvent(it) }
-    }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         if (!gamepadGate.shouldBlockGamepad() && triggerAxisHandler.onGenericMotion(event)) {
@@ -132,6 +135,7 @@ class SecondaryHomeActivity : ComponentActivity() {
         if (instanceRef?.get() === this) {
             instanceRef = null
         }
+        secondaryDisplayHost.detach(this)
         super.onDestroy()
     }
 
@@ -147,18 +151,19 @@ class SecondaryHomeActivity : ComponentActivity() {
         if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
             registerTask(displayId, taskId)
         }
+        displayCoordinator.handleSecondaryHomeIntent(this, intent)
     }
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         val displayId = display?.displayId
+        if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
+            displayCoordinator.onSecondaryHomeUserLeave(this)
+        }
         WajihaLog.d(
             WajihaTags.DISPLAY,
             "onUserLeaveHint: displayId=$displayId taskId=$taskId",
         )
-        if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
-            displayCoordinator.beginFastSecondaryReclaim(displayId)
-        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -169,9 +174,8 @@ class SecondaryHomeActivity : ComponentActivity() {
         } else if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
             WajihaLog.d(
                 WajihaLogKind.WINDOW,
-                "SecondaryHome.onWindowFocusChanged: lost focus displayId=$displayId — fast reclaim",
+                "SecondaryHome.onWindowFocusChanged: lost focus displayId=$displayId",
             )
-            displayCoordinator.beginFastSecondaryReclaim(displayId)
         }
     }
 
@@ -180,10 +184,10 @@ class SecondaryHomeActivity : ComponentActivity() {
         hideSystemStatusBar()
         isResumed = true
         gamepadGate.onLauncherForegrounded()
-        foregroundAppMonitor.onLauncherForegrounded()
         visibleDisplayId = display?.displayId
         display?.displayId?.let { registerTask(it, taskId) }
-        displayCoordinator.stopFastSecondaryReclaim()
+        visibleDisplayId?.let { displayCoordinator.onSecondaryHomeResumed(this) }
+        foregroundAppMonitor.onSecondaryLauncherForegrounded()
         WajihaLog.d(
             WajihaLogKind.WINDOW,
             "SecondaryHome.onResume: displayId=$visibleDisplayId taskId=$taskId",
@@ -192,16 +196,14 @@ class SecondaryHomeActivity : ComponentActivity() {
 
     override fun onPause() {
         val displayId = display?.displayId
+        super.onPause()
+        isResumed = false
         if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
             WajihaLog.d(
                 WajihaLogKind.WINDOW,
-                "SecondaryHome.onPause: displayId=$displayId taskId=$taskId — fast reclaim",
+                "SecondaryHome.onPause: displayId=$displayId taskId=$taskId",
             )
-            displayCoordinator.beginFastSecondaryReclaim(displayId)
         }
-        super.onPause()
-        isResumed = false
-        if (visibleDisplayId == displayId) visibleDisplayId = null
     }
 
     override fun onStart() {
@@ -210,8 +212,16 @@ class SecondaryHomeActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        val displayId = display?.displayId
         super.onStop()
-        if (visibleDisplayId == display?.displayId) visibleDisplayId = null
+        if (visibleDisplayId == displayId) visibleDisplayId = null
+        if (displayId != null && displayId != Display.DEFAULT_DISPLAY) {
+            WajihaLog.d(
+                WajihaLogKind.WINDOW,
+                "SecondaryHome.onStop: displayId=$displayId taskId=$taskId",
+            )
+            displayCoordinator.onSecondaryHomeStopped(displayId)
+        }
     }
 
     companion object {

@@ -72,7 +72,9 @@ import com.wajiha.input.LocalFocusContinuityController
 import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
+import com.wajiha.ui.theme.FocusBorderStyle
 import com.wajiha.ui.theme.GamepadFocusChromeScope
+import com.wajiha.ui.theme.LocalFocusIndicatorStyle
 import com.wajiha.ui.theme.LocalGamepadFocusChromeScope
 import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
@@ -173,12 +175,12 @@ private fun offsetForLockedSide(
 private fun inflateForTileScale(
     rect: Rect,
     scale: Float,
+    ringPadPx: Float = 0f,
 ): Rect {
-    if (scale == 1f) return rect
     val cx = rect.center.x
     val cy = rect.center.y
-    val hw = rect.width * scale / 2f
-    val hh = rect.height * scale / 2f
+    val hw = rect.width * scale / 2f + ringPadPx
+    val hh = rect.height * scale / 2f + ringPadPx
     return Rect(cx - hw, cy - hh, cx + hw, cy + hh)
 }
 
@@ -306,6 +308,22 @@ private fun ContextMenuDimScrim(
 ) {
     val scrimColor = Color.Black.copy(alpha = scrimAlpha)
     val density = LocalDensity.current
+    val focusStyle = LocalFocusIndicatorStyle.current
+    val ringPadPx =
+        with(density) {
+            when (focusStyle.borderStyle) {
+                FocusBorderStyle.Glow,
+                FocusBorderStyle.Neon,
+                FocusBorderStyle.Aura,
+                FocusBorderStyle.SoftPulse,
+                FocusBorderStyle.GradientPulse,
+                -> focusStyle.selectedThickness.toPx() * 3f
+
+                FocusBorderStyle.Double -> focusStyle.selectedThickness.toPx() * 2f
+
+                else -> focusStyle.selectedThickness.toPx()
+            }
+        }
     val tileCornerRadiusPx =
         with(density) {
             WajihaShapes.tileCornerRadius.toPx() * WajihaFocus.selectedScale
@@ -313,10 +331,10 @@ private fun ContextMenuDimScrim(
     var overlayRootBounds by remember { mutableStateOf<Rect?>(null) }
 
     val localTileCutout =
-        remember(tileCutoutRoot, overlayRootBounds) {
+        remember(tileCutoutRoot, overlayRootBounds, ringPadPx) {
             val overlay = overlayRootBounds ?: return@remember null
             val tile = tileCutoutRoot ?: return@remember null
-            val scaled = inflateForTileScale(tile, WajihaFocus.selectedScale)
+            val scaled = inflateForTileScale(tile, WajihaFocus.selectedScale, ringPadPx)
             Rect(
                 left = scaled.left - overlay.left,
                 top = scaled.top - overlay.top,

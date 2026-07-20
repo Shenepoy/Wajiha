@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -97,6 +95,7 @@ import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.GamepadHintGlyph
 import com.wajiha.ui.components.gamepad.GamepadTile
 import com.wajiha.ui.components.gamepad.hasCenterInViewport
+import com.wajiha.ui.components.gamepad.smoothBringItemIntoView
 import com.wajiha.ui.components.gamepad.visibleFractionOnScrollAxis
 import com.wajiha.ui.secondary.SessionGridTile
 import com.wajiha.ui.secondary.sessionDisplayLabel
@@ -109,7 +108,6 @@ import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -890,9 +888,17 @@ fun BottomScreen(
                                             }
                                         }
                                     },
-                            contentPadding = PaddingValues(WajihaSpacing.md),
-                            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm + WajihaSpacing.xs),
-                            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm + WajihaSpacing.xs),
+                            contentPadding =
+                                PaddingValues(
+                                    start = WajihaSpacing.md + WajihaSpacing.xs,
+                                    top = WajihaSpacing.md + WajihaSpacing.xs,
+                                    // Extra end/bottom so D-pad can rest the last column/row
+                                    // fully on-screen (focus ring + selected scale).
+                                    end = WajihaSpacing.xl,
+                                    bottom = WajihaSpacing.xl,
+                                ),
+                            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.md),
+                            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.md),
                         ) {
                             if (gridSessions.isNotEmpty()) {
                                 items(gridSessions, key = { "session-${it.packageName}" }) { session ->
@@ -1411,7 +1417,37 @@ private fun HomePlatformFilterRow(
         }
     }
 
-    Box(modifier = modifier) {
+    Box(
+        modifier =
+            modifier.drawWithContent {
+                drawContent()
+                val fadeWidth = FilterEdgeFadeWidth.toPx().coerceAtMost(size.width)
+                if (showStartFade) {
+                    drawRect(
+                        brush =
+                            Brush.horizontalGradient(
+                                colors = listOf(edgeColor, Color.Transparent),
+                                startX = 0f,
+                                endX = fadeWidth,
+                            ),
+                        size = Size(fadeWidth, size.height),
+                    )
+                }
+                if (showEndFade) {
+                    val fadeStart = size.width - fadeWidth
+                    drawRect(
+                        brush =
+                            Brush.horizontalGradient(
+                                colors = listOf(Color.Transparent, edgeColor),
+                                startX = fadeStart,
+                                endX = size.width,
+                            ),
+                        topLeft = Offset(fadeStart, 0f),
+                        size = Size(fadeWidth, size.height),
+                    )
+                }
+            },
+    ) {
         LazyRow(
             state = listState,
             modifier = Modifier.fillMaxWidth(),
@@ -1435,108 +1471,28 @@ private fun HomePlatformFilterRow(
                 )
             }
         }
-        if (showStartFade) {
-            Box(
-                modifier =
-                    Modifier
-                        .align(Alignment.CenterStart)
-                        .fillMaxHeight()
-                        .width(FilterEdgeFadeWidth)
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(edgeColor, Color.Transparent),
-                            ),
-                        ),
-            )
-        }
-        if (showEndFade) {
-            Box(
-                modifier =
-                    Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .width(FilterEdgeFadeWidth)
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(Color.Transparent, edgeColor),
-                            ),
-                        ),
-            )
-        }
     }
 }
 
-private val FilterEdgeFadeWidth = 28.dp
+private val FilterEdgeFadeWidth = 14.dp
 
 /**
- * Keep [gameId] in the padded viewport.
+ * Keep [gameId] fully inside the padded viewport.
  *
  * Instant [scrollBy] only — at most one column per call (no page teleport).
- * If the tile is already center-in-viewport (e.g. just snapped after touch-scroll),
- * do nothing — an edge-pad nudge here was the post-snap jump.
+ * Requires the whole tile (not just center) so trailing columns aren't clipped.
  */
 private suspend fun LazyGridState.smoothBringGameIntoView(
     gameId: Long,
     lazyIndex: Int,
     edgePaddingPx: Int,
 ) {
-    val info = layoutInfo.visibleItemsInfo.firstOrNull { it.key == gameId }
-    if (info != null && info.hasCenterInViewport(layoutInfo, horizontalScroll = true)) {
-        return
-    }
-    val stride = libraryColumnStridePx()
-    val delta =
-        if (info != null) {
-            libraryEdgePadDeltaPx(info, edgePaddingPx).coerceIn(-stride.toFloat(), stride.toFloat())
-        } else {
-            val maxVisible = layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: firstVisibleItemIndex
-            val minVisible = layoutInfo.visibleItemsInfo.minOfOrNull { it.index } ?: firstVisibleItemIndex
-            when {
-                lazyIndex > maxVisible -> stride.toFloat()
-                lazyIndex < minVisible -> -stride.toFloat()
-                else -> stride.toFloat()
-            }
-        }
-    if (abs(delta) > 0.5f) {
-        scrollBy(delta)
-    }
-}
-
-private fun LazyGridState.libraryColumnStridePx(): Int {
-    val viewport =
-        (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).coerceAtLeast(1)
-    val row0 =
-        layoutInfo.visibleItemsInfo
-            .filter { it.row == 0 }
-            .sortedBy { it.offset.x }
-    val avgWidth =
-        row0
-            .map { it.size.width }
-            .average()
-            .let { if (it.isNaN()) viewport / 3.0 else it }
-            .toInt()
-            .coerceAtLeast(1)
-    return if (row0.size >= 2) {
-        (row0[1].offset.x - row0[0].offset.x).coerceAtLeast(1)
-    } else {
-        avgWidth
-    }
-}
-
-private fun LazyGridState.libraryEdgePadDeltaPx(
-    info: androidx.compose.foundation.lazy.grid.LazyGridItemInfo,
-    edgePaddingPx: Int,
-): Float {
-    val viewportStart = layoutInfo.viewportStartOffset + edgePaddingPx
-    val viewportEnd = layoutInfo.viewportEndOffset - edgePaddingPx
-    if (viewportEnd <= viewportStart) return 0f
-    val itemStart = info.offset.x
-    val itemEnd = itemStart + info.size.width
-    return when {
-        itemStart < viewportStart -> (itemStart - viewportStart).toFloat()
-        itemEnd > viewportEnd -> (itemEnd - viewportEnd).toFloat()
-        else -> 0f
-    }
+    smoothBringItemIntoView(
+        key = gameId,
+        lazyIndex = lazyIndex,
+        horizontalScroll = true,
+        edgePaddingPx = edgePaddingPx,
+    )
 }
 
 /** Compact scroll + item geometry for focus/scroll diagnostics. */
@@ -1595,10 +1551,22 @@ private fun HomeChromeActions(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        TextButton(
-            onClick = onOpenApps,
-            modifier = Modifier.focusProperties { canFocus = false },
-        ) { Text("Apps") }
+        Box(modifier = Modifier.focusProperties { canFocus = false }) {
+            TextButton(onClick = onOpenApps) {
+                Text("Apps")
+            }
+            // Overlay on the Apps button only; does not expand the row.
+            Box(modifier = Modifier.matchParentSize()) {
+                GamepadHintGlyph(
+                    button = GamepadHintButton.L3,
+                    size = 12.dp,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 2.dp, end = 2.dp),
+                )
+            }
+        }
         if (onOpenSystem != null) {
             TextButton(
                 onClick = onOpenSystem,

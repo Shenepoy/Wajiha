@@ -37,7 +37,7 @@ class AndroidLibraryActions(
         mode: String,
     ): String? {
         val policy = ScrapeRunPolicy.fromName(mode)
-        val blocked = batchScraper.preflightMessage(platformId)
+        val blocked = batchScraper.preflightMessage(platformId, policy)
         if (blocked != null) return blocked
         if (ScrapeWorker.isWorkActive(context)) {
             return "A scrape is already running"

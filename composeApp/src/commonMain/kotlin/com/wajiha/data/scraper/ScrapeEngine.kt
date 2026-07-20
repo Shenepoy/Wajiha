@@ -77,7 +77,10 @@ class ScrapeEngine(
         settings: ScraperSettings,
         policy: ScrapeRunPolicy = ScrapeRunPolicy.FillGaps,
     ): GameScrapeResult {
-        val effective = settings.forPlatform(game.platformId)
+        val platformSettings = settings.forPlatform(game.platformId)
+        val effective =
+            policy.sourceId?.let { platformSettings.copy(enabledSources = listOf(it)) }
+                ?: platformSettings
         val query = buildQuery(game)
         if (!hasConfiguredSources(effective)) {
             WajihaLog.w(WajihaTags.SCRAPE, "gameId=${game.id}: no sources configured")

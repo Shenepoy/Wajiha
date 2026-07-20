@@ -1,8 +1,12 @@
 package com.wajiha.ui.components.gamepad
 
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -11,14 +15,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
 import com.wajiha.input.FocusClaimSource
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.LocalFocusContinuityController
@@ -28,7 +35,8 @@ import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.UiSound
 import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.theme.WajihaShapes
-import com.wajiha.ui.theme.WajihaSpacing
+
+private const val DisabledContentAlpha = 0.38f
 
 @Composable
 fun GamepadButton(
@@ -43,6 +51,70 @@ fun GamepadButton(
     onFocusedChanged: ((Boolean) -> Unit)? = null,
     sound: UiSound? = UiSound.Open,
 ) {
+    GamepadButtonScaffold(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        outlined = outlined,
+        gamepadFocusable = gamepadFocusable,
+        focusRequester = focusRequester,
+        focusId = focusId ?: text,
+        onFocusedChanged = onFocusedChanged,
+        sound = sound,
+        content = { Text(text) },
+    )
+}
+
+/** Compact square button with a vector glyph (e.g. Apps Options). */
+@Composable
+fun GamepadIconButton(
+    imageVector: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    outlined: Boolean = true,
+    gamepadFocusable: Boolean = true,
+    focusRequester: FocusRequester? = null,
+    focusId: Any? = null,
+    onFocusedChanged: ((Boolean) -> Unit)? = null,
+    sound: UiSound? = UiSound.Open,
+) {
+    GamepadButtonScaffold(
+        onClick = onClick,
+        modifier = modifier.defaultMinSize(minWidth = 44.dp, minHeight = 44.dp),
+        enabled = enabled,
+        outlined = outlined,
+        gamepadFocusable = gamepadFocusable,
+        focusRequester = focusRequester,
+        focusId = focusId ?: contentDescription,
+        onFocusedChanged = onFocusedChanged,
+        sound = sound,
+        contentPadding = PaddingValues(10.dp),
+        content = {
+            Icon(
+                imageVector = imageVector,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(22.dp),
+            )
+        },
+    )
+}
+
+@Composable
+private fun GamepadButtonScaffold(
+    onClick: () -> Unit,
+    modifier: Modifier,
+    enabled: Boolean,
+    outlined: Boolean,
+    gamepadFocusable: Boolean,
+    focusRequester: FocusRequester?,
+    focusId: Any,
+    onFocusedChanged: ((Boolean) -> Unit)?,
+    sound: UiSound?,
+    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    content: @Composable () -> Unit,
+) {
     var focused by remember { mutableStateOf(false) }
     val useCustomNav = LocalGamepadNavController.current != null
     val feedback = LocalUiFeedback.current
@@ -51,10 +123,9 @@ fun GamepadButton(
     val resolvedFocusRequester = focusRequester ?: localFocusRequester
     val continuity = LocalFocusContinuityController.current
     val layerId = LocalFocusLayerId.current
-    val resolvedFocusId = focusId ?: text
     val anchor =
-        remember(continuity, layerId, resolvedFocusId) {
-            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(resolvedFocusId, layerId)
+        remember(continuity, layerId, focusId) {
+            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(focusId, layerId)
         }
 
     fun performClick() {
@@ -69,15 +140,18 @@ fun GamepadButton(
         onClick()
     }
 
+    // Keep Material Button enabled so Compose can focus it; dim when logically disabled.
+    // Focus chrome still paints while disabled so D-pad can land on min/max steppers.
     val chrome =
         Modifier
-            .clip(WajihaShapes.button)
-            .wajihaPressedFeedback(interactionSource, WajihaShapes.button)
+            .alpha(if (enabled) 1f else DisabledContentAlpha)
             .wajihaFocusIndicator(
                 highlighted = !useCustomNav && focused,
                 shape = WajihaShapes.button,
                 focusAnchor = anchor,
-            ).defaultMinSize(minHeight = LocalSettingRowMinHeight.current)
+            ).clip(WajihaShapes.button)
+            .wajihaPressedFeedback(interactionSource, WajihaShapes.button)
+            .defaultMinSize(minHeight = LocalSettingRowMinHeight.current)
             .focusRequester(resolvedFocusRequester)
             .then(
                 if (gamepadFocusable) {
@@ -94,7 +168,9 @@ fun GamepadButton(
                                 continuity?.claim(anchor, FocusClaimSource.Compose)
                             }
                             onFocusedChanged?.invoke(it.isFocused)
-                        }.wajihaGamepadFocus(enabled && gamepadFocusable)
+                        }
+                        // Focusable even when logically disabled (min/max steppers).
+                        .wajihaGamepadFocus(gamepadFocusable)
                 } else {
                     Modifier
                 },
@@ -112,35 +188,35 @@ fun GamepadButton(
                     Modifier
                 },
             ).pointerInput(enabled) {
-                if (enabled) {
-                    detectTapGestures {
-                        if (anchor != null) {
-                            continuity?.claim(anchor, FocusClaimSource.Touch)
-                        }
-                        try {
-                            resolvedFocusRequester.requestFocus()
-                        } catch (_: Exception) {
-                        }
-                        performClick()
+                detectTapGestures {
+                    if (anchor != null) {
+                        continuity?.claim(anchor, FocusClaimSource.Touch)
                     }
+                    try {
+                        resolvedFocusRequester.requestFocus()
+                    } catch (_: Exception) {
+                    }
+                    performClick()
                 }
             }
 
     if (outlined) {
         OutlinedButton(
             onClick = ::performClick,
-            enabled = enabled,
+            enabled = true,
             interactionSource = interactionSource,
+            contentPadding = contentPadding,
             modifier = modifier.then(chrome),
             shape = WajihaShapes.button,
-        ) { Text(text) }
+        ) { content() }
     } else {
         Button(
             onClick = ::performClick,
-            enabled = enabled,
+            enabled = true,
             interactionSource = interactionSource,
+            contentPadding = contentPadding,
             modifier = modifier.then(chrome),
             shape = WajihaShapes.button,
-        ) { Text(text) }
+        ) { content() }
     }
 }

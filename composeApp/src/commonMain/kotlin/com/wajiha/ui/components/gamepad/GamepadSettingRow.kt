@@ -24,16 +24,22 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -74,8 +80,30 @@ import com.wajiha.ui.theme.WajihaSpacing
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
-/** Compact row height for multi-choice list items (denser than [WajihaSpacing.touchMin]). */
+/** Compact row height for multi-choice list items (denser than [SettingsCompactRowMinHeight]). */
 private val MultiChoiceItemMinHeight = 34.dp
+private val SettingExpansionIconSize = 20.dp
+
+@Composable
+internal fun SettingExpansionIcon(
+    expanded: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Icon(
+        imageVector =
+            if (expanded) {
+                Icons.Filled.KeyboardArrowDown
+            } else {
+                Icons.AutoMirrored.Filled.KeyboardArrowRight
+            },
+        contentDescription = if (expanded) "Collapse" else "Expand",
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier =
+            modifier
+                .padding(start = 2.dp, end = 4.dp)
+                .size(SettingExpansionIconSize),
+    )
+}
 
 /** One selectable value in a [SettingType.MultiChoice] row. */
 data class MultiChoiceOption(
@@ -170,13 +198,23 @@ fun GamepadSettingRow(
     }
 
     var focused by remember { mutableStateOf(false) }
-    val useCustomNav = LocalGamepadNavController.current != null
-    val highlight = !useCustomNav && focused
+    val navController = LocalGamepadNavController.current
+    val useCustomNav = navController != null
     val feedback = LocalUiFeedback.current
+    val hintReporter = LocalSettingHintCapabilitiesReporter.current
     val canReset = onReset != null && !isAtDefault
+    val hintCapabilities =
+        SettingHintCapabilities(
+            canReset = canReset,
+            canAdjust =
+                type == SettingType.Toggle ||
+                    type == SettingType.Number ||
+                    (type == SettingType.BinaryChoice && options.isNotEmpty() && onSelect != null),
+        )
     val stackedChoices = type == SettingType.BinaryChoice && options.size > 3
     val localFocusRequester = remember { FocusRequester() }
     val resolvedFocusRequester = focusRequester ?: localFocusRequester
+    val sectionScroll = LocalSettingSectionScroll.current
     val continuity = LocalFocusContinuityController.current
     val layerId = LocalFocusLayerId.current
     val resolvedFocusId = focusId ?: label
@@ -184,6 +222,7 @@ fun GamepadSettingRow(
         remember(continuity, layerId, resolvedFocusId) {
             continuity?.takeIf { layerId.isNotEmpty() }?.anchor(resolvedFocusId, layerId)
         }
+    var itemCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     fun claimTouchFocus() {
         if (anchor != null) {
@@ -229,6 +268,23 @@ fun GamepadSettingRow(
         }
     }
 
+    fun adjustChoice(direction: Int): Boolean {
+        if (type != SettingType.BinaryChoice || onSelect == null || options.isEmpty()) return false
+        val selectedIndex = options.indexOfFirst { it.first == selected }
+        val targetIndex =
+            if (direction < 0) {
+                if (selectedIndex < 0) options.lastIndex else (selectedIndex - 1).coerceAtLeast(0)
+            } else {
+                if (selectedIndex < 0) 0 else (selectedIndex + 1).coerceAtMost(options.lastIndex)
+            }
+        if (targetIndex != selectedIndex) {
+            feedback.navigate()
+            onSelect(options[targetIndex].first)
+        }
+        // Inline choices own horizontal input even when already at an endpoint.
+        return true
+    }
+
     fun handleHorizontalKey(key: Key): Boolean {
         if (key != Key.DirectionLeft && key != Key.DirectionRight) return false
         return when (type) {
@@ -243,19 +299,76 @@ fun GamepadSettingRow(
                 true
             }
 
+            SettingType.BinaryChoice -> {
+                adjustChoice(if (key == Key.DirectionLeft) -1 else 1)
+            }
+
             else -> {
                 false
             }
         }
     }
 
+    val currentActivate by rememberUpdatedState { activate() }
+    val currentAdjustLeft by rememberUpdatedState { handleHorizontalKey(Key.DirectionLeft) }
+    val currentAdjustRight by rememberUpdatedState { handleHorizontalKey(Key.DirectionRight) }
+
+    DisposableEffect(navController, resolvedFocusId, type, hintCapabilities.canAdjust) {
+        if (navController != null && type == SettingType.BinaryChoice) {
+            navController.register(
+                id = resolvedFocusId,
+                onActivate = { currentActivate() },
+                onAdjustLeft =
+                    if (hintCapabilities.canAdjust) {
+                        { currentAdjustLeft() }
+                    } else {
+                        null
+                    },
+                onAdjustRight =
+                    if (hintCapabilities.canAdjust) {
+                        { currentAdjustRight() }
+                    } else {
+                        null
+                    },
+            )
+        }
+        onDispose {
+            if (type == SettingType.BinaryChoice) {
+                navController?.unregister(resolvedFocusId)
+            }
+        }
+    }
+
+    val highlight =
+        if (useCustomNav) {
+            type == SettingType.BinaryChoice && navController.isSlotFocused(resolvedFocusId)
+        } else {
+            focused
+        }
+
+    LaunchedEffect(useCustomNav, highlight, sectionScroll, resolvedFocusId, type) {
+        if (useCustomNav && type == SettingType.BinaryChoice && highlight) {
+            sectionScroll?.ensureFocusVisible(resolvedFocusId)
+        }
+    }
+
+    LaunchedEffect(useCustomNav, highlight, hintCapabilities) {
+        if (useCustomNav && type == SettingType.BinaryChoice) {
+            onFocusedChanged?.invoke(highlight)
+            hintReporter(hintCapabilities.takeIf { highlight })
+        }
+    }
+
     val interactionModifier =
         Modifier
-            .clip(WajihaShapes.focus)
-            .wajihaFocusIndicator(highlighted = highlight, focusAnchor = anchor)
             .focusRequester(resolvedFocusRequester)
-            .reportSectionVisibleFocus(resolvedFocusRequester, resolvedFocusId)
-            .then(
+            .reportSectionVisibleFocus(
+                requester = resolvedFocusRequester,
+                id = resolvedFocusId,
+                currentBoundsInRoot = {
+                    itemCoordinates?.takeIf { it.isAttached }?.unclippedBoundsInRoot()
+                },
+            ).then(
                 if (!useCustomNav) {
                     Modifier
                         .onFocusChanged {
@@ -264,6 +377,7 @@ fun GamepadSettingRow(
                                 continuity?.claim(anchor, FocusClaimSource.Compose)
                             }
                             onFocusedChanged?.invoke(it.isFocused)
+                            hintReporter(hintCapabilities.takeIf { _ -> it.isFocused })
                         }.wajihaGamepadFocus()
                         .onPreviewKeyEvent { event ->
                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -337,7 +451,13 @@ fun GamepadSettingRow(
         modifier =
             modifier
                 .fillMaxWidth()
-                .defaultMinSize(minHeight = LocalSettingRowMinHeight.current),
+                .defaultMinSize(minHeight = LocalSettingRowMinHeight.current)
+                .onGloballyPositioned { itemCoordinates = it }
+                .wajihaFocusIndicator(
+                    highlighted = highlight,
+                    shape = WajihaShapes.focus,
+                    focusAnchor = anchor,
+                ),
     ) {
         if (stackedChoices && options.isNotEmpty()) {
             Column(
@@ -534,11 +654,11 @@ private fun MultiChoiceSettingRow(
                 Modifier
                     .fillMaxWidth()
                     .onGloballyPositioned { headerCoordinates = it }
-                    .clip(WajihaShapes.focus)
                     .wajihaFocusIndicator(
                         highlighted = headerHighlight,
                         focusAnchor = headerAnchor,
-                    ).focusRequester(headerFocusRequester)
+                    ).clip(WajihaShapes.focus)
+                    .focusRequester(headerFocusRequester)
                     .reportSectionVisibleFocus(headerFocusRequester, focusId)
                     .then(
                         if (!useCustomNav) {
@@ -927,7 +1047,7 @@ private fun SegmentedChoice(
 }
 
 @Composable
-private fun SettingLabelWithReset(
+internal fun SettingLabelWithReset(
     label: String,
     canReset: Boolean,
     onReset: (() -> Unit)?,

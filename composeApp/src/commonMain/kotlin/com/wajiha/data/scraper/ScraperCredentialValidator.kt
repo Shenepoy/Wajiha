@@ -23,6 +23,11 @@ class ScraperCredentialValidator(
     private val http: HttpClient,
     private val devCreds: ScreenScraperDevCredentials,
 ) {
+    fun isScreenScraperConfigured(settings: ScraperSettings): Boolean =
+        settings.screenScraperUser.isNotBlank() &&
+            settings.screenScraperPassword.isNotBlank() &&
+            resolveScreenScraperDevCredentials(settings, devCreds) != null
+
     suspend fun testScreenScraper(settings: ScraperSettings): CredentialTestResult {
         if (settings.screenScraperUser.isBlank() || settings.screenScraperPassword.isBlank()) {
             return CredentialTestResult.Failure("Username and password required")
@@ -39,17 +44,15 @@ class ScraperCredentialValidator(
                     .get("https://api.screenscraper.fr/api2/ssuserInfos.php") {
                         screenScraperParams(settings, devCreds)
                     }.body<String>()
-            if (body.contains("\"error\"", ignoreCase = true)) {
-                val lower = body.lowercase()
+            val apiError = screenScraperApiError(body)
+            if (apiError != null) {
                 val message =
-                    when {
-                        "développeur" in lower ||
-                            "developpeur" in lower ||
-                            "developer" in lower -> {
+                    when (apiError) {
+                        "ScreenScraper developer credentials rejected" -> {
                             "Developer credentials rejected — check Dev ID/password"
                         }
 
-                        "login" in lower || "password" in lower || "user" in lower -> {
+                        "ScreenScraper username or password rejected" -> {
                             "Invalid username/password"
                         }
 
@@ -59,16 +62,19 @@ class ScraperCredentialValidator(
                     }
                 CredentialTestResult.Failure(message)
             } else {
-                val pseudo =
+                val user =
                     runCatching {
                         WajihaJson.Lenient
                             .decodeFromString<SsUserEnvelope>(body)
                             .response
                             ?.ssuser
-                            ?.pseudo
                     }.getOrNull()
-                val label = pseudo?.takeIf { it.isNotBlank() } ?: settings.screenScraperUser
-                CredentialTestResult.Success("Logged in as $label")
+                if (user == null) {
+                    CredentialTestResult.Failure("Unexpected response from ScreenScraper")
+                } else {
+                    val label = user.pseudo?.takeIf { it.isNotBlank() } ?: settings.screenScraperUser
+                    CredentialTestResult.Success("Logged in as $label")
+                }
             }
         } catch (e: Exception) {
             CredentialTestResult.Failure(e.message ?: "Connection failed")

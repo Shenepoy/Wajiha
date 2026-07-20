@@ -18,6 +18,7 @@ import com.wajiha.data.scraper.SourceLookupOutcome
 import com.wajiha.data.scraper.classifyHttpStatus
 import com.wajiha.data.scraper.getStringResult
 import com.wajiha.data.scraper.resolveScreenScraperDevCredentials
+import com.wajiha.data.scraper.screenScraperApiError
 import com.wajiha.data.scraper.screenScraperParams
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
@@ -251,7 +252,7 @@ class ScreenScraperSource(
                     result.value
                 }
             }
-        if (response.contains("\"error\"", ignoreCase = true)) return emptyList()
+        if (screenScraperApiError(response) != null) return emptyList()
         return try {
             val parsed = WajihaJson.Lenient.decodeFromString<SsSearchEnvelope>(response)
             parsed.response
@@ -269,29 +270,24 @@ class ScreenScraperSource(
         response: String,
         settings: ScraperSettings,
     ): SourceLookupOutcome {
-        if (response.contains("\"error\"", ignoreCase = true)) {
-            val lower = response.lowercase()
+        val apiError = screenScraperApiError(response)
+        if (apiError != null) {
             val failure =
-                when {
-                    "quota" in lower || "rate" in lower -> {
-                        ScrapeFailure(ScrapeFailureKind.RateLimited, "ScreenScraper quota exceeded")
+                when (apiError) {
+                    "ScreenScraper quota exceeded" -> {
+                        ScrapeFailure(ScrapeFailureKind.RateLimited, apiError)
                     }
 
-                    "développeur" in lower || "developpeur" in lower || "developer" in lower -> {
-                        ScrapeFailure(
-                            ScrapeFailureKind.Auth,
-                            "ScreenScraper developer ID missing or invalid",
-                        )
-                    }
-
-                    "login" in lower || "password" in lower || "user" in lower -> {
-                        ScrapeFailure(ScrapeFailureKind.Auth, "ScreenScraper auth failed")
+                    "ScreenScraper developer credentials rejected",
+                    "ScreenScraper username or password rejected",
+                    -> {
+                        ScrapeFailure(ScrapeFailureKind.Auth, apiError)
                     }
 
                     else -> {
                         classifyHttpStatus(200, response).copy(
                             kind = ScrapeFailureKind.Unknown,
-                            message = "ScreenScraper API error",
+                            message = apiError,
                         )
                     }
                 }

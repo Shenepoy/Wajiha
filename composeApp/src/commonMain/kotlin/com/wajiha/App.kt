@@ -31,6 +31,7 @@ import com.wajiha.state.MenuDestination
 import com.wajiha.state.MenuRouteSnapshot
 import com.wajiha.state.SecondaryMode
 import com.wajiha.ui.apps.AppDrawerScreen
+import com.wajiha.ui.components.WajihaFolderSettingChrome
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaSnackbarHost
 import com.wajiha.ui.components.WajihaToolbar
@@ -152,9 +153,12 @@ fun App() {
             return@WajihaTheme
         }
 
-        // SELECT swap: adopt the shared menu snapshot when this display gains
-        // the menu; only clear local route when becoming hero (leave snapshot).
-        LaunchedEffect(primaryShowsMenu) {
+        // SELECT swap: adopt the shared menu snapshot on the ownership edge in
+        // the same composition that gains the menu — a LaunchedEffect is one
+        // frame too late and briefly paints Home (game grid) first.
+        var prevPrimaryShowsMenu by remember { mutableStateOf(primaryShowsMenu) }
+        if (prevPrimaryShowsMenu != primaryShowsMenu) {
+            prevPrimaryShowsMenu = primaryShowsMenu
             if (primaryShowsMenu) {
                 val snap = dualStore.menuRoute.value
                 platformDetailId = snap.platformDetailId
@@ -326,6 +330,14 @@ fun App() {
             }
         }
 
+        LaunchedEffect(primaryShowsMenu) {
+            if (!primaryShowsMenu) return@LaunchedEffect
+            dualStore.openAppsRequests.collect {
+                viewModel.playOpen()
+                route = Route.Apps
+            }
+        }
+
         LaunchedEffect(isDual, swapped, secondaryMode) {
             if (isDual && swapped && secondaryMode == SecondaryMode.NowPlaying) {
                 route = Route.NowRunning
@@ -407,6 +419,29 @@ fun App() {
                             dualDisplay = isDual,
                             gamepadOwner = GamepadOwner.Primary,
                             onClaimGamepad = dualStore::claimGamepad,
+                            iconShape = settings.iconShape,
+                            gridColumns = settings.appDrawerColumns,
+                            gridRows = settings.appDrawerRows,
+                            iconSizePreference = settings.appDrawerIconSize,
+                            gridOrientation = settings.appDrawerOrientation,
+                            gridScrollMode = settings.appDrawerScrollMode,
+                            showAppLabels = settings.appDrawerShowLabels,
+                            favoritePackages = settings.appDrawerFavoritePackages,
+                            onGridColumnsChange = settingsViewModel::setAppDrawerColumns,
+                            onGridRowsChange = settingsViewModel::setAppDrawerRows,
+                            onIconSizeChange = settingsViewModel::setAppDrawerIconSize,
+                            onGridOrientationChange = settingsViewModel::setAppDrawerOrientation,
+                            onGridScrollModeChange = settingsViewModel::setAppDrawerScrollMode,
+                            onShowAppLabelsChange = settingsViewModel::setAppDrawerShowLabels,
+                            onAddFavorite = settingsViewModel::addAppDrawerFavorite,
+                            onRemoveFavorite = settingsViewModel::removeAppDrawerFavorite,
+                            onMoveFavorite = { pkg, delta ->
+                                settingsViewModel.moveAppDrawerFavorite(
+                                    packageName = pkg,
+                                    delta = delta,
+                                    installedPackages = apps.map { it.packageName },
+                                )
+                            },
                         )
                     }
 
@@ -529,12 +564,13 @@ fun App() {
                     Route.System -> {
                         SyncSystemHeroSnapshot(systemControls, dualStore)
                         val systemFocus = remember { FocusRequester() }
+                        val backHome = {
+                            viewModel.playBack()
+                            route = Route.Home
+                        }
                         WajihaScreen(
                             layerId = "system",
-                            onBack = {
-                                viewModel.playBack()
-                                route = Route.Home
-                            },
+                            onBack = backHome,
                             showActionBar = true,
                             gamepadHints =
                                 if (isDual) {
@@ -547,23 +583,13 @@ fun App() {
                             onClaimGamepad = dualStore::claimGamepad,
                             onOwnerGainedFocus = { systemFocus.requestContentFocus() },
                         ) {
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                WajihaToolbar(
-                                    title = "System",
-                                    onBack = {
-                                        viewModel.playBack()
-                                        route = Route.Home
-                                    },
-                                )
-                                QuickSettingsPanel(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .weight(1f)
-                                            .focusRequester(systemFocus)
-                                            .wajihaGamepadFocus(),
-                                    showGamepadHints = false,
-                                )
+                            WajihaFolderSettingChrome(
+                                onBack = backHome,
+                                tabs = listOf("System"),
+                                selectedIndex = 0,
+                                onSelect = {},
+                            ) {
+                                QuickSettingsPanel(initialFocusRequester = systemFocus)
                             }
                         }
                     }

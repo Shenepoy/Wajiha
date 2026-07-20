@@ -17,6 +17,8 @@ data class ScrapeRunPolicy(
     val overwriteMetadata: Boolean = false,
     val overwriteMedia: Boolean = false,
     val onlyMissingMedia: Boolean = true,
+    /** Optional per-run source override. Null uses the enabled source list. */
+    val sourceId: String? = null,
 ) {
     companion object {
         val FillGaps = ScrapeRunPolicy()
@@ -28,18 +30,21 @@ data class ScrapeRunPolicy(
                 onlyMissingMedia = false,
             )
 
-        fun fromName(name: String?): ScrapeRunPolicy =
-            when (name?.lowercase()) {
-                "force" -> Force
-                else -> FillGaps
-            }
+        fun fromName(name: String?): ScrapeRunPolicy {
+            val parts = name.orEmpty().lowercase().split(':', limit = 2)
+            val base = if (parts.firstOrNull() == "force") Force else FillGaps
+            return base.copy(sourceId = parts.getOrNull(1)?.takeIf(String::isNotBlank))
+        }
     }
 
-    fun wireName(): String =
-        when (mode) {
-            ScrapeRunMode.FillGaps -> "fill_gaps"
-            ScrapeRunMode.Force -> "force"
-        }
+    fun wireName(): String {
+        val modeName =
+            when (mode) {
+                ScrapeRunMode.FillGaps -> "fill_gaps"
+                ScrapeRunMode.Force -> "force"
+            }
+        return sourceId?.takeIf(String::isNotBlank)?.let { "$modeName:$it" } ?: modeName
+    }
 }
 
 /**

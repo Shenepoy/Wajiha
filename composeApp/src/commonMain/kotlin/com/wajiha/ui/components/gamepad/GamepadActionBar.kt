@@ -69,8 +69,9 @@ fun defaultGamepadHints(isDual: Boolean = true): List<GamepadHint> =
 
 val quickSettingsGamepadHints: List<GamepadHint> =
     listOf(
-        GamepadHint(GamepadHintButton.A, "Activate / Adjust"),
+        GamepadHint(GamepadHintButton.A, "Open / Toggle"),
         GamepadHint(GamepadHintButton.DpadLeftRight, "Adjust"),
+        GamepadHint(GamepadHintButton.Y, "Reset"),
         GamepadHint(GamepadHintButton.B, "Back"),
     )
 
@@ -78,7 +79,7 @@ val runningAppsGamepadHints: List<GamepadHint> =
     listOf(
         GamepadHint(GamepadHintButton.A, "Front / Top"),
         GamepadHint(GamepadHintButton.X, "Kill"),
-        GamepadHint(GamepadHintButton.B, "Back to grid"),
+        GamepadHint(GamepadHintButton.B, "Back"),
     )
 
 val achievementsGamepadHints: List<GamepadHint> =
@@ -135,7 +136,7 @@ fun List<GamepadHint>.withoutFocusScreenHint(): List<GamepadHint> = filterNot { 
 val secondaryModeTabGamepadHints: List<GamepadHint> =
     listOf(
         GamepadHint(GamepadHintButton.A, "Select tab"),
-        GamepadHint(GamepadHintButton.B, "Games"),
+        GamepadHint(GamepadHintButton.B, "Back"),
         GamepadHint(GamepadHintButton.L1R1, "Tab"),
     )
 

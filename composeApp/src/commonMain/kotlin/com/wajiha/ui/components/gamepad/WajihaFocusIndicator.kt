@@ -24,7 +24,6 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -34,7 +33,9 @@ import com.wajiha.input.LocalFocusContinuityController
 import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.ui.theme.FocusBorderStyle
 import com.wajiha.ui.theme.FocusPlacement
+import com.wajiha.ui.theme.GamepadFocusChromeScope
 import com.wajiha.ui.theme.LocalFocusIndicatorStyle
+import com.wajiha.ui.theme.LocalGamepadFocusChromeScope
 import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.showGamepadChrome
 import kotlin.math.min
@@ -43,8 +44,9 @@ import kotlin.math.min
  * Draws Wajiha custom focus chrome around focused bounds.
  * Suppresses default Compose indication — pair with [com.wajiha.input.wajihaGamepadFocus].
  *
- * [FocusPlacement.Outside] registers with [LocalFocusRingOverlay] so the ring is painted at
- * screen root (above neighbors / past clips). [FocusPlacement.Inside] still draws locally.
+ * [FocusPlacement.Outside] and expanding styles (Glow/Neon/Aura/…) register with
+ * [LocalFocusRingOverlay] so chrome is painted at screen root past LazyGrid / clip parents.
+ * Simple Inside strokes still draw locally.
  */
 fun Modifier.wajihaFocusIndicator(
     highlighted: Boolean,
@@ -56,19 +58,48 @@ fun Modifier.wajihaFocusIndicator(
         if (!showGamepadChrome(highlighted)) return@composed this
         val style = LocalFocusIndicatorStyle.current
         val color = style.color ?: WajihaFocus.borderColor()
-        val thickness = if (selected) style.selectedThickness else style.thickness
-        val placement = style.placement
-        val borderStyle = style.borderStyle
-        val overlay = LocalFocusRingOverlay.current
+        val chromeScope = LocalGamepadFocusChromeScope.current
+        // Dense grids need a crisp ring — skip the +1dp selected bump and wide glow.
+        val compact =
+            chromeScope == GamepadFocusChromeScope.GameGrid ||
+                chromeScope == GamepadFocusChromeScope.Menu
+        val thickness =
+            when {
+                compact -> style.thickness.coerceAtMost(2.5.dp)
+                selected -> style.selectedThickness
+                else -> style.thickness
+            }
+        // Dense tile grids: always paint Inside so Outside/Glow never eats gutters
+        // or clips against the screen edge (polyscreen / bottom launcher).
+        val placement = if (compact) FocusPlacement.Inside else style.placement
+        val borderStyle =
+            if (compact && borderStyleNeedsCompactRemap(style.borderStyle)) {
+                FocusBorderStyle.Solid
+            } else {
+                style.borderStyle
+            }
+        val overlayState = LocalFocusRingOverlay.current
+        val needsOverlay =
+            placement == FocusPlacement.Outside ||
+                borderStyle == FocusBorderStyle.Glow ||
+                borderStyle == FocusBorderStyle.Neon ||
+                borderStyle == FocusBorderStyle.Aura ||
+                borderStyle == FocusBorderStyle.SoftPulse ||
+                borderStyle == FocusBorderStyle.GradientPulse ||
+                borderStyle == FocusBorderStyle.Double
 
-        if (placement == FocusPlacement.Outside && overlay != null) {
+        if (needsOverlay && overlayState != null) {
             return@composed outsideFocusViaOverlay(
-                overlay = overlay,
+                overlay = overlayState,
                 color = color,
                 thickness = thickness,
                 borderStyle = borderStyle,
                 shape = shape,
                 focusAnchor = focusAnchor,
+                // Keep the user's placement; expanding styles may still halo outward
+                // from Inside strokes without forcing Outside geometry.
+                placementOutside = placement == FocusPlacement.Outside,
+                compact = compact,
             )
         }
 
@@ -81,12 +112,20 @@ fun Modifier.wajihaFocusIndicator(
                 pulsingBorder(color, thickness, shape, placement)
             }
 
+            FocusBorderStyle.SoftPulse -> {
+                softPulseBorder(color, thickness, shape, placement)
+            }
+
             FocusBorderStyle.Double -> {
                 doubleBorder(color, thickness, shape, placement)
             }
 
             FocusBorderStyle.Glow -> {
                 glowBorder(color, thickness, shape, placement)
+            }
+
+            FocusBorderStyle.Aura -> {
+                auraBorder(color, thickness, shape, placement)
             }
 
             FocusBorderStyle.CornerBrackets -> {
@@ -116,6 +155,14 @@ fun Modifier.wajihaFocusIndicator(
         }
     }
 
+/** Wide glow/aura styles read as muddy blobs in dense tile grids — use Solid there. */
+private fun borderStyleNeedsCompactRemap(style: FocusBorderStyle): Boolean =
+    style == FocusBorderStyle.Glow ||
+        style == FocusBorderStyle.Neon ||
+        style == FocusBorderStyle.Aura ||
+        style == FocusBorderStyle.SoftPulse ||
+        style == FocusBorderStyle.GradientPulse
+
 private fun Modifier.outsideFocusViaOverlay(
     overlay: FocusRingOverlayState,
     color: Color,
@@ -123,10 +170,13 @@ private fun Modifier.outsideFocusViaOverlay(
     borderStyle: FocusBorderStyle,
     shape: Shape,
     focusAnchor: FocusAnchor?,
+    placementOutside: Boolean = true,
+    compact: Boolean = false,
 ): Modifier =
     composed {
         val token = remember { Any() }
         var boundsInRoot by remember { mutableStateOf<Rect?>(null) }
+        val viewportBoundsInRoot = LocalSettingSectionScroll.current?.viewportBoundsInRoot()
         val continuity = LocalFocusContinuityController.current
         val layerId = LocalFocusLayerId.current
         val resolvedAnchor =
@@ -142,14 +192,17 @@ private fun Modifier.outsideFocusViaOverlay(
             anchor = resolvedAnchor,
             active = true,
             boundsInRoot = boundsInRoot,
+            viewportBoundsInRoot = viewportBoundsInRoot,
             color = color,
             thickness = thickness,
             borderStyle = borderStyle,
             shape = shape,
+            placementOutside = placementOutside,
+            compact = compact,
         )
 
         onGloballyPositioned { coords ->
-            boundsInRoot = coords.boundsInRoot()
+            boundsInRoot = coords.unclippedBoundsInRoot()
         }
     }
 
@@ -227,10 +280,12 @@ internal fun DrawScope.drawFocusChrome(
     pulseAlpha: Float = 1f,
     marchPhase: Float = 0f,
     gradientPhase: Float = 0f,
+    compact: Boolean = false,
 ) {
     val strokeWidth = thickness.toPx()
     val radius = cornerRadiusPx(shape, itemSize, this)
     val tinted = color.copy(alpha = (color.alpha * pulseAlpha).coerceIn(0f, 1f))
+    val glowSpreadFactor = if (compact) 0.55f else 1f
 
     when (borderStyle) {
         FocusBorderStyle.Solid,
@@ -243,6 +298,28 @@ internal fun DrawScope.drawFocusChrome(
                 size = bounds.size,
                 cornerRadius = bounds.cornerRadius,
                 style = Stroke(width = strokeWidth),
+            )
+        }
+
+        FocusBorderStyle.SoftPulse -> {
+            val breathe = 0.75f + gradientPhase * 0.55f
+            val softWidth = strokeWidth * breathe
+            val bounds = strokeBounds(itemSize, softWidth, placementOutside, radius)
+            drawRoundRect(
+                color = color.copy(alpha = (0.35f + pulseAlpha * 0.55f).coerceIn(0f, 1f)),
+                topLeft = itemTopLeft + bounds.topLeft,
+                size = bounds.size,
+                cornerRadius = bounds.cornerRadius,
+                style = Stroke(width = softWidth),
+            )
+            val haloSpread = softWidth * 2.2f * glowSpreadFactor
+            val haloOutset = haloSpread / 2f
+            drawRoundRect(
+                color = color.copy(alpha = 0.12f * pulseAlpha * glowSpreadFactor),
+                topLeft = itemTopLeft + Offset(-haloOutset, -haloOutset),
+                size = Size(itemSize.width + haloSpread, itemSize.height + haloSpread),
+                cornerRadius = CornerRadius(radius + haloOutset, radius + haloOutset),
+                style = Stroke(width = haloSpread),
             )
         }
 
@@ -305,30 +382,38 @@ internal fun DrawScope.drawFocusChrome(
                 cornerRadius = bounds.cornerRadius,
                 style = Stroke(width = strokeWidth),
             )
+            // Halo always expands outward so Inside Glow is not an inset frame.
             listOf(2.5f to 0.18f, 4f to 0.10f, 6f to 0.05f).forEach { (spread, alpha) ->
-                val spreadPx = strokeWidth * spread
-                val layer =
-                    if (placementOutside) {
-                        val outset = spreadPx / 2f
-                        Triple(
-                            Offset(-outset, -outset),
-                            Size(itemSize.width + spreadPx, itemSize.height + spreadPx),
-                            CornerRadius(radius + spreadPx / 2f, radius + spreadPx / 2f),
-                        )
-                    } else {
-                        val inset = spreadPx / 2f
-                        Triple(
-                            Offset(inset, inset),
-                            Size(itemSize.width - spreadPx, itemSize.height - spreadPx),
-                            CornerRadius(radius + spreadPx / 2f, radius + spreadPx / 2f),
-                        )
-                    }
+                val spreadPx = strokeWidth * spread * glowSpreadFactor
+                val outset = spreadPx / 2f
                 drawRoundRect(
-                    color = color.copy(alpha = alpha * pulseAlpha),
-                    topLeft = itemTopLeft + layer.first,
-                    size = layer.second,
-                    cornerRadius = layer.third,
+                    color = color.copy(alpha = alpha * pulseAlpha * glowSpreadFactor),
+                    topLeft = itemTopLeft + Offset(-outset, -outset),
+                    size = Size(itemSize.width + spreadPx, itemSize.height + spreadPx),
+                    cornerRadius = CornerRadius(radius + outset, radius + outset),
                     style = Stroke(width = spreadPx),
+                )
+            }
+        }
+
+        FocusBorderStyle.Aura -> {
+            val bounds = strokeBounds(itemSize, strokeWidth, placementOutside, radius)
+            drawRoundRect(
+                color = tinted,
+                topLeft = itemTopLeft + bounds.topLeft,
+                size = bounds.size,
+                cornerRadius = bounds.cornerRadius,
+                style = Stroke(width = strokeWidth),
+            )
+            listOf(1.8f to 0.22f, 3.4f to 0.12f, 5.2f to 0.06f).forEach { (spread, alpha) ->
+                val spreadPx = strokeWidth * spread * (0.85f + pulseAlpha * 0.25f) * glowSpreadFactor
+                val outset = spreadPx / 2f
+                drawRoundRect(
+                    color = color.copy(alpha = alpha * pulseAlpha * glowSpreadFactor),
+                    topLeft = itemTopLeft + Offset(-outset, -outset),
+                    size = Size(itemSize.width + spreadPx, itemSize.height + spreadPx),
+                    cornerRadius = CornerRadius(radius + outset, radius + outset),
+                    style = Stroke(width = spreadPx * 0.85f),
                 )
             }
         }
@@ -374,52 +459,36 @@ internal fun DrawScope.drawFocusChrome(
                 style = Stroke(width = strokeWidth),
             )
             val spreadPx = strokeWidth * 3.5f
-            val layer =
-                if (placementOutside) {
-                    val outset = spreadPx / 2f
-                    Triple(
-                        Offset(-outset, -outset),
-                        Size(itemSize.width + spreadPx, itemSize.height + spreadPx),
-                        CornerRadius(radius + spreadPx / 3f, radius + spreadPx / 3f),
-                    )
-                } else {
-                    val inset = spreadPx / 2f
-                    Triple(
-                        Offset(inset, inset),
-                        Size(itemSize.width - spreadPx, itemSize.height - spreadPx),
-                        CornerRadius(radius + spreadPx / 3f, radius + spreadPx / 3f),
-                    )
-                }
+            // Halo expands outward for both placements so Inside is not clipped to an inset wash.
+            val haloPx = spreadPx * glowSpreadFactor
+            val outset = haloPx / 2f
             drawRoundRect(
-                color = color.copy(alpha = haloAlpha * pulseAlpha),
-                topLeft = itemTopLeft + layer.first,
-                size = layer.second,
-                cornerRadius = layer.third,
-                style = Stroke(width = spreadPx),
+                color = color.copy(alpha = haloAlpha * pulseAlpha * glowSpreadFactor),
+                topLeft = itemTopLeft + Offset(-outset, -outset),
+                size = Size(itemSize.width + haloPx, itemSize.height + haloPx),
+                cornerRadius = CornerRadius(radius + haloPx / 3f, radius + haloPx / 3f),
+                style = Stroke(width = haloPx),
             )
         }
 
         FocusBorderStyle.Neon -> {
             val bounds = strokeBounds(itemSize, strokeWidth, placementOutside, radius)
-            val glowSpread = strokeWidth * 2.8f
-            val glowOffset = if (placementOutside) glowSpread / 2f else -glowSpread / 2f
+            val glowSpread = strokeWidth * 2.8f * glowSpreadFactor
+            // Always expand neon halo outward (Inside placement previously drew negative
+            // offsets that parents with .clip() shaved off).
+            val glowOutset = glowSpread / 2f
             drawRoundRect(
-                color = color.copy(alpha = 0.35f * pulseAlpha),
-                topLeft =
-                    itemTopLeft +
-                        Offset(
-                            bounds.topLeft.x + glowOffset,
-                            bounds.topLeft.y + glowOffset,
-                        ),
+                color = color.copy(alpha = 0.35f * pulseAlpha * glowSpreadFactor),
+                topLeft = itemTopLeft + Offset(-glowOutset, -glowOutset),
                 size =
                     Size(
-                        bounds.size.width + glowSpread,
-                        bounds.size.height + glowSpread,
+                        itemSize.width + glowSpread,
+                        itemSize.height + glowSpread,
                     ),
                 cornerRadius =
                     CornerRadius(
-                        bounds.cornerRadius.x + glowSpread / 2f,
-                        bounds.cornerRadius.y + glowSpread / 2f,
+                        radius + glowOutset,
+                        radius + glowOutset,
                     ),
                 style = Stroke(width = strokeWidth + glowSpread),
             )
@@ -453,8 +522,10 @@ internal fun DrawScope.drawFocusChrome(
 
                     FocusBorderStyle.Solid,
                     FocusBorderStyle.Pulsing,
+                    FocusBorderStyle.SoftPulse,
                     FocusBorderStyle.Double,
                     FocusBorderStyle.Glow,
+                    FocusBorderStyle.Aura,
                     FocusBorderStyle.CornerBrackets,
                     FocusBorderStyle.GradientPulse,
                     FocusBorderStyle.Neon,
@@ -545,6 +616,81 @@ private fun Modifier.pulsingBorder(
                     )
                 }
             }
+        }
+    }
+
+private fun Modifier.softPulseBorder(
+    color: Color,
+    thickness: Dp,
+    shape: Shape,
+    placement: FocusPlacement,
+): Modifier =
+    composed {
+        val transition = rememberInfiniteTransition(label = "focus_soft_pulse")
+        val alpha by transition.animateFloat(
+            initialValue = 0.55f,
+            targetValue = 1f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(1600, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+            label = "focus_soft_pulse_alpha",
+        )
+        val phase by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(1600, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+            label = "focus_soft_pulse_phase",
+        )
+        drawBehind {
+            drawFocusChrome(
+                itemTopLeft = Offset.Zero,
+                itemSize = size,
+                color = color,
+                thickness = thickness,
+                borderStyle = FocusBorderStyle.SoftPulse,
+                shape = shape,
+                placementOutside = placement == FocusPlacement.Outside,
+                pulseAlpha = alpha,
+                gradientPhase = phase,
+            )
+        }
+    }
+
+private fun Modifier.auraBorder(
+    color: Color,
+    thickness: Dp,
+    shape: Shape,
+    placement: FocusPlacement,
+): Modifier =
+    composed {
+        val transition = rememberInfiniteTransition(label = "focus_aura")
+        val alpha by transition.animateFloat(
+            initialValue = 0.5f,
+            targetValue = 1f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(1200, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+            label = "focus_aura_alpha",
+        )
+        drawBehind {
+            drawFocusChrome(
+                itemTopLeft = Offset.Zero,
+                itemSize = size,
+                color = color,
+                thickness = thickness,
+                borderStyle = FocusBorderStyle.Aura,
+                shape = shape,
+                placementOutside = placement == FocusPlacement.Outside,
+                pulseAlpha = alpha,
+            )
         }
     }
 

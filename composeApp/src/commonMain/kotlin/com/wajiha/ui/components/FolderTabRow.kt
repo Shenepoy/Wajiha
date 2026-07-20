@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.wajiha.ui.components.gamepad.SettingsCompactRowMinHeight
 import com.wajiha.ui.components.gamepad.wajihaPressedFeedback
 import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
@@ -72,7 +73,7 @@ fun FolderTabRow(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    minHeight: Dp = WajihaSpacing.touchMin,
+    minHeight: Dp = SettingsCompactRowMinHeight,
     showTopEdge: Boolean = true,
     /**
      * Selected tab [LayoutCoordinates] for a parent that draws the shared folder

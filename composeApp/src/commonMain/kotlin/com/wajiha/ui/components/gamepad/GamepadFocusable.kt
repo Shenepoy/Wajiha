@@ -59,14 +59,14 @@ fun GamepadFocusable(
     Box(
         modifier =
             modifier
-                .clip(shape)
-                .wajihaPressedFeedback(pressed, shape)
                 .wajihaFocusIndicator(
                     highlighted = highlight,
                     shape = shape,
                     selected = selected || navHighlighted,
                     focusAnchor = anchor,
-                ).then(
+                ).clip(shape)
+                .wajihaPressedFeedback(pressed, shape)
+                .then(
                     if (!useCustomNav) {
                         Modifier
                             .onFocusChanged {

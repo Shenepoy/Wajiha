@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -49,6 +52,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -72,7 +76,9 @@ import com.wajiha.input.LocalFocusContinuityController
 import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
+import com.wajiha.ui.theme.FocusBorderStyle
 import com.wajiha.ui.theme.GamepadFocusChromeScope
+import com.wajiha.ui.theme.LocalFocusIndicatorStyle
 import com.wajiha.ui.theme.LocalGamepadFocusChromeScope
 import com.wajiha.ui.theme.WajihaFocus
 import com.wajiha.ui.theme.WajihaShapes
@@ -173,12 +179,12 @@ private fun offsetForLockedSide(
 private fun inflateForTileScale(
     rect: Rect,
     scale: Float,
+    ringPadPx: Float = 0f,
 ): Rect {
-    if (scale == 1f) return rect
     val cx = rect.center.x
     val cy = rect.center.y
-    val hw = rect.width * scale / 2f
-    val hh = rect.height * scale / 2f
+    val hw = rect.width * scale / 2f + ringPadPx
+    val hh = rect.height * scale / 2f + ringPadPx
     return Rect(cx - hw, cy - hh, cx + hw, cy + hh)
 }
 
@@ -246,6 +252,7 @@ private fun ContextMenuTitleText(
 private fun AppContextMenuRow(
     label: String,
     onClick: () -> Unit,
+    icon: ImageVector = Icons.Filled.Info,
     focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -280,7 +287,7 @@ private fun AppContextMenuRow(
                 .spacedBy(WajihaSpacing.xs),
     ) {
         Icon(
-            imageVector = Icons.Filled.Info,
+            imageVector = icon,
             contentDescription = null,
             modifier = Modifier.size(ContextMenuIconSlot),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -306,6 +313,22 @@ private fun ContextMenuDimScrim(
 ) {
     val scrimColor = Color.Black.copy(alpha = scrimAlpha)
     val density = LocalDensity.current
+    val focusStyle = LocalFocusIndicatorStyle.current
+    val ringPadPx =
+        with(density) {
+            when (focusStyle.borderStyle) {
+                FocusBorderStyle.Glow,
+                FocusBorderStyle.Neon,
+                FocusBorderStyle.Aura,
+                FocusBorderStyle.SoftPulse,
+                FocusBorderStyle.GradientPulse,
+                -> focusStyle.selectedThickness.toPx() * 3f
+
+                FocusBorderStyle.Double -> focusStyle.selectedThickness.toPx() * 2f
+
+                else -> focusStyle.selectedThickness.toPx()
+            }
+        }
     val tileCornerRadiusPx =
         with(density) {
             WajihaShapes.tileCornerRadius.toPx() * WajihaFocus.selectedScale
@@ -313,10 +336,10 @@ private fun ContextMenuDimScrim(
     var overlayRootBounds by remember { mutableStateOf<Rect?>(null) }
 
     val localTileCutout =
-        remember(tileCutoutRoot, overlayRootBounds) {
+        remember(tileCutoutRoot, overlayRootBounds, ringPadPx) {
             val overlay = overlayRootBounds ?: return@remember null
             val tile = tileCutoutRoot ?: return@remember null
-            val scaled = inflateForTileScale(tile, WajihaFocus.selectedScale)
+            val scaled = inflateForTileScale(tile, WajihaFocus.selectedScale, ringPadPx)
             Rect(
                 left = scaled.left - overlay.left,
                 top = scaled.top - overlay.top,
@@ -392,11 +415,17 @@ fun AppContextMenu(
     anchorBounds: Rect?,
     onDismiss: () -> Unit,
     onOpenAppInfo: (packageName: String) -> Unit,
+    isFavorite: Boolean = false,
+    canMoveFavoriteUp: Boolean = false,
+    canMoveFavoriteDown: Boolean = false,
+    onToggleFavorite: (packageName: String) -> Unit = {},
+    onMoveFavoriteUp: (packageName: String) -> Unit = {},
+    onMoveFavoriteDown: (packageName: String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (target == null) return
 
-    val infoRowFocus = remember(target.packageName) { FocusRequester() }
+    val firstRowFocus = remember(target.packageName) { FocusRequester() }
     val layerId = "app_context_${target.packageName}"
     val focusContinuity = LocalFocusContinuityController.current
 
@@ -412,7 +441,7 @@ fun AppContextMenu(
     LaunchedEffect(target.packageName) {
         withFrameNanos { }
         try {
-            infoRowFocus.requestFocus()
+            firstRowFocus.requestFocus()
         } catch (_: Exception) {
         }
     }
@@ -565,8 +594,31 @@ fun AppContextMenu(
                         ) {
                             Column(modifier = Modifier.padding(vertical = WajihaSpacing.xs)) {
                                 AppContextMenuRow(
+                                    label = if (isFavorite) "Remove favorite" else "Favorite",
+                                    icon = Icons.Filled.Star,
+                                    focusRequester = firstRowFocus,
+                                    onClick = {
+                                        onToggleFavorite(target.packageName)
+                                        onDismiss()
+                                    },
+                                )
+                                if (isFavorite && canMoveFavoriteUp) {
+                                    AppContextMenuRow(
+                                        label = "Move up",
+                                        icon = Icons.Filled.KeyboardArrowUp,
+                                        onClick = { onMoveFavoriteUp(target.packageName) },
+                                    )
+                                }
+                                if (isFavorite && canMoveFavoriteDown) {
+                                    AppContextMenuRow(
+                                        label = "Move down",
+                                        icon = Icons.Filled.KeyboardArrowDown,
+                                        onClick = { onMoveFavoriteDown(target.packageName) },
+                                    )
+                                }
+                                AppContextMenuRow(
                                     label = "App info",
-                                    focusRequester = infoRowFocus,
+                                    icon = Icons.Filled.Info,
                                     onClick = {
                                         onOpenAppInfo(target.packageName)
                                         onDismiss()

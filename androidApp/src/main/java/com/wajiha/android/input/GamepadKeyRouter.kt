@@ -15,6 +15,7 @@ import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.SystemNotificationStore
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 import java.util.concurrent.CountDownLatch
@@ -47,6 +48,15 @@ class GamepadKeyRouter(
     private val triggers = LauncherTriggerActions(store, notifications, appActions)
     private var primaryRef: WeakReference<ComponentActivity>? = null
     private var secondaryRef: WeakReference<ComponentActivity>? = null
+    private var secondaryOverlayDispatch: ((KeyEvent) -> Boolean)? = null
+
+    fun attachSecondaryOverlay(dispatch: (KeyEvent) -> Boolean) {
+        secondaryOverlayDispatch = dispatch
+    }
+
+    fun detachSecondaryOverlay() {
+        secondaryOverlayDispatch = null
+    }
 
     fun attach(
         owner: GamepadOwner,
@@ -130,8 +140,16 @@ class GamepadKeyRouter(
                 return true
             }
             scope.launch {
-                val swapped = settingsRepository.toggleSwapScreenRoles()
+                // Adopt the destination menu onto the gaining display before the
+                // swap pref notifies Compose — otherwise AppDock/Apps flash as
+                // GameGrid for a frame.
+                val current =
+                    settingsRepository.settings
+                        .first()
+                        .swapScreenRoles
+                val swapped = !current
                 store.onScreenRolesSwapped(menuOnPrimary = swapped)
+                settingsRepository.setSwapScreenRoles(swapped)
                 WajihaLog.i(
                     WajihaTags.GAMEPAD,
                     "map: SELECT → swapScreenRoles=$swapped " +
@@ -171,9 +189,23 @@ class GamepadKeyRouter(
             return dualState != DualScreenState.GameRunning &&
                 dualState != DualScreenState.BlackoutSecondary
         }
+        if (event.keyCode == KeyEvent.KEYCODE_BUTTON_THUMBL) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                return triggers.onL3("key")
+            }
+            val dualState = store.state.value
+            return dualState != DualScreenState.GameRunning &&
+                dualState != DualScreenState.BlackoutSecondary
+        }
         val owner = effectiveOwner()
         if (from == owner) {
             return localDispatch(event)
+        }
+        if (owner == GamepadOwner.Secondary) {
+            val overlayDispatch = secondaryOverlayDispatch
+            if (overlayDispatch != null) {
+                return runOnMainBlocking { overlayDispatch(event) }
+            }
         }
         val target = activityFor(owner)
         if (target == null || target.isFinishing || target.isDestroyed) {
@@ -228,6 +260,7 @@ private fun isMappedGamepadKey(keyCode: Int): Boolean =
         keyCode == KeyEvent.KEYCODE_BUTTON_R1 ||
         keyCode == KeyEvent.KEYCODE_BUTTON_L2 ||
         keyCode == KeyEvent.KEYCODE_BUTTON_R2 ||
+        keyCode == KeyEvent.KEYCODE_BUTTON_THUMBL ||
         keyCode == KeyEvent.KEYCODE_PAGE_UP ||
         keyCode == KeyEvent.KEYCODE_PAGE_DOWN ||
         isSwapScreenKey(keyCode)

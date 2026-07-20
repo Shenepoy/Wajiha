@@ -3,11 +3,15 @@ package com.wajiha.android.monitor
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.wajiha.android.icons.CustomIconPackLoader
+import com.wajiha.android.icons.IconResolver
+import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -16,6 +20,8 @@ import org.koin.core.component.inject
  * Refreshes [ForegroundAppMonitor]'s known emulator set when packages are
  * installed, removed, or updated — faster than the 60s poll refresh alone.
  *
+ * Also clears the selected icon pack if that pack APK is removed.
+ *
  * Safe for production: system [Intent.ACTION_PACKAGE_*] broadcasts are
  * exempt from implicit-broadcast restrictions and carry no Play policy risk.
  */
@@ -23,6 +29,8 @@ class EmulatorPackageReceiver :
     BroadcastReceiver(),
     KoinComponent {
     private val monitor: ForegroundAppMonitor by inject()
+    private val settingsRepository: SettingsRepository by inject()
+    private val iconResolver: IconResolver by inject()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onReceive(
@@ -42,6 +50,19 @@ class EmulatorPackageReceiver :
         scope.launch {
             try {
                 monitor.refreshKnownPackages()
+                if (action == Intent.ACTION_PACKAGE_REMOVED || action == Intent.ACTION_PACKAGE_REPLACED) {
+                    val selected = settingsRepository.settings.first().iconPackPackage
+                    val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+                    if (selected == packageName) {
+                        if (action == Intent.ACTION_PACKAGE_REMOVED && !replacing) {
+                            settingsRepository.setIconPackPackage("")
+                        }
+                        CustomIconPackLoader.evict(packageName)
+                        iconResolver.clearCache()
+                    } else {
+                        CustomIconPackLoader.evict(packageName)
+                    }
+                }
             } finally {
                 pending.finish()
             }

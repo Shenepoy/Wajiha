@@ -151,8 +151,8 @@ data class ScraperSettings(
     val screenScraperPassword: String = "",
     /**
      * Optional ScreenScraper developer app pair (`devid` / `devpassword`).
-     * SS API requires these for every call; leave blank to omit them from requests.
-     * When blank, build-time gradle credentials are used if present.
+     * The API requires these for every call. When blank, build-time Gradle
+     * credentials are used if present; otherwise ScreenScraper is not configured.
      */
     val screenScraperDevId: String = "",
     val screenScraperDevPassword: String = "",

@@ -37,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
@@ -45,7 +44,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import com.wajiha.data.db.EmulatorEntity
 import com.wajiha.data.db.GameEntity
@@ -63,13 +61,13 @@ import com.wajiha.platform.SystemControls
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.SettingsHeroOption
-import com.wajiha.ui.components.FolderTabRow
 import com.wajiha.ui.components.LocalUiFeedback
+import com.wajiha.ui.components.WajihaFolderChromeMetrics
+import com.wajiha.ui.components.WajihaFolderSettingChrome
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
-import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
 import com.wajiha.ui.components.gamepad.ProvideSettingsDensity
 import com.wajiha.ui.components.gamepad.SettingType
 import com.wajiha.ui.components.gamepad.WajihaMultiChoiceSetting
@@ -227,19 +225,10 @@ fun GameDetailScreen(
                         gamepadOwner = gamepadOwner,
                         dualStore = dualStore,
                         settingsHeroActions = settings.settingsHeroActions,
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = WajihaSpacing.md)
-                                .padding(bottom = WajihaSpacing.md),
+                        modifier = Modifier.fillMaxSize(),
                     )
                 } else {
-                    Column(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = WajihaSpacing.md),
-                    ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
                         GameDetailCompactHero(
                             game = game,
                             platformName = state.platform?.name,
@@ -249,6 +238,7 @@ fun GameDetailScreen(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
+                                    .padding(horizontal = WajihaFolderChromeMetrics.horizontalPadding)
                                     .padding(top = WajihaSpacing.xs),
                         )
                         WajihaSettingPanel(
@@ -256,6 +246,7 @@ fun GameDetailScreen(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
+                                    .padding(horizontal = WajihaFolderChromeMetrics.horizontalPadding)
                                     .padding(top = WajihaSpacing.sm)
                                     .weight(0.28f),
                         ) {
@@ -283,8 +274,7 @@ fun GameDetailScreen(
                             modifier =
                                 Modifier
                                     .weight(1f)
-                                    .fillMaxWidth()
-                                    .padding(top = WajihaSpacing.sm, bottom = WajihaSpacing.md),
+                                    .fillMaxWidth(),
                         )
                     }
                 }
@@ -311,120 +301,75 @@ private fun GameDetailTabsPane(
     settingsHeroActions: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier) {
-        if (dualDisplay && onBack != null) {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .zIndex(1f)
-                        .padding(top = WajihaSpacing.sm),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-            ) {
-                GamepadButton(
-                    text = "Back",
-                    onClick = onBack,
-                    outlined = true,
-                    gamepadFocusable = false,
-                    sound = null,
-                )
-                FolderTabRow(
-                    tabs = sections.map { it.label },
-                    selectedIndex = selectedSectionIndex,
-                    onSelect = onSelectSection,
-                    minHeight = LocalSettingRowMinHeight.current,
-                    modifier =
-                        Modifier
-                            .weight(1f)
-                            .focusProperties { canFocus = false },
+    WajihaFolderSettingChrome(
+        tabs = sections.map { it.label },
+        selectedIndex = selectedSectionIndex,
+        onSelect = onSelectSection,
+        onBack = onBack.takeIf { dualDisplay },
+        modifier = modifier,
+    ) {
+        when (sections[selectedSectionIndex]) {
+            ActionPaneSection.Launch -> {
+                LaunchSectionContent(
+                    game = game,
+                    secondaryDisplayId = secondaryDisplayId,
+                    dualDisplay = dualDisplay,
+                    onSetLaunchDisplay = viewModel::setLaunchOnDisplay,
+                    onSetFavorite = viewModel::setFavorite,
+                    onLaunchTop = { viewModel.launchOnDisplay(0) },
+                    onLaunchBottom = {
+                        viewModel.launchOnDisplay(secondaryDisplayId ?: 4)
+                    },
+                    showFavoriteRow = showFavoriteRow,
+                    dualStore = dualStore,
+                    settingsHeroActions = settingsHeroActions,
+                    firstFocusRequester = sectionFocus,
                 )
             }
-        } else {
-            FolderTabRow(
-                tabs = sections.map { it.label },
-                selectedIndex = selectedSectionIndex,
-                onSelect = onSelectSection,
-                minHeight = LocalSettingRowMinHeight.current,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .zIndex(1f)
-                        .focusProperties { canFocus = false }
-                        .padding(top = WajihaSpacing.sm),
-            )
+
+            ActionPaneSection.Emulator -> {
+                EmulatorSectionContent(
+                    emulators = state.emulators,
+                    selectedId = game.emulatorOverrideId,
+                    onSelect = viewModel::setEmulatorOverride,
+                    dualStore = dualStore,
+                    settingsHeroActions = settingsHeroActions,
+                    firstFocusRequester = sectionFocus,
+                )
+            }
+
+            ActionPaneSection.Scraper -> {
+                ScraperSectionContent(
+                    state = state,
+                    onScrape = { policy -> viewModel.rescrape(policy = policy) },
+                    onDeleteMedia = viewModel::deleteMedia,
+                    dualDisplay = dualDisplay,
+                    gamepadOwner = gamepadOwner,
+                    firstFocusRequester = sectionFocus,
+                )
+            }
         }
 
-        WajihaSettingPanel(
-            folderPanel = true,
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-        ) {
-            when (sections[selectedSectionIndex]) {
-                ActionPaneSection.Launch -> {
-                    LaunchSectionContent(
-                        game = game,
-                        secondaryDisplayId = secondaryDisplayId,
-                        dualDisplay = dualDisplay,
-                        onSetLaunchDisplay = viewModel::setLaunchOnDisplay,
-                        onSetFavorite = viewModel::setFavorite,
-                        onLaunchTop = { viewModel.launchOnDisplay(0) },
-                        onLaunchBottom = {
-                            viewModel.launchOnDisplay(secondaryDisplayId ?: 4)
-                        },
-                        showFavoriteRow = showFavoriteRow,
-                        dualStore = dualStore,
-                        settingsHeroActions = settingsHeroActions,
-                        firstFocusRequester = sectionFocus,
-                    )
-                }
-
-                ActionPaneSection.Emulator -> {
-                    EmulatorSectionContent(
-                        emulators = state.emulators,
-                        selectedId = game.emulatorOverrideId,
-                        onSelect = viewModel::setEmulatorOverride,
-                        dualStore = dualStore,
-                        settingsHeroActions = settingsHeroActions,
-                        firstFocusRequester = sectionFocus,
-                    )
-                }
-
-                ActionPaneSection.Scraper -> {
-                    ScraperSectionContent(
-                        state = state,
-                        onScrape = { policy -> viewModel.rescrape(policy = policy) },
-                        onDeleteMedia = viewModel::deleteMedia,
-                        dualDisplay = dualDisplay,
-                        gamepadOwner = gamepadOwner,
-                        firstFocusRequester = sectionFocus,
-                    )
-                }
-            }
-
-            state.scrapeMessage?.let { msg ->
-                Text(
-                    text = msg,
-                    style = MaterialTheme.typography.bodySmall,
-                    color =
-                        when (state.scrapeMessageSuccess) {
-                            true -> MaterialTheme.colorScheme.primary
-                            false -> MaterialTheme.colorScheme.error
-                            null -> MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    modifier = Modifier.padding(top = WajihaSpacing.sm),
-                )
-            }
-            state.actionError?.let { err ->
-                Text(
-                    text = err,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = WajihaSpacing.xs),
-                )
-            }
+        state.scrapeMessage?.let { msg ->
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color =
+                    when (state.scrapeMessageSuccess) {
+                        true -> MaterialTheme.colorScheme.primary
+                        false -> MaterialTheme.colorScheme.error
+                        null -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                modifier = Modifier.padding(top = WajihaSpacing.sm),
+            )
+        }
+        state.actionError?.let { err ->
+            Text(
+                text = err,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = WajihaSpacing.xs),
+            )
         }
     }
 }

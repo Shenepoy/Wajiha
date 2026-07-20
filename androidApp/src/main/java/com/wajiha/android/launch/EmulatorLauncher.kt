@@ -118,7 +118,7 @@ object EmulatorLauncher {
                 }
             }
 
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             spec.activityFlags.forEach { flag ->
                 flagStringToIntent(flag)?.let { intent.addFlags(it) }
             }
@@ -229,7 +229,10 @@ object EmulatorLauncher {
             // apps. Catch ActivityNotFoundException instead.
             val options =
                 spec.launchDisplayId?.let {
-                    ActivityOptions.makeBasic().setLaunchDisplayId(it).toBundle()
+                    ActivityOptions
+                        .makeCustomAnimation(context, 0, 0)
+                        .setLaunchDisplayId(it)
+                        .toBundle()
                 }
             if (options != null) {
                 context.startActivity(intent, options)
