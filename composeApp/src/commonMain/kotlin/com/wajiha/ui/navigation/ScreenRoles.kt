@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import com.wajiha.data.prefs.HeroDisplaySlot
 import com.wajiha.input.GamepadScreen
 import com.wajiha.input.MirroredGamepadHintsHost
 import com.wajiha.input.requestContentFocus
@@ -83,6 +84,12 @@ fun LauncherHeroPane(
                 platformName = hero.platformName,
                 heroContext = heroContext,
                 contentFocusRequester = contentFocus,
+                displaySlot =
+                    if (gamepadOwner == GamepadOwner.Secondary) {
+                        HeroDisplaySlot.Secondary
+                    } else {
+                        HeroDisplaySlot.Primary
+                    },
                 modifier = Modifier.fillMaxSize(),
             )
             Column(

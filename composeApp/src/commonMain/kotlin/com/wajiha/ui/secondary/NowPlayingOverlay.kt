@@ -21,26 +21,42 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.wajiha.platform.AppActions
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingState
 import com.wajiha.state.SecondaryMode
+import com.wajiha.ui.components.WajihaDockHeight
 import com.wajiha.ui.components.gamepad.GamepadActionBarHeight
 import com.wajiha.ui.components.gamepad.GamepadFocusable
 import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
 import com.wajiha.ui.theme.WajihaAlphas
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
+import org.koin.compose.koinInject
 
 /** Sits just above the gamepad action bar with a tight gap. */
 internal val NowPlayingOverlayBottomPadding = GamepadActionBarHeight
 
-/** Bottom-right anchor above gamepad action bar hints. */
-fun BoxScope.nowPlayingOverlayPlacement(modifier: Modifier = Modifier): Modifier =
+/**
+ * Bottom-right anchor above gamepad action bar hints.
+ * [contentBottomInset] clears stacked chrome such as the home dock.
+ */
+fun BoxScope.nowPlayingOverlayPlacement(
+    modifier: Modifier = Modifier,
+    contentBottomInset: Dp = 0.dp,
+): Modifier =
     modifier
         .align(Alignment.BottomEnd)
-        .padding(end = WajihaSpacing.md, bottom = NowPlayingOverlayBottomPadding)
+        .padding(
+            end = WajihaSpacing.md,
+            bottom = NowPlayingOverlayBottomPadding + contentBottomInset,
+        )
+
+/** Extra bottom inset when the home dock is visible on GameGrid. */
+fun homeDockNowPlayingInset(showHomeDock: Boolean): Dp = if (showHomeDock) WajihaDockHeight else 0.dp
 
 /** Chip is only useful on the games grid — not on Now Running or sibling mode tabs. */
 internal fun shouldShowNowPlayingOverlay(mode: SecondaryMode): Boolean = mode == SecondaryMode.GameGrid
@@ -54,6 +70,8 @@ fun NowPlayingOverlay(
 ) {
     val nowPlaying by store.nowPlayingUiState.collectAsState()
     val mode by store.secondaryMode.collectAsState()
+    val topFg by store.topDisplayForegroundPackage.collectAsState()
+    val appActions = koinInject<AppActions>()
 
     val show =
         nowPlaying != null &&
@@ -69,7 +87,12 @@ fun NowPlayingOverlay(
                 if (onOpenNowPlaying != null) {
                     onOpenNowPlaying()
                 } else {
-                    store.setSecondaryMode(SecondaryMode.NowPlaying)
+                    openSessionSurface(
+                        store = store,
+                        appActions = appActions,
+                        topDisplayPackage = topFg,
+                        packageName = nowPlaying!!.packageName,
+                    )
                 }
             },
             modifier = modifier,

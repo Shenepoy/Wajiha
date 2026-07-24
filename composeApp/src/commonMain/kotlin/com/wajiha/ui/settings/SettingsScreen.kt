@@ -56,6 +56,9 @@ import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.db.RomFolderEntity
 import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.FocusIndicatorPreferenceValues
+import com.wajiha.data.prefs.GameGridPreferences
+import com.wajiha.data.prefs.HeroDisplaySlot
+import com.wajiha.data.prefs.HeroLayoutPresets
 import com.wajiha.data.prefs.IconAppearancePreferences
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.input.GamepadKeys
@@ -84,6 +87,7 @@ import com.wajiha.ui.components.gamepad.MultiChoiceOption
 import com.wajiha.ui.components.gamepad.ProvideSettingsDensity
 import com.wajiha.ui.components.gamepad.SettingSectionFocusRestorer
 import com.wajiha.ui.components.gamepad.SettingType
+import com.wajiha.ui.components.gamepad.WajihaActionSetting
 import com.wajiha.ui.components.gamepad.WajihaChoiceSetting
 import com.wajiha.ui.components.gamepad.WajihaMultiChoiceSetting
 import com.wajiha.ui.components.gamepad.WajihaNumberSetting
@@ -95,6 +99,9 @@ import com.wajiha.ui.components.gamepad.libraryPlatformRowGamepadHints
 import com.wajiha.ui.components.gamepad.scrollHeaderToTop
 import com.wajiha.ui.components.gamepad.settingsGamepadHints
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
+import com.wajiha.ui.home.hero.HeroLayoutEditorCanvasFromStore
+import com.wajiha.ui.home.hero.HeroLayoutEditorControlsFromStore
+import com.wajiha.ui.navigation.heroOnPrimary
 import com.wajiha.ui.scraper.ScraperPageContent
 import com.wajiha.ui.scraper.ScraperViewModel
 import com.wajiha.ui.theme.FocusIndicatorDefaults
@@ -323,6 +330,7 @@ fun SettingsScreen(
                             perms = perms,
                             systemControls = systemControls,
                             dualScreenStore = dualScreenStore,
+                            gamepadOwner = gamepadOwner,
                             firstFocusRequester = sectionFocus,
                         )
                     }
@@ -332,6 +340,7 @@ fun SettingsScreen(
                             settings = settings,
                             settingsViewModel = settingsViewModel,
                             dualScreenStore = dualScreenStore,
+                            secondaryMenuActivity = gamepadOwner == GamepadOwner.Secondary,
                             firstFocusRequester = sectionFocus,
                         )
                     }
@@ -448,9 +457,48 @@ private fun ScreensSectionContent(
     perms: PermissionStates,
     systemControls: SystemControls,
     dualScreenStore: DualScreenStore,
+    gamepadOwner: GamepadOwner? = null,
     firstFocusRequester: FocusRequester? = null,
 ) {
     val single = settings.singleScreen
+    val layoutEditing by dualScreenStore.heroLayoutEditing.collectAsState()
+    if (layoutEditing) {
+        val saveAndExit: (com.wajiha.data.prefs.HeroLayout) -> Unit = { layout ->
+            val slot = dualScreenStore.heroLayoutEditSlot.value
+            settingsViewModel.setHeroLayoutForSlot(slot, layout)
+        }
+        if (single) {
+            // Single-screen: Settings replaces TopScreen, so stack preview + controls here.
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier =
+                        Modifier
+                            .weight(0.55f)
+                            .fillMaxWidth(),
+                ) {
+                    HeroLayoutEditorCanvasFromStore(
+                        tile = null,
+                        platformName = null,
+                        onExit = {
+                            dualScreenStore.heroLayoutEditDraft.value?.let(saveAndExit)
+                            dualScreenStore.setHeroLayoutEditing(false)
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                HeroLayoutEditorControlsFromStore(
+                    onSaveAndExit = saveAndExit,
+                    modifier =
+                        Modifier
+                            .weight(0.45f)
+                            .fillMaxWidth(),
+                )
+            }
+        } else {
+            HeroLayoutEditorControlsFromStore(onSaveAndExit = saveAndExit)
+        }
+        return
+    }
     WajihaSettingBlurb(
         "Choose one screen or both. Single screen runs the combined launcher on the " +
             "main display only; dual uses top and bottom on clamshell handhelds.",
@@ -797,125 +845,54 @@ private fun ScreensSectionContent(
             )
         }
     }
-    // Dual-only hero piece toggles — hidden entirely in single-screen mode.
-    if (!single) {
-        WajihaSettingDivider()
-        WajihaSettingBlurb(
-            "Show or hide individual pieces of the top-screen game preview " +
-                "(library focus and game Info).",
-        )
-        WajihaToggleSetting(
-            label = "Backdrop / hero art",
-            description = "Full-bleed background image behind the cover and metadata.",
-            checked = settings.topHeroBackdrop,
-            onCheckedChange = settingsViewModel::setTopHeroBackdrop,
-            defaultChecked = true,
-            onReset = { settingsViewModel.setTopHeroBackdrop(true) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Cover / box art",
-            description = "Box art, video preview, or initials placeholder on the left.",
-            checked = settings.topHeroCover,
-            onCheckedChange = settingsViewModel::setTopHeroCover,
-            defaultChecked = true,
-            onReset = { settingsViewModel.setTopHeroCover(true) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Cover border",
-            description = "Show border around game cover.",
-            checked = settings.topHeroCoverBorder,
-            onCheckedChange = settingsViewModel::setTopHeroCoverBorder,
-            defaultChecked = false,
-            onReset = { settingsViewModel.setTopHeroCoverBorder(false) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Logo overlay",
-            description = "Game logo drawn over the bottom of the cover art.",
-            checked = settings.topHeroLogo,
-            onCheckedChange = settingsViewModel::setTopHeroLogo,
-            defaultChecked = true,
-            onReset = { settingsViewModel.setTopHeroLogo(true) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Platform icon",
-            description = "Small platform icon beside the platform name on the library hero.",
-            checked = settings.topHeroPlatformIcon,
-            onCheckedChange = settingsViewModel::setTopHeroPlatformIcon,
-            defaultChecked = true,
-            onReset = { settingsViewModel.setTopHeroPlatformIcon(true) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Platform name",
-            description = "Platform label under or beside the game title.",
-            checked = settings.topHeroPlatform,
-            onCheckedChange = settingsViewModel::setTopHeroPlatform,
-            defaultChecked = true,
-            onReset = { settingsViewModel.setTopHeroPlatform(true) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Title",
-            description = "Game display name on the top screen.",
-            checked = settings.topHeroTitle,
-            onCheckedChange = settingsViewModel::setTopHeroTitle,
-            defaultChecked = true,
-            onReset = { settingsViewModel.setTopHeroTitle(true) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Metadata line",
-            description =
-                "Developer, year, genre, region, and age rating on the library hero; " +
-                    "full metadata panel on Info.",
-            checked = settings.topHeroMetadata,
-            onCheckedChange = settingsViewModel::setTopHeroMetadata,
-            defaultChecked = true,
-            onReset = { settingsViewModel.setTopHeroMetadata(true) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Description",
-            description = "Game synopsis / description text.",
-            checked = settings.topHeroDescription,
-            onCheckedChange = settingsViewModel::setTopHeroDescription,
-            defaultChecked = true,
-            onReset = { settingsViewModel.setTopHeroDescription(true) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Play stats",
-            description = "Play count on the library hero; plays and play time on Info.",
-            checked = settings.topHeroPlayStats,
-            onCheckedChange = settingsViewModel::setTopHeroPlayStats,
-            defaultChecked = true,
-            onReset = { settingsViewModel.setTopHeroPlayStats(true) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Favorite badge",
-            description = "★ Favorite label on the Info / game detail hero.",
-            checked = settings.topHeroFavorite,
-            onCheckedChange = settingsViewModel::setTopHeroFavorite,
-            defaultChecked = true,
-            onReset = { settingsViewModel.setTopHeroFavorite(true) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Section hint",
-            description =
-                "Controller / navigation hint under the title on Info " +
-                    "(\"Launch, emulator… on the bottom screen\").",
-            checked = settings.topHeroSectionHint,
-            onCheckedChange = settingsViewModel::setTopHeroSectionHint,
-            defaultChecked = false,
-            onReset = { settingsViewModel.setTopHeroSectionHint(false) },
-        )
-    }
+    WajihaSettingDivider()
+    WajihaSettingBlurb(
+        "Each physical screen can keep its own hero layout. Unconfigured screens " +
+            "auto-fit from the other screen or a preset. Empty hero does not turn off " +
+            "the focused-game backdrop behind the grid.",
+    )
+    val isDual = !single
+    val heroSlot =
+        if (heroOnPrimary(isDual, settings.swapScreenRoles)) {
+            HeroDisplaySlot.Primary
+        } else if (isDual) {
+            HeroDisplaySlot.Secondary
+        } else {
+            HeroDisplaySlot.Primary
+        }
+    val heroLayout = settings.heroLayoutBundle.slot(heroSlot)
+    val presetChoices =
+        (
+            HeroLayoutPresets.namedIds +
+                listOfNotNull(
+                    HeroLayoutPresets.CUSTOM.takeIf { heroLayout.presetId == HeroLayoutPresets.CUSTOM },
+                )
+        ).distinct()
+    WajihaMultiChoiceSetting(
+        label = "Hero layout preset",
+        description = "Applies to the screen currently showing the hero.",
+        choiceOptions =
+            presetChoices.map { id ->
+                MultiChoiceOption(id, HeroLayoutPresets.label(id))
+            },
+        selected = heroLayout.presetId,
+        onSelect = { id ->
+            if (id != HeroLayoutPresets.CUSTOM) {
+                settingsViewModel.applyHeroLayoutPreset(heroSlot, id)
+            }
+        },
+        defaultValue = HeroLayoutPresets.CLASSIC,
+        onReset = { settingsViewModel.applyHeroLayoutPreset(heroSlot, HeroLayoutPresets.CLASSIC) },
+    )
+    WajihaSettingDivider()
+    WajihaActionSetting(
+        label = "Customize layout",
+        actionLabel = "Edit",
+        description = "Move, show, or hide hero elements with gamepad and touch.",
+        onClick = {
+            dualScreenStore.beginHeroLayoutEdit(heroSlot, heroLayout)
+        },
+    )
 }
 
 @Composable
@@ -923,6 +900,7 @@ private fun AppearanceSectionContent(
     settings: AppSettings,
     settingsViewModel: SettingsViewModel,
     dualScreenStore: DualScreenStore,
+    secondaryMenuActivity: Boolean = false,
     firstFocusRequester: FocusRequester? = null,
 ) {
     val iconPacks by settingsViewModel.iconPacks.collectAsState()
@@ -944,7 +922,29 @@ private fun AppearanceSectionContent(
                 settings.iconPackPackage
             }
 
-    WajihaSettingBlurb("Tune the home grid look, color theme, gamepad focus ring, and controller glyphs.")
+    WajihaSettingBlurb(
+        "Tune the home dock, grid look, color theme, gamepad focus ring, and controller glyphs.",
+    )
+    WajihaToggleSetting(
+        label = "Show home dock",
+        description =
+            "Pin strip above the gamepad hints on the games grid. Pins match Apps " +
+                "favorites — add or reorder them from the Apps drawer.",
+        checked = settings.showHomeDock,
+        onCheckedChange = settingsViewModel::setShowHomeDock,
+        defaultChecked = true,
+        onReset = { settingsViewModel.setShowHomeDock(true) },
+        focusRequester = firstFocusRequester,
+        onFocusedChanged =
+            settingsToggleHeroFocus(
+                store = dualScreenStore,
+                title = "Show home dock",
+                subtitle =
+                    "Pin strip above the gamepad hints. Pins match Apps favorites.",
+                checked = settings.showHomeDock,
+            ),
+    )
+    WajihaSettingDivider()
     WajihaChoiceSetting(
         label = "Theme",
         description = "Follow the system setting or lock dark or light mode.",
@@ -958,7 +958,6 @@ private fun AppearanceSectionContent(
         onSelect = settingsViewModel::setTheme,
         defaultValue = "dark",
         onReset = { settingsViewModel.setTheme("dark") },
-        focusRequester = firstFocusRequester,
         onFocusedChanged = { focused ->
             if (focused) {
                 val label =
@@ -1001,7 +1000,7 @@ private fun AppearanceSectionContent(
     WajihaSettingDivider()
     WajihaChoiceSetting(
         label = "Icon pack",
-        description = "Apply an installed Android icon pack to the Apps drawer.",
+        description = "Apply an installed Android icon pack to the Apps drawer and home dock.",
         options = packOptions,
         selected = settings.iconPackPackage,
         onSelect = settingsViewModel::setIconPackPackage,
@@ -1039,7 +1038,7 @@ private fun AppearanceSectionContent(
     WajihaSettingDivider()
     WajihaChoiceSetting(
         label = "Icon shape",
-        description = "Clip shape for app icons in the Apps drawer.",
+        description = "Clip shape for app icons in the Apps drawer and home dock.",
         options =
             IconAppearancePreferences.shapes.map { id ->
                 id to IconAppearancePreferences.shapeLabel(id)
@@ -1054,7 +1053,7 @@ private fun AppearanceSectionContent(
                     dualScreenStore,
                     genericSettingHeroDetail(
                         title = "Icon shape",
-                        subtitle = "Clip shape for app icons in the Apps drawer.",
+                        subtitle = "Clip shape for app icons in the Apps drawer and home dock.",
                         valueText = IconAppearancePreferences.shapeLabel(settings.iconShape),
                         options =
                             if (settings.settingsHeroActions) {
@@ -1082,16 +1081,59 @@ private fun AppearanceSectionContent(
         },
     )
     WajihaSettingDivider()
+    WajihaSettingBlurb(
+        "Game grid look for this screen. The other screen keeps its own setup.",
+    )
+    val gridArt =
+        if (secondaryMenuActivity) settings.gameGridSecondaryArt else settings.gameGridArt
+    val gridRows =
+        if (secondaryMenuActivity) settings.gameGridSecondaryRows else settings.gridRows
+    val gridTile =
+        if (secondaryMenuActivity) settings.gameGridSecondaryTileSize else settings.gameGridTileSize
+    WajihaChoiceSetting(
+        label = "Grid art",
+        description = "Cover posters, square icons, or wide logos on library tiles.",
+        options = GameGridPreferences.artStyles.map { it to GameGridPreferences.artLabel(it) },
+        selected = gridArt,
+        onSelect = {
+            if (secondaryMenuActivity) {
+                settingsViewModel.setGameGridSecondaryArt(it)
+            } else {
+                settingsViewModel.setGameGridArt(it)
+            }
+        },
+        defaultValue = GameGridPreferences.DEFAULT_ART,
+        onReset = {
+            if (secondaryMenuActivity) {
+                settingsViewModel.setGameGridSecondaryArt(GameGridPreferences.DEFAULT_ART)
+            } else {
+                settingsViewModel.setGameGridArt(GameGridPreferences.DEFAULT_ART)
+            }
+        },
+    )
+    WajihaSettingDivider()
     WajihaNumberSetting(
         label = "Grid rows",
         description = "How many rows of games appear on the home grid.",
-        value = settings.gridRows,
-        onValueChange = settingsViewModel::setGridRows,
-        range = 2..3,
+        value = gridRows,
+        onValueChange = {
+            if (secondaryMenuActivity) {
+                settingsViewModel.setGameGridSecondaryRows(it)
+            } else {
+                settingsViewModel.setGridRows(it)
+            }
+        },
+        range = GameGridPreferences.ABS_MIN_ROWS..GameGridPreferences.ABS_MAX_ROWS,
         step = 1,
         valueLabel = { "$it rows" },
-        defaultValue = 2,
-        onReset = { settingsViewModel.setGridRows(2) },
+        defaultValue = GameGridPreferences.DEFAULT_ROWS,
+        onReset = {
+            if (secondaryMenuActivity) {
+                settingsViewModel.setGameGridSecondaryRows(GameGridPreferences.DEFAULT_ROWS)
+            } else {
+                settingsViewModel.setGridRows(GameGridPreferences.DEFAULT_ROWS)
+            }
+        },
         onFocusedChanged = { focused ->
             if (focused) {
                 publishSettingsHero(
@@ -1099,13 +1141,35 @@ private fun AppearanceSectionContent(
                     genericSettingHeroDetail(
                         title = "Grid rows",
                         subtitle = "How many rows of games appear on the home grid.",
-                        valueText = "${settings.gridRows} rows",
-                        numberValue = settings.gridRows,
+                        valueText = "$gridRows rows",
+                        numberValue = gridRows,
                         numberUnit = "rows",
                     ),
                 )
             } else {
                 clearSettingsHero(dualScreenStore)
+            }
+        },
+    )
+    WajihaSettingDivider()
+    WajihaChoiceSetting(
+        label = "Tile size",
+        description = "Scale library tiles small, medium, or large.",
+        options = GameGridPreferences.tileSizes.map { it to GameGridPreferences.tileSizeTitle(it) },
+        selected = gridTile,
+        onSelect = {
+            if (secondaryMenuActivity) {
+                settingsViewModel.setGameGridSecondaryTileSize(it)
+            } else {
+                settingsViewModel.setGameGridTileSize(it)
+            }
+        },
+        defaultValue = GameGridPreferences.DEFAULT_TILE_SIZE,
+        onReset = {
+            if (secondaryMenuActivity) {
+                settingsViewModel.setGameGridSecondaryTileSize(GameGridPreferences.DEFAULT_TILE_SIZE)
+            } else {
+                settingsViewModel.setGameGridTileSize(GameGridPreferences.DEFAULT_TILE_SIZE)
             }
         },
     )

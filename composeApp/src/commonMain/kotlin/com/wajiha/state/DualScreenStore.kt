@@ -56,6 +56,7 @@ data class NowPlayingState(
     val boxartPath: String? = null,
     val heroPath: String? = null,
     val logoPath: String? = null,
+    val iconPath: String? = null,
     val sessionStartedAt: Long = 0,
     /** Accumulated ms on the top display before the current segment. */
     val sessionElapsedMs: Long = 0,
@@ -215,6 +216,21 @@ class DualScreenStore {
     /** Settings hero option/action picking — gamepad follows the hero display. */
     private val _settingsHeroPicking = MutableStateFlow(false)
 
+    /** Free-form hero layout editor — gamepad follows the hero display. */
+    private val _heroLayoutEditing = MutableStateFlow(false)
+    val heroLayoutEditing: StateFlow<Boolean> = _heroLayoutEditing.asStateFlow()
+
+    private val _heroLayoutEditDraft = MutableStateFlow<com.wajiha.data.prefs.HeroLayout?>(null)
+    val heroLayoutEditDraft = _heroLayoutEditDraft.asStateFlow()
+
+    private val _heroLayoutEditSlot =
+        MutableStateFlow(com.wajiha.data.prefs.HeroDisplaySlot.Primary)
+    val heroLayoutEditSlot = _heroLayoutEditSlot.asStateFlow()
+
+    private val _heroLayoutEditSelected =
+        MutableStateFlow(com.wajiha.data.prefs.HeroElementId.Title)
+    val heroLayoutEditSelected = _heroLayoutEditSelected.asStateFlow()
+
     /** Resolved hero for whichever display is showing [TopScreen]. */
     val heroContext: StateFlow<HeroContext> =
         combine(
@@ -316,7 +332,7 @@ class DualScreenStore {
      * Hero has real focusable UI (scrape slot grid or settings/detail actions).
      * Idle artwork / Apps / System heroes do not count.
      */
-    fun isHeroInteractive(): Boolean = _scrapeReviewPicking.value || _settingsHeroPicking.value
+    fun isHeroInteractive(): Boolean = _scrapeReviewPicking.value || _settingsHeroPicking.value || _heroLayoutEditing.value
 
     /**
      * L2 may flip ownership: dual layout, not blackout, and the hero is interactive
@@ -339,13 +355,14 @@ class DualScreenStore {
             _gamepadOwner,
             _scrapeReviewPicking,
             _settingsHeroPicking,
-        ) { dualState, owner, scrapePicking, settingsPicking ->
+            _heroLayoutEditing,
+        ) { dualState, owner, scrapePicking, settingsPicking, layoutEditing ->
             if (dualState == DualScreenState.SingleDisplay ||
                 dualState == DualScreenState.BlackoutSecondary
             ) {
                 return@combine null
             }
-            if (!scrapePicking && !settingsPicking) return@combine null
+            if (!scrapePicking && !settingsPicking && !layoutEditing) return@combine null
             when (owner) {
                 GamepadOwner.Primary -> GamepadOwner.Secondary
                 GamepadOwner.Secondary -> GamepadOwner.Primary
@@ -553,11 +570,12 @@ class DualScreenStore {
         }
         _state.value = DualScreenState.GameRunning
         when (preferredGameMode) {
-            SecondaryMode.NowPlaying -> {
-                requestNavigateToNowPlaying()
-            }
-
-            SecondaryMode.GameGrid -> {
+            // Keep GameGrid through launch. Auto Now Playing hard-cuts brightness
+            // on Thor (Grid ~160 → Now Playing ~230) and reads as a flash even
+            // with crossfade. Chip + Now Running tab still open the full panel.
+            SecondaryMode.NowPlaying,
+            SecondaryMode.GameGrid,
+            -> {
                 if (_secondaryMode.value != SecondaryMode.GameGrid) {
                     _secondaryMode.value = SecondaryMode.GameGrid
                 }
@@ -623,7 +641,14 @@ class DualScreenStore {
 
     private fun enterGameRunningStateIfNeeded() {
         if (_state.value == DualScreenState.SingleDisplay) return
-        val mode = if (blackoutOnLaunch) SecondaryMode.Off else preferredGameMode
+        // NowPlaying preferred keeps GameGrid — auto full-panel Now Playing
+        // hard-cuts brightness on Thor at session start (see applyDeferred).
+        val mode =
+            when {
+                blackoutOnLaunch -> SecondaryMode.Off
+                preferredGameMode == SecondaryMode.NowPlaying -> SecondaryMode.GameGrid
+                else -> preferredGameMode
+            }
         _secondaryMode.value = mode
         _state.value =
             if (mode == SecondaryMode.Off) {
@@ -743,6 +768,7 @@ class DualScreenStore {
         if (active) {
             _settingsHeroDetail.value = null
             _settingsHeroPicking.value = false
+            if (_heroLayoutEditing.value) setHeroLayoutEditing(false)
             SettingsHeroActionBridge.clear()
         }
         if (!active) {
@@ -778,9 +804,57 @@ class DualScreenStore {
     fun setSettingsHeroPicking(picking: Boolean) {
         if (_settingsHeroPicking.value == picking) return
         _settingsHeroPicking.value = picking
-        if (picking) stickyGamepadOwner = null
+        if (picking) {
+            stickyGamepadOwner = null
+            if (_heroLayoutEditing.value) setHeroLayoutEditing(false)
+        }
         recomputeGamepadOwner()
         _gamepadFocusEpoch.value = _gamepadFocusEpoch.value + 1L
+    }
+
+    /** Hero layout editor active — gamepad follows the hero display. */
+    fun setHeroLayoutEditing(editing: Boolean) {
+        if (_heroLayoutEditing.value == editing) return
+        if (editing && _scrapeReviewPicking.value) return
+        _heroLayoutEditing.value = editing
+        if (editing) {
+            stickyGamepadOwner = null
+            _settingsHeroPicking.value = false
+            _settingsHeroDetail.value = null
+            SettingsHeroActionBridge.clear()
+        }
+        // Keep the draft until Settings controls dispose/save (and the next
+        // beginHeroLayoutEdit overwrites). Clearing here raced B-on-canvas /
+        // swap teardown and could drop an unsaved layout.
+        recomputeGamepadOwner()
+        _gamepadFocusEpoch.value = _gamepadFocusEpoch.value + 1L
+    }
+
+    fun beginHeroLayoutEdit(
+        slot: com.wajiha.data.prefs.HeroDisplaySlot,
+        layout: com.wajiha.data.prefs.HeroLayout,
+    ) {
+        if (_scrapeReviewPicking.value) return
+        _heroLayoutEditSlot.value = slot
+        _heroLayoutEditDraft.value = layout.copy(configured = true)
+        _heroLayoutEditSelected.value =
+            layout.elements
+                .firstOrNull { it.visible && it.id != com.wajiha.data.prefs.HeroElementId.Backdrop }
+                ?.id
+                ?: com.wajiha.data.prefs.HeroElementId.Title
+        setHeroLayoutEditing(true)
+    }
+
+    fun updateHeroLayoutEditDraft(layout: com.wajiha.data.prefs.HeroLayout) {
+        _heroLayoutEditDraft.value = layout.copy(configured = true)
+    }
+
+    fun clearHeroLayoutEditDraft() {
+        _heroLayoutEditDraft.value = null
+    }
+
+    fun setHeroLayoutEditSelected(id: com.wajiha.data.prefs.HeroElementId) {
+        _heroLayoutEditSelected.value = id
     }
 
     fun setAppsHeroDetail(
@@ -840,6 +914,10 @@ class DualScreenStore {
      */
     fun onScreenRolesSwapped(menuOnPrimary: Boolean) {
         if (_state.value == DualScreenState.SingleDisplay) return
+        // Exit layout editor on swap so drag/nudge cannot span displays.
+        // Use the setter so draft clear / gamepad recompute stay consistent;
+        // Settings controls DisposableEffect still saves the last draft.
+        if (_heroLayoutEditing.value) setHeroLayoutEditing(false)
         gamesMenuOnPrimary = menuOnPrimary
         stickyGamepadOwner = null
         if (!menuOnPrimary) {
@@ -900,6 +978,11 @@ class DualScreenStore {
     /**
      * Explicit claim — touch / key on a display. Sticky until L2 toggles or
      * single-display clears it.
+     *
+     * Only steals **key routing**. Does not bump [gamepadFocusEpoch], so the
+     * gaining screen keeps its current selection/anchor (touching bottom must
+     * control bottom without yanking focus). L2 / SELECT still use
+     * [setGamepadOwner] when a full focus restore is intended.
      */
     fun claimGamepad(owner: GamepadOwner) {
         if (_state.value == DualScreenState.SingleDisplay) {
@@ -908,7 +991,9 @@ class DualScreenStore {
             return
         }
         stickyGamepadOwner = owner
-        setGamepadOwner(owner)
+        if (_gamepadOwner.value != owner) {
+            _gamepadOwner.value = owner
+        }
     }
 
     /** L2 — flip gamepad between top (Primary) and bottom (Secondary). */
@@ -991,6 +1076,11 @@ class DualScreenStore {
 
                 // Settings hero option/action picking follows the hero display.
                 _settingsHeroPicking.value -> {
+                    if (gamesMenuOnPrimary) GamepadOwner.Secondary else GamepadOwner.Primary
+                }
+
+                // Hero layout editor follows the hero display.
+                _heroLayoutEditing.value -> {
                     if (gamesMenuOnPrimary) GamepadOwner.Secondary else GamepadOwner.Primary
                 }
 

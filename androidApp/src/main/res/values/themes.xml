@@ -2,8 +2,12 @@
 <resources>
     <!-- DayNight so platform chrome tracks SettingsRepository via AppCompatDelegate. -->
     <style name="Theme.Wajiha" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <!-- Light default; values-night overrides for dark. -->
+        <!-- Light default; values-night keeps the same window/splash colors so
+             system-night Thor never flashes #0B101B before Compose. -->
         <item name="android:windowBackground">@color/wajiha_background_light</item>
+        <item name="android:windowSplashScreenBackground">@color/wajiha_background_light</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_fill</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/wajiha_background_light</item>
         <!-- Thor applies task animations across both panels; suppress them so
              top-screen app transitions never blank the bottom compositor. -->
         <item name="android:windowAnimationStyle">@null</item>

@@ -23,6 +23,7 @@ import com.wajiha.android.monitor.ForegroundAppMonitor
 import com.wajiha.android.platform.AndroidLibraryActions
 import com.wajiha.android.service.KeepAliveService
 import com.wajiha.android.system.SystemController
+import com.wajiha.android.ui.BootTheme
 import com.wajiha.android.ui.hideSystemStatusBar
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaLogKind
@@ -60,6 +61,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // Splash colors come from Theme.Wajiha; this paints the real BootTheme
+        // window as soon as the Activity window exists.
+        BootTheme.applyWindowBackground(this)
 
         val displayId = display?.displayId ?: Display.DEFAULT_DISPLAY
         WajihaLog.i(
@@ -184,6 +188,13 @@ class MainActivity : ComponentActivity() {
         if ((display?.displayId ?: Display.DEFAULT_DISPLAY) == Display.DEFAULT_DISPLAY) {
             displayCoordinator.requestSecondaryAvailability("primary-resume")
         }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // When another app is default HOME, leaving Main must not let background
+        // secondary recovery / hero restore steal top+bottom afterward.
+        displayCoordinator.onPrimaryUserLeave()
     }
 
     override fun onPause() {

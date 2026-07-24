@@ -4,6 +4,7 @@ import android.app.Presentation
 import android.graphics.PixelFormat
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -24,6 +25,7 @@ import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.secondary.SecondaryApp
 import kotlinx.coroutines.flow.StateFlow
 import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Owns the one live secondary Compose tree. The Activity remains the Android
@@ -40,6 +42,7 @@ class SecondaryDisplayHost {
     private var gamepadGate: GamepadGate? = null
     private var overlayPresentation: Presentation? = null
     private var overlayView: SecondaryOverlayContainer? = null
+    private var pendingOverlayHandoff: Runnable? = null
 
     fun attach(
         activity: ComponentActivity,
@@ -72,6 +75,7 @@ class SecondaryDisplayHost {
             return
         }
         if (surface.value == SecondaryRenderSurface.Overlay && overlayView != null) return
+        cancelOverlayHandoff()
         hideOverlayWindow()
         ownership.claim(SecondaryRenderSurface.Overlay)
 
@@ -135,22 +139,92 @@ class SecondaryDisplayHost {
 
     fun showActivity(reason: String) {
         if (surface.value == SecondaryRenderSurface.Activity && overlayView == null) return
+        val hadOverlay = overlayPresentation != null
+        // Start Activity Compose under the still-visible Overlay so the first
+        // Activity frame is ready before we dismiss — avoids a black flash.
         ownership.claim(SecondaryRenderSurface.Activity)
-        activityRef?.get()?.window?.decorView?.postOnAnimation {
+        if (!hadOverlay) {
+            hideOverlayWindow()
+            return
+        }
+        val decor = activityRef?.get()?.window?.decorView
+        if (decor == null) {
             hideOverlayWindow()
             WajihaLog.i(WajihaTags.DISPLAY, "secondaryHost: Overlay → Activity reason=$reason")
-        } ?: hideOverlayWindow()
+            return
+        }
+        scheduleOverlayHandoff(decor, reason)
     }
 
     fun hideOverlay() {
+        cancelOverlayHandoff()
         ownership.claim(SecondaryRenderSurface.Activity)
         hideOverlayWindow()
     }
 
     private fun returnToActivity(reason: String) {
+        cancelOverlayHandoff()
         ownership.claim(SecondaryRenderSurface.Activity)
         hideOverlayWindow()
         WajihaLog.d(WajihaTags.DISPLAY, "secondaryHost: use Activity reason=$reason")
+    }
+
+    /**
+     * Warm [SecondaryHomeActivity]'s Compose tree for a few frames while the
+     * live Presentation still covers the panel, then dismiss the Overlay.
+     */
+    private fun scheduleOverlayHandoff(
+        decor: View,
+        reason: String,
+    ) {
+        cancelOverlayHandoff()
+        val done = AtomicBoolean(false)
+
+        fun complete() {
+            if (!done.compareAndSet(false, true)) return
+            pendingOverlayHandoff = null
+            hideOverlayWindow()
+            WajihaLog.i(WajihaTags.DISPLAY, "secondaryHost: Overlay → Activity reason=$reason")
+        }
+        val timeout =
+            Runnable {
+                WajihaLog.d(
+                    WajihaTags.DISPLAY,
+                    "secondaryHost: Overlay handoff timeout reason=$reason",
+                )
+                complete()
+            }
+        pendingOverlayHandoff = timeout
+        decor.postDelayed(timeout, OVERLAY_HANDOFF_TIMEOUT_MS)
+        // post → composition scheduled; then N choreographer frames for paint.
+        decor.post {
+            var framesLeft = OVERLAY_HANDOFF_WARM_FRAMES
+
+            fun afterFrame() {
+                if (done.get()) return
+                decor.postOnAnimation {
+                    framesLeft--
+                    if (framesLeft <= 0) {
+                        decor.removeCallbacks(timeout)
+                        pendingOverlayHandoff = null
+                        complete()
+                    } else {
+                        afterFrame()
+                    }
+                }
+            }
+            afterFrame()
+        }
+    }
+
+    private fun cancelOverlayHandoff() {
+        val pending = pendingOverlayHandoff ?: return
+        pendingOverlayHandoff = null
+        activityRef
+            ?.get()
+            ?.window
+            ?.decorView
+            ?.removeCallbacks(pending)
     }
 
     private fun hideOverlayWindow() {
@@ -161,6 +235,12 @@ class SecondaryDisplayHost {
         if (presentation != null) {
             runCatching { presentation.dismiss() }
         }
+    }
+
+    private companion object {
+        /** Activity Compose stays mounted under Overlay; a few frames is enough. */
+        private const val OVERLAY_HANDOFF_WARM_FRAMES = 5
+        private const val OVERLAY_HANDOFF_TIMEOUT_MS = 750L
     }
 }
 

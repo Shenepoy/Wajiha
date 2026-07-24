@@ -66,6 +66,8 @@ fun GamepadScreen(
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val latestPreviewKey = rememberUpdatedState(onPreviewKey)
+    val latestOwner = rememberUpdatedState(owner)
+    val latestClaimGamepad = rememberUpdatedState(onClaimGamepad)
     // Created before the layer handler so bridged D-pad (GamepadPreviewKeyBridge)
     // can restore Gamepad chrome — those keys never reach onPreviewKeyEvent.
     val inputModeController = rememberInputModeController()
@@ -129,6 +131,13 @@ fun GamepadScreen(
                         detectTapGestures(
                             onPress = {
                                 inputModeController.onTouch()
+                                // Route gamepad keys to this display without a focus
+                                // restore — claim is sticky routing only (no epoch yank).
+                                val touchOwner = latestOwner.value
+                                val claim = latestClaimGamepad.value
+                                if (touchOwner != null && claim != null) {
+                                    claim(touchOwner)
+                                }
                                 tryAwaitRelease()
                             },
                             onTap = {
@@ -147,13 +156,15 @@ fun GamepadScreen(
                         ) {
                             return@onPreviewKeyEvent true
                         }
+                        val claimOwner = latestOwner.value
+                        val claimGamepad = latestClaimGamepad.value
                         if (
-                            onClaimGamepad != null &&
-                            owner != null &&
+                            claimOwner != null &&
+                            claimGamepad != null &&
                             event.type == KeyEventType.KeyDown &&
                             isGamepadClaimKey(event.key)
                         ) {
-                            onClaimGamepad(owner)
+                            claimGamepad(claimOwner)
                         }
                         // Screen handlers (L1/R1 tab cycle, X, etc.) before grace/repeat throttle.
                         if (latestPreviewKey.value?.invoke(event) == true) {

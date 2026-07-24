@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -77,6 +79,7 @@ import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.ui.components.WajihaContextMenuMetrics
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
+import com.wajiha.ui.icons.WajihaIcons
 import com.wajiha.ui.theme.FocusBorderStyle
 import com.wajiha.ui.theme.GamepadFocusChromeScope
 import com.wajiha.ui.theme.LocalFocusIndicatorStyle
@@ -92,6 +95,12 @@ private val ContextMenuMarqueeIdleMs = 1500
 private val ContextMenuMarqueePxPerSec = 40f
 
 private enum class MenuSide { Right, Left, Above, Below }
+
+private enum class AppContextMenuFocusRow {
+    PrimaryOpen,
+    MoveUp,
+    MoveDown,
+}
 
 data class AppContextTarget(
     val packageName: String,
@@ -111,17 +120,42 @@ private fun chooseMenuSide(
     val leftSpace = anchor.left - padPx
     val belowSpace = containerH - padPx - anchor.bottom
     val aboveSpace = anchor.top - padPx
+    val neededW = menuW + gapPx
+    val neededH = menuH + gapPx
 
     return when {
-        rightSpace >= menuW + gapPx -> MenuSide.Right
-        leftSpace >= menuW + gapPx -> MenuSide.Left
-        belowSpace >= menuH + gapPx -> MenuSide.Below
-        aboveSpace >= menuH + gapPx -> MenuSide.Above
+        // Bottom-edge anchors (dock pins): sit above instead of floating beside.
+        belowSpace < neededH && aboveSpace >= neededH -> MenuSide.Above
+
+        rightSpace >= neededW -> MenuSide.Right
+
+        leftSpace >= neededW -> MenuSide.Left
+
+        belowSpace >= neededH -> MenuSide.Below
+
+        aboveSpace >= neededH -> MenuSide.Above
+
         rightSpace >= leftSpace && rightSpace >= belowSpace && rightSpace >= aboveSpace -> MenuSide.Right
+
         leftSpace >= belowSpace && leftSpace >= aboveSpace -> MenuSide.Left
+
         belowSpace >= aboveSpace -> MenuSide.Below
+
         else -> MenuSide.Above
     }
+}
+
+private fun rootRectToLocal(
+    root: Rect,
+    overlayRoot: Rect?,
+): Rect {
+    if (overlayRoot == null) return root
+    return Rect(
+        left = root.left - overlayRoot.left,
+        top = root.top - overlayRoot.top,
+        right = root.right - overlayRoot.left,
+        bottom = root.bottom - overlayRoot.top,
+    )
 }
 
 private fun offsetForLockedSide(
@@ -143,6 +177,16 @@ private fun offsetForLockedSide(
 
     fun clampY(y: Float) = y.coerceIn(minY, maxY)
 
+    /** Center when possible; otherwise keep the menu flush with the nearer anchor edge. */
+    fun alignHorizontal(): Float {
+        val centered = anchor.center.x - menuW / 2f
+        return when {
+            centered < minX -> clampX(anchor.left)
+            centered > maxX -> clampX(anchor.right - menuW)
+            else -> centered
+        }
+    }
+
     return when (side) {
         MenuSide.Right -> {
             IntOffset(
@@ -160,14 +204,14 @@ private fun offsetForLockedSide(
 
         MenuSide.Below -> {
             IntOffset(
-                clampX(anchor.center.x - menuW / 2f).roundToInt(),
+                alignHorizontal().roundToInt(),
                 clampY(anchor.bottom + gapPx).roundToInt(),
             )
         }
 
         MenuSide.Above -> {
             IntOffset(
-                clampX(anchor.center.x - menuW / 2f).roundToInt(),
+                alignHorizontal().roundToInt(),
                 clampY(anchor.top - menuH - gapPx).roundToInt(),
             )
         }
@@ -250,7 +294,7 @@ private fun ContextMenuTitleText(
 private fun AppContextMenuRow(
     label: String,
     onClick: () -> Unit,
-    icon: ImageVector = Icons.Filled.Info,
+    icon: ImageVector? = Icons.Filled.Info,
     focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -266,6 +310,7 @@ private fun AppContextMenuRow(
                 .onFocusChanged { focused = it.isFocused }
                 .wajihaGamepadFocus()
                 .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     if (GamepadKeys.isConfirm(event.type, event.key)) {
                         onClick()
                         true
@@ -280,16 +325,16 @@ private fun AppContextMenuRow(
                     bottom = 2.dp,
                 ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement =
-            androidx.compose.foundation.layout.Arrangement
-                .spacedBy(WajihaSpacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(WajihaContextMenuMetrics.iconSlot),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(WajihaContextMenuMetrics.iconSlot),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
@@ -412,6 +457,10 @@ fun AppContextMenu(
     anchorBounds: Rect?,
     onDismiss: () -> Unit,
     onOpenAppInfo: (packageName: String) -> Unit,
+    onLaunchOnDisplay: (packageName: String, displayId: Int) -> Unit = { _, _ -> },
+    dualDisplay: Boolean = false,
+    topDisplayId: Int = 0,
+    bottomDisplayId: Int = 4,
     isFavorite: Boolean = false,
     canMoveFavoriteUp: Boolean = false,
     canMoveFavoriteDown: Boolean = false,
@@ -423,6 +472,12 @@ fun AppContextMenu(
     if (target == null) return
 
     val firstRowFocus = remember(target.packageName) { FocusRequester() }
+    val moveUpFocus = remember(target.packageName) { FocusRequester() }
+    val moveDownFocus = remember(target.packageName) { FocusRequester() }
+    var focusRow by remember(target.packageName) {
+        mutableStateOf(AppContextMenuFocusRow.PrimaryOpen)
+    }
+    var focusEpoch by remember(target.packageName) { mutableStateOf(0) }
     val layerId = "app_context_${target.packageName}"
     val focusContinuity = LocalFocusContinuityController.current
 
@@ -436,9 +491,38 @@ fun AppContextMenu(
     }
 
     LaunchedEffect(target.packageName) {
+        focusRow = AppContextMenuFocusRow.PrimaryOpen
+        focusEpoch++
+    }
+
+    LaunchedEffect(focusEpoch, focusRow, canMoveFavoriteUp, canMoveFavoriteDown) {
+        // Wait for favorite reorder + row insert/remove to settle before reclaiming focus.
         withFrameNanos { }
+        withFrameNanos { }
+        val requester =
+            when (focusRow) {
+                AppContextMenuFocusRow.PrimaryOpen -> {
+                    firstRowFocus
+                }
+
+                AppContextMenuFocusRow.MoveUp -> {
+                    when {
+                        canMoveFavoriteUp -> moveUpFocus
+                        canMoveFavoriteDown -> moveDownFocus
+                        else -> firstRowFocus
+                    }
+                }
+
+                AppContextMenuFocusRow.MoveDown -> {
+                    when {
+                        canMoveFavoriteDown -> moveDownFocus
+                        canMoveFavoriteUp -> moveUpFocus
+                        else -> firstRowFocus
+                    }
+                }
+            }
         try {
-            firstRowFocus.requestFocus()
+            requester.requestFocus()
         } catch (_: Exception) {
         }
     }
@@ -453,6 +537,11 @@ fun AppContextMenu(
     val gap = WajihaSpacing.sm
     var menuSize by remember(target.packageName) { mutableStateOf(IntSize.Zero) }
     var lockedSide by remember(target.packageName) { mutableStateOf<MenuSide?>(null) }
+    var overlayRootBounds by remember(target.packageName) { mutableStateOf<Rect?>(null) }
+    // Re-pick side when the tile moves under an open menu (favorite reorder).
+    LaunchedEffect(anchorBounds?.center) {
+        lockedSide = null
+    }
 
     BackHandler { handleBack() }
 
@@ -461,6 +550,7 @@ fun AppContextMenu(
             modifier =
                 modifier
                     .fillMaxSize()
+                    .onGloballyPositioned { overlayRootBounds = it.boundsInRoot() }
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         if (GamepadKeys.isBack(event.type, event.key)) handleBack() else false
@@ -471,9 +561,19 @@ fun AppContextMenu(
                 onDismiss = onDismiss,
             )
 
+            val localAnchor =
+                remember(anchorBounds, overlayRootBounds) {
+                    anchorBounds?.let { root ->
+                        inflateForTileScale(
+                            rootRectToLocal(root, overlayRootBounds),
+                            WajihaFocus.selectedScale,
+                        )
+                    }
+                }
+
             val menuOffset =
                 remember(
-                    anchorBounds,
+                    localAnchor,
                     constraints.maxWidth,
                     constraints.maxHeight,
                     menuSize,
@@ -490,18 +590,17 @@ fun AppContextMenu(
                             if (menuSize.height > 0) {
                                 menuSize.height.toFloat()
                             } else {
-                                96.dp.toPx()
+                                220.dp.toPx()
                             }
                         val gapPx = gap.toPx()
                         val padPx = WajihaSpacing.sm.toPx()
                         val cw = constraints.maxWidth.toFloat()
                         val ch = constraints.maxHeight.toFloat()
 
-                        if (anchorBounds != null) {
-                            val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
+                        if (localAnchor != null) {
                             val side =
                                 lockedSide ?: chooseMenuSide(
-                                    anchor = anchor,
+                                    anchor = localAnchor,
                                     menuW = menuW,
                                     menuH = menuH,
                                     containerW = cw,
@@ -511,7 +610,7 @@ fun AppContextMenu(
                                 )
                             offsetForLockedSide(
                                 side = side,
-                                anchor = anchor,
+                                anchor = localAnchor,
                                 menuW = menuW,
                                 menuH = menuH,
                                 containerW = cw,
@@ -528,13 +627,17 @@ fun AppContextMenu(
                     }
                 }
 
-            LaunchedEffect(menuSize, anchorBounds, constraints.maxWidth, constraints.maxHeight) {
-                if (lockedSide == null && menuSize != IntSize.Zero && anchorBounds != null) {
+            LaunchedEffect(
+                menuSize,
+                localAnchor,
+                constraints.maxWidth,
+                constraints.maxHeight,
+            ) {
+                if (lockedSide == null && menuSize != IntSize.Zero && localAnchor != null) {
                     with(density) {
-                        val anchor = inflateForTileScale(anchorBounds, WajihaFocus.selectedScale)
                         lockedSide =
                             chooseMenuSide(
-                                anchor = anchor,
+                                anchor = localAnchor,
                                 menuW = menuSize.width.toFloat(),
                                 menuH = menuSize.height.toFloat(),
                                 containerW = constraints.maxWidth.toFloat(),
@@ -590,10 +693,41 @@ fun AppContextMenu(
                             LocalGamepadFocusChromeScope provides GamepadFocusChromeScope.Menu,
                         ) {
                             Column(modifier = Modifier.padding(vertical = WajihaSpacing.xs)) {
+                                if (dualDisplay) {
+                                    AppContextMenuRow(
+                                        label = "Open top",
+                                        icon = WajihaIcons.OpenInNew,
+                                        focusRequester = firstRowFocus,
+                                        onClick = {
+                                            onLaunchOnDisplay(target.packageName, topDisplayId)
+                                            onDismiss()
+                                        },
+                                    )
+                                    AppContextMenuRow(
+                                        label = "Open bottom",
+                                        icon = WajihaIcons.OpenInNewDown,
+                                        onClick = {
+                                            onLaunchOnDisplay(
+                                                target.packageName,
+                                                bottomDisplayId,
+                                            )
+                                            onDismiss()
+                                        },
+                                    )
+                                } else {
+                                    AppContextMenuRow(
+                                        label = "Open",
+                                        icon = Icons.Filled.PlayArrow,
+                                        focusRequester = firstRowFocus,
+                                        onClick = {
+                                            onLaunchOnDisplay(target.packageName, topDisplayId)
+                                            onDismiss()
+                                        },
+                                    )
+                                }
                                 AppContextMenuRow(
                                     label = if (isFavorite) "Remove favorite" else "Favorite",
                                     icon = Icons.Filled.Star,
-                                    focusRequester = firstRowFocus,
                                     onClick = {
                                         onToggleFavorite(target.packageName)
                                         onDismiss()
@@ -603,14 +737,24 @@ fun AppContextMenu(
                                     AppContextMenuRow(
                                         label = "Move up",
                                         icon = Icons.Filled.KeyboardArrowUp,
-                                        onClick = { onMoveFavoriteUp(target.packageName) },
+                                        focusRequester = moveUpFocus,
+                                        onClick = {
+                                            focusRow = AppContextMenuFocusRow.MoveUp
+                                            focusEpoch++
+                                            onMoveFavoriteUp(target.packageName)
+                                        },
                                     )
                                 }
                                 if (isFavorite && canMoveFavoriteDown) {
                                     AppContextMenuRow(
                                         label = "Move down",
                                         icon = Icons.Filled.KeyboardArrowDown,
-                                        onClick = { onMoveFavoriteDown(target.packageName) },
+                                        focusRequester = moveDownFocus,
+                                        onClick = {
+                                            focusRow = AppContextMenuFocusRow.MoveDown
+                                            focusEpoch++
+                                            onMoveFavoriteDown(target.packageName)
+                                        },
                                     )
                                 }
                                 AppContextMenuRow(

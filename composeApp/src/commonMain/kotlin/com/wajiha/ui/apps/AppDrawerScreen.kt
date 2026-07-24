@@ -166,6 +166,14 @@ fun AppDrawerScreen(
     /** App tile focused when options opened; restored when the panel closes. */
     var optionsAnchorPackage by remember { mutableStateOf<String?>(null) }
     val menuOpen = contextMenuTarget != null
+    val menuPackage = contextMenuTarget?.packageName
+    val menuTileBounds = menuPackage?.let { tileBoundsByPackage[it] }
+    // Favorites reorder moves the tile — keep the menu cutout on that package.
+    LaunchedEffect(menuPackage, menuTileBounds) {
+        if (menuPackage != null && menuTileBounds != null) {
+            contextMenuAnchorBounds = menuTileBounds
+        }
+    }
 
     fun closeOptions() {
         if (!optionsOpen) return
@@ -915,6 +923,10 @@ fun AppDrawerScreen(
                 anchorBounds = contextMenuAnchorBounds,
                 onDismiss = ::dismissContextMenu,
                 onOpenAppInfo = onOpenAppInfo,
+                onLaunchOnDisplay = onLaunchOnDisplay,
+                dualDisplay = dualDisplay,
+                topDisplayId = 0,
+                bottomDisplayId = bottomDisplayId,
                 isFavorite = menuIsFavorite,
                 canMoveFavoriteUp =
                     menuPackage != null &&

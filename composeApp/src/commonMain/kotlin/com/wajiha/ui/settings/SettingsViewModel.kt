@@ -180,6 +180,57 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.setGridRows(rows) }
     }
 
+    fun setGameGridArt(value: String) {
+        viewModelScope.launch { settingsRepository.setGameGridArt(value) }
+    }
+
+    fun setGameGridTileSize(value: String) {
+        viewModelScope.launch { settingsRepository.setGameGridTileSize(value) }
+    }
+
+    fun setGameGridSecondaryRows(rows: Int) {
+        viewModelScope.launch { settingsRepository.setGameGridSecondaryRows(rows) }
+    }
+
+    fun setGameGridSecondaryArt(value: String) {
+        viewModelScope.launch { settingsRepository.setGameGridSecondaryArt(value) }
+    }
+
+    fun setGameGridSecondaryTileSize(value: String) {
+        viewModelScope.launch { settingsRepository.setGameGridSecondaryTileSize(value) }
+    }
+
+    fun applyHeroLayoutPreset(
+        slot: com.wajiha.data.prefs.HeroDisplaySlot,
+        presetId: String,
+    ) {
+        viewModelScope.launch {
+            settingsRepository.updateHeroLayoutSlot(slot) {
+                com.wajiha.data.prefs.HeroLayoutPresets
+                    .template(presetId)
+                    .copy(configured = true)
+            }
+        }
+    }
+
+    fun setHeroLayoutForSlot(
+        slot: com.wajiha.data.prefs.HeroDisplaySlot,
+        layout: com.wajiha.data.prefs.HeroLayout,
+    ) {
+        viewModelScope.launch {
+            settingsRepository.updateHeroLayoutSlot(slot) { layout.copy(configured = true) }
+        }
+    }
+
+    fun updateHeroLayoutSlot(
+        slot: com.wajiha.data.prefs.HeroDisplaySlot,
+        transform: (com.wajiha.data.prefs.HeroLayout) -> com.wajiha.data.prefs.HeroLayout,
+    ) {
+        viewModelScope.launch {
+            settingsRepository.updateHeroLayoutSlot(slot, transform)
+        }
+    }
+
     fun setSingleScreen(value: Boolean) {
         viewModelScope.launch { settingsRepository.setSingleScreen(value) }
     }
@@ -293,6 +344,10 @@ class SettingsViewModel(
         viewModelScope.launch {
             settingsRepository.moveAppDrawerFavorite(packageName, delta, installedPackages)
         }
+    }
+
+    fun setShowHomeDock(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setShowHomeDock(value) }
     }
 
     fun setFocusBorderStyle(style: String) {

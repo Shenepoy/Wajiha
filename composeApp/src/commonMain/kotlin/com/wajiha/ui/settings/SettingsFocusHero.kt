@@ -713,7 +713,7 @@ private fun sectionOverviewCopy(sectionLabel: String?): String =
         "Library" -> "Systems with ROM folders. Add a platform, edit folders, or rescan."
         "Scraper" -> "Global scraper sources and batch options for metadata artwork."
         "Screens" -> "Single vs dual layout, display roles, and gameplay secondary modes."
-        "Appearance" -> "Grid look, theme, focus ring, and controller glyphs."
+        "Appearance" -> "Home dock, grid look, theme, focus ring, and controller glyphs."
         "System" -> "Permissions, launcher defaults, and app info."
         else -> "Browse settings sections with L1 / R1."
     }

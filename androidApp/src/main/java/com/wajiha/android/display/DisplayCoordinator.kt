@@ -17,6 +17,7 @@ import com.wajiha.android.MainActivity
 import com.wajiha.android.SecondaryHomeActivity
 import com.wajiha.android.monitor.SessionTaskRegistry
 import com.wajiha.android.monitor.TopDisplayTaskResolver
+import com.wajiha.android.system.SystemController
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 import com.wajiha.state.DualScreenState
@@ -30,11 +31,18 @@ import com.wajiha.state.SecondaryMode
  * a dedicated SECONDARY_HOME activity on its own taskAffinity, started
  * explicitly when Wajiha is not yet the default home (system only auto-
  * starts SECONDARY_HOME for the default launcher).
+ *
+ * When Wajiha is not the default HOME app, never force a CATEGORY_HOME
+ * transition onto display 0 or fight the system secondary home after the
+ * user presses Home. Yield stays sticky until the user explicitly returns
+ * to Wajiha (primary resume / HOME intent) — a timed pause still let
+ * recovery and restorePrimaryHero steal both panels.
  */
 class DisplayCoordinator(
     private val context: Context,
     private val store: DualScreenStore,
     private val secondaryDisplayHost: SecondaryDisplayHost,
+    private val systemController: SystemController,
 ) : DisplayManager.DisplayListener {
     private val displayManager =
         context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
@@ -46,9 +54,32 @@ class DisplayCoordinator(
     private var lastSecondaryProbeAt = 0L
     private var lastPrimaryHomeRequestAt = 0L
 
+    /**
+     * When true, keep the live Overlay until [releaseForeignSecondarySurface]
+     * finishes. Resume alone is not enough — Thor can report SecondaryHome
+     * healthy while an Azahar-class HWC sideband still blacks the panel.
+     */
+    private var holdOverlayForForeignSurface = false
+
+    /**
+     * Live Overlay armed across [startActivity] for a Wajiha-launched game.
+     * Resume must not hand Overlay → Activity until [finishLaunchCoverAfterSecondaryUi].
+     */
+    @Volatile
+    private var holdOverlayForGameLaunch = false
+    private var launchCoverReleaseRunnable: Runnable? = null
+
     /** Skip secondary reclaim briefly after OOM-guard kills. */
     @Volatile
     private var memoryGuardReclaimDeferUntil: Long = 0L
+
+    /**
+     * After Home while not the default launcher, suppress secondary reclaim and
+     * primary hero restore so stock HOME can own both panels. Cleared only when
+     * the user returns to Wajiha ([requestSecondaryAvailability] primary paths).
+     */
+    @Volatile
+    private var yieldSecondaryToSystemHome: Boolean = false
     private var lastFocusGameAt = 0L
     private var lastFocusGamePkg: String? = null
     private val secondaryRecovery: SecondaryRecoveryController =
@@ -220,6 +251,13 @@ class DisplayCoordinator(
 
     /** Bring [MainActivity] above Recents on display 0 (browsing / hero mode). */
     fun restorePrimaryHero(main: MainActivity? = null) {
+        if (yieldSecondaryToSystemHome) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "restorePrimaryHero: skip — yielding to system home",
+            )
+            return
+        }
         if (store.hasActiveSessions()) {
             val topGame = store.topDisplayForegroundPackage.value
             if (topGame != null && topGame != context.packageName && store.getSession(topGame) != null) {
@@ -289,6 +327,22 @@ class DisplayCoordinator(
 
     fun requestSecondaryAvailability(reason: String) {
         runOnMain {
+            // User returned to Wajiha — resume owning the bottom panel.
+            if (reason == "primary-resume" || reason == "primary-home-intent") {
+                if (yieldSecondaryToSystemHome) {
+                    WajihaLog.i(
+                        WajihaTags.DISPLAY,
+                        "secondaryHome: clear system-home yield reason=$reason",
+                    )
+                }
+                yieldSecondaryToSystemHome = false
+            } else if (yieldSecondaryToSystemHome) {
+                WajihaLog.d(
+                    WajihaTags.DISPLAY,
+                    "secondaryHome: skip availability — yielding to system home reason=$reason",
+                )
+                return@runOnMain
+            }
             val displayId = secondaryDisplay()?.displayId ?: return@runOnMain
             exhaustedRecoveryRetryUsed = false
             secondaryRecovery.request(displayId, reason)
@@ -297,9 +351,9 @@ class DisplayCoordinator(
 
     /**
      * A real SECONDARY_HOME request means the user pressed Home while another
-     * app may still own display 0. Bring Wajiha Home forward there as well.
-     * This stops that activity, allowing apps such as Azahar to dismiss their
-     * display-4 Presentation. Internal recovery launches must not do this.
+     * app may still own display 0. Bring Wajiha Home forward there as well —
+     * only when Wajiha is the default launcher. Internal recovery launches must
+     * not do this.
      */
     fun handleSecondaryHomeIntent(
         activity: Activity,
@@ -309,6 +363,14 @@ class DisplayCoordinator(
             !intent.hasCategory(SECONDARY_HOME_CATEGORY) ||
             intent.getBooleanExtra(EXTRA_INTERNAL_SECONDARY_HOME_LAUNCH, false)
         ) {
+            return
+        }
+        if (!systemController.isDefaultLauncher()) {
+            yieldToSystemHome("secondary-home-intent")
+            WajihaLog.i(
+                WajihaTags.DISPLAY,
+                "secondaryHome: user HOME ignored — not default launcher",
+            )
             return
         }
         WajihaLog.i(
@@ -325,6 +387,46 @@ class DisplayCoordinator(
      */
     fun onSecondaryHomeUserLeave(activity: ComponentActivity) {
         if (store.state.value == DualScreenState.AppOnSecondary) return
+
+        // Thor fires SecondaryHome onUserLeaveHint synchronously when a top-
+        // display game starts. Remounting Overlay / CLEAR_TASK flashes black.
+        // Launch already armed the live Overlay (and/or freeze pin) — leave it.
+        // Must run before not-default yield so launching from Wajiha still works
+        // when another app is the default HOME.
+        if (isWithinGameLaunchGrace() ||
+            holdOverlayForGameLaunch ||
+            secondaryTransitionCover.isPinned()
+        ) {
+            holdOverlayForForeignSurface = false
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "secondaryHome: user leave — keep launch cover (grace/pin/live)",
+            )
+            return
+        }
+
+        // Not the default HOME app: never steal either panel after the user
+        // leaves for stock HOME. Sticky until primary resume.
+        if (!systemController.isDefaultLauncher()) {
+            yieldToSystemHome("user-leave")
+            holdOverlayForForeignSurface = false
+            secondaryTransitionCover.hide(force = true)
+            secondaryDisplayHost.hideOverlay()
+            val foreignOwner =
+                store.topDisplayForegroundPackage.value
+                    ?.takeUnless { it == context.packageName }
+                    ?.takeIf { it in DUAL_SCREEN_PRESENTATION_PACKAGES }
+                    ?: findLiveDualScreenPresentationOwner()
+            if (foreignOwner != null) {
+                releaseForeignSecondarySurface(activity, foreignOwner)
+            }
+            WajihaLog.i(
+                WajihaTags.DISPLAY,
+                "secondaryHome: user leave — not default launcher; yield HOME",
+            )
+            return
+        }
+
         if (secondaryDisplayHost.surface.value == SecondaryRenderSurface.Overlay) {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
@@ -340,29 +442,190 @@ class DisplayCoordinator(
             SECONDARY_COVER_TIMEOUT_MS,
         )
 
-        val topPackage = store.topDisplayForegroundPackage.value
-        if (topPackage == null || topPackage == context.packageName) {
+        // Only Citra-family Presentations leave a display-4 HWC sideband.
+        // Never CLEAR_TASK a normal single-screen emu (AetherSX2, Eden, …).
+        val topPackage =
+            store.topDisplayForegroundPackage.value
+                ?.takeUnless { it == context.packageName }
+        val foreignOwner =
+            topPackage?.takeIf { it in DUAL_SCREEN_PRESENTATION_PACKAGES }
+                ?: findLiveDualScreenPresentationOwner()
+        if (foreignOwner == null) {
+            holdOverlayForForeignSurface = false
             WajihaLog.d(
                 WajihaTags.DISPLAY,
-                "secondaryHome: user leave — secondary reclaimed; primary already Wajiha or unknown",
+                "secondaryHome: user leave — no foreign secondary surface owner",
             )
             return
         }
+
+        // Keep Overlay until CLEAR_TASK tears down the Presentation sideband.
+        // onSecondaryHomeResumed alone races HWC and paints black.
+        holdOverlayForForeignSurface = true
         val now = System.currentTimeMillis()
-        if (now - lastPrimaryHomeRequestAt < PRIMARY_HOME_MIN_INTERVAL_MS) {
+        if (now - lastPrimaryHomeRequestAt >= PRIMARY_HOME_MIN_INTERVAL_MS) {
+            lastPrimaryHomeRequestAt = now
+            WajihaLog.i(
+                WajihaTags.DISPLAY,
+                "secondaryHome: user leave — bringing primary launcher over $foreignOwner",
+            )
+            bringPrimaryLauncherForward(activity)
+        } else {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
-                "secondaryHome: user leave — primary HOME request throttled",
+                "secondaryHome: user leave — primary HOME request throttled; " +
+                    "still clearing secondary surface owner=$foreignOwner",
             )
-            return
         }
-        lastPrimaryHomeRequestAt = now
+        releaseForeignSecondarySurface(activity, foreignOwner)
+    }
+
+    private fun yieldToSystemHome(reason: String) {
+        yieldSecondaryToSystemHome = true
+        cancelSecondaryRecovery("yield-system-home:$reason")
         WajihaLog.i(
             WajihaTags.DISPLAY,
-            "secondaryHome: user leave — bringing primary launcher over $topPackage",
+            "secondaryHome: sticky yield to system home reason=$reason",
         )
-        bringPrimaryLauncherForward(activity)
-        releaseForeignSecondarySurface(activity, topPackage)
+    }
+
+    /**
+     * Primary left while Wajiha is not the default HOME app (Home, Recents,
+     * another app). Sticky-yield so background reclaim cannot steal both
+     * panels. Skipped during Wajiha-driven game launch cover arming.
+     */
+    fun onPrimaryUserLeave() {
+        if (systemController.isDefaultLauncher()) return
+        if (isWithinGameLaunchGrace() ||
+            holdOverlayForGameLaunch ||
+            secondaryTransitionCover.isPinned()
+        ) {
+            return
+        }
+        yieldToSystemHome("primary-user-leave")
+        holdOverlayForForeignSurface = false
+        secondaryTransitionCover.hide(force = true)
+        secondaryDisplayHost.hideOverlay()
+    }
+
+    private fun isWithinGameLaunchGrace(): Boolean {
+        if (!store.hasActiveSessions()) return false
+        val session = store.nowPlaying.value
+        val startedAt = session?.sessionStartedAt ?: return true
+        return System.currentTimeMillis() - startedAt < GAME_LAUNCH_RECLAIM_DEFER_MS
+    }
+
+    /**
+     * Arm a live Overlay Presentation across [startActivity]. A bitmap freeze
+     * bridges only the Activity → Overlay mount gap; the Overlay then paints
+     * Compose continuously (including deferred Now Playing). Timer-dismissing
+     * a freeze onto a paused/empty Activity surface was the remaining black flash.
+     *
+     * @param onReady main thread, once the live Overlay owns the panel
+     */
+    fun armSecondaryLiveCoverForLaunch(onReady: (() -> Unit)? = null) {
+        runOnMain {
+            val activity = SecondaryHomeActivity.instance()
+            if (activity == null ||
+                activity.display?.displayId == null ||
+                activity.display?.displayId == Display.DEFAULT_DISPLAY
+            ) {
+                onReady?.invoke()
+                return@runOnMain
+            }
+            cancelLaunchCoverRelease()
+            holdOverlayForGameLaunch = true
+            secondaryTransitionCover.pinFor(LAUNCH_COVER_PIN_MS)
+            secondaryTransitionCover.show(activity) {
+                secondaryDisplayHost.showOverlay(activity)
+                warmThen(
+                    activity = activity,
+                    frames = LAUNCH_OVERLAY_WARM_FRAMES,
+                ) {
+                    secondaryTransitionCover.hide(force = true)
+                    WajihaLog.d(
+                        WajihaTags.DISPLAY,
+                        "secondaryCover: live Overlay armed for game launch",
+                    )
+                    onReady?.invoke()
+                }
+            }
+            // Safety: never leave the freeze pin stuck if Overlay mount stalls.
+            mainHandler.postDelayed(
+                {
+                    if (secondaryTransitionCover.isPinned()) {
+                        secondaryTransitionCover.hide(force = true)
+                    }
+                },
+                LAUNCH_COVER_PIN_MS,
+            )
+        }
+    }
+
+    /**
+     * After deferred bottom UI has been applied on the live Overlay, hand
+     * Overlay → Activity (Activity Compose stayed mounted underneath).
+     */
+    fun finishLaunchCoverAfterSecondaryUi() {
+        runOnMain {
+            cancelLaunchCoverRelease()
+            val release =
+                Runnable {
+                    holdOverlayForGameLaunch = false
+                    secondaryTransitionCover.hide(force = true)
+                    WajihaLog.d(
+                        WajihaTags.DISPLAY,
+                        "secondaryCover: launch live handoff Overlay → Activity",
+                    )
+                    handSecondaryToActivityIfHealthy("launch-settled")
+                }
+            launchCoverReleaseRunnable = release
+            mainHandler.postDelayed(release, LAUNCH_COVER_AFTER_UI_MS)
+        }
+    }
+
+    private fun cancelLaunchCoverRelease() {
+        launchCoverReleaseRunnable?.let { mainHandler.removeCallbacks(it) }
+        launchCoverReleaseRunnable = null
+    }
+
+    private fun warmThen(
+        activity: Activity,
+        frames: Int,
+        onDone: () -> Unit,
+    ) {
+        val decor = activity.window?.decorView
+        if (decor == null || frames <= 0) {
+            onDone()
+            return
+        }
+        decor.post {
+            var left = frames
+
+            fun tick() {
+                decor.postOnAnimation {
+                    left--
+                    if (left <= 0) {
+                        onDone()
+                    } else {
+                        tick()
+                    }
+                }
+            }
+            tick()
+        }
+    }
+
+    /** Citra-family emus that leave a Thor display-4 Presentation sideband. */
+    private fun findLiveDualScreenPresentationOwner(): String? {
+        for (packageName in DUAL_SCREEN_PRESENTATION_PACKAGES) {
+            if (TopDisplayTaskResolver.taskIdForPackage(context, packageName) != null ||
+                SessionTaskRegistry.hasTask(packageName)
+            ) {
+                return packageName
+            }
+        }
+        return null
     }
 
     /**
@@ -397,8 +660,12 @@ class DisplayCoordinator(
                             WajihaTags.DISPLAY,
                             "secondaryHome: cleared stale secondary surface owner=$packageName",
                         )
+                        holdOverlayForForeignSurface = false
                         mainHandler.postDelayed(
-                            { bringPrimaryLauncherForward(activity) },
+                            {
+                                bringPrimaryLauncherForward(activity)
+                                handSecondaryToActivityIfHealthy("surface-released")
+                            },
                             PRIMARY_RECLAIM_AFTER_SURFACE_RELEASE_MS,
                         )
                     }.onFailure {
@@ -406,6 +673,7 @@ class DisplayCoordinator(
                             WajihaTags.DISPLAY,
                             "secondaryHome: surface release failed owner=$packageName — ${it.message}",
                         )
+                        // Keep Overlay; Activity handoff would black the panel.
                     }
             },
             SECONDARY_SURFACE_RELEASE_DELAY_MS,
@@ -413,10 +681,38 @@ class DisplayCoordinator(
     }
 
     fun onSecondaryHomeStopped(displayId: Int) {
+        if (yieldSecondaryToSystemHome) {
+            cancelSecondaryRecovery("yield-system-home:secondary-stop")
+            WajihaLog.i(
+                WajihaTags.DISPLAY,
+                "secondaryHome: stop ignored — yielding to system home " +
+                    "displayId=$displayId",
+            )
+            return
+        }
+        // Foreign app owns the bottom panel — do not reclaim over it.
+        if (store.state.value == DualScreenState.AppOnSecondary ||
+            secondaryAppPackage != null
+        ) {
+            cancelSecondaryRecovery("app-on-secondary:secondary-stop")
+            WajihaLog.i(
+                WajihaTags.DISPLAY,
+                "secondaryHome: stop ignored — app on secondary " +
+                    "pkg=$secondaryAppPackage displayId=$displayId",
+            )
+            return
+        }
         requestSecondaryRecovery(displayId, "stop")
     }
 
     private fun bringPrimaryLauncherForward(activity: Activity) {
+        if (!systemController.isDefaultLauncher()) {
+            WajihaLog.i(
+                WajihaTags.DISPLAY,
+                "secondaryHome: skip primary HOME — not default launcher",
+            )
+            return
+        }
         val primaryTaskId = MainActivity.primaryTaskId
         try {
             val homeIntent =
@@ -481,6 +777,13 @@ class DisplayCoordinator(
         reason: String,
     ) {
         runOnMain {
+            if (yieldSecondaryToSystemHome) {
+                WajihaLog.d(
+                    WajihaTags.DISPLAY,
+                    "secondaryRecovery: skip — yielding to system home reason=$reason",
+                )
+                return@runOnMain
+            }
             val physicalDisplayId = secondaryDisplay()?.displayId
             if (displayId != physicalDisplayId) {
                 WajihaLog.d(
@@ -500,6 +803,7 @@ class DisplayCoordinator(
     /** Low-frequency safety net for ROM starts that produce no fresh lifecycle callback. */
     fun probeSecondaryHome(reason: String) {
         mainHandler.post {
+            if (yieldSecondaryToSystemHome) return@post
             val now = System.currentTimeMillis()
             if (now - lastSecondaryProbeAt < SECONDARY_PROBE_MIN_INTERVAL_MS) return@post
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -514,14 +818,72 @@ class DisplayCoordinator(
     fun onSecondaryHomeResumed(activity: Activity) {
         val displayId = activity.display?.displayId ?: return
         activity.window.decorView.postDelayed(
-            { secondaryTransitionCover.hide() },
+            {
+                // Must not rip off a pinned launch freeze or live-launch Overlay.
+                if (!secondaryTransitionCover.isPinned() && !holdOverlayForGameLaunch) {
+                    secondaryTransitionCover.hide()
+                }
+            },
             SECONDARY_COVER_REMOVE_DELAY_MS,
         )
         runOnMain {
             secondaryAppPackage = null
             store.onSecondaryAppDismissed()
             secondaryRecovery.onResumed(displayId)
+            // Never tear the live cover down from focusGameOnPrimary. Also wait
+            // out foreign Presentation CLEAR_TASK — resume alone races HWC.
+            // Game-launch Overlay is released only from finishLaunchCoverAfterSecondaryUi.
+            when {
+                holdOverlayForForeignSurface -> {
+                    WajihaLog.d(
+                        WajihaTags.DISPLAY,
+                        "secondaryHost: keep Overlay — foreign secondary surface pending",
+                    )
+                }
+
+                holdOverlayForGameLaunch -> {
+                    WajihaLog.d(
+                        WajihaTags.DISPLAY,
+                        "secondaryHost: keep Overlay — game launch cover active",
+                    )
+                }
+
+                else -> {
+                    handSecondaryToActivityIfHealthy("secondary-healthy")
+                }
+            }
         }
+    }
+
+    /**
+     * Dismiss the live secondary Presentation only when the Activity surface is
+     * healthy and no Azahar-class sideband clear is in flight. Focusing a
+     * top-display game must not call this.
+     */
+    private fun handSecondaryToActivityIfHealthy(reason: String) {
+        if (holdOverlayForForeignSurface) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "secondaryHost: keep Overlay — foreign secondary surface pending reason=$reason",
+            )
+            return
+        }
+        if (holdOverlayForGameLaunch && reason != "launch-settled") {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "secondaryHost: keep Overlay — game launch cover active reason=$reason",
+            )
+            return
+        }
+        val displayId = secondaryDisplay()?.displayId ?: return
+        if (!isSecondaryHealthy(displayId)) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "secondaryHost: keep Overlay — secondary not healthy reason=$reason",
+            )
+            return
+        }
+        secondaryDisplayHost.showActivity(reason)
     }
 
     fun cancelSecondaryRecovery(reason: String) {
@@ -543,6 +905,9 @@ class DisplayCoordinator(
     private fun secondaryRecoveryGate(): SecondaryRecoveryGate {
         if (store.forceSingleScreen) {
             return SecondaryRecoveryGate(suppressReason = "single-screen")
+        }
+        if (yieldSecondaryToSystemHome) {
+            return SecondaryRecoveryGate(suppressReason = "yield-system-home")
         }
         if (store.state.value == DualScreenState.AppOnSecondary) {
             val packageName = secondaryAppPackage
@@ -581,9 +946,20 @@ class DisplayCoordinator(
     /**
      * After a game launches on the top display, pull its task above [MainActivity].
      * Without this, Thor keeps the HOME task resumed while the emulator sits invisible.
+     *
+     * Does **not** dismiss [SecondaryDisplayHost]'s live Overlay — that cover exists
+     * for foreign Presentation sidebands (Azahar/Citra). Gamepad session focus used
+     * to call showActivity here and left display 4 black. Handoff is
+     * [handSecondaryToActivityIfHealthy] from resume / surface-release only.
      */
     fun focusGameOnPrimary(packageName: String) {
-        secondaryDisplayHost.showActivity("focus-game:$packageName")
+        if (yieldSecondaryToSystemHome) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "focusGameOnPrimary: skip — yielding to system home pkg=$packageName",
+            )
+            return
+        }
         val now = System.currentTimeMillis()
         if (packageName == lastFocusGamePkg && now - lastFocusGameAt < FOCUS_DEBOUNCE_MS) {
             return
@@ -643,6 +1019,13 @@ class DisplayCoordinator(
         displayId: Int,
         launchIfNeeded: Boolean = true,
     ) {
+        if (yieldSecondaryToSystemHome) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "reclaimSecondaryHomeOnDisplay: skip — yielding to system home",
+            )
+            return
+        }
         val taskId = SecondaryHomeActivity.taskIdForDisplay(displayId)
         var moved = false
         if (taskId != null) {
@@ -669,6 +1052,13 @@ class DisplayCoordinator(
 
     /** One post-recovery check; retry attempts never manipulate display 0. */
     private fun reconcilePrimaryAfterSecondaryRecovery() {
+        if (yieldSecondaryToSystemHome) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "reconcilePrimaryAfterSecondaryRecovery: skip — yielding to system home",
+            )
+            return
+        }
         val actualTop =
             TopDisplayTaskResolver.topPackageOnDisplay(
                 context,
@@ -712,6 +1102,13 @@ class DisplayCoordinator(
             WajihaLog.d(WajihaTags.DISPLAY, "ensureSecondaryHome: skip — forceSingleScreen")
             return
         }
+        if (yieldSecondaryToSystemHome) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "ensureSecondaryHome: skip — yielding to system home",
+            )
+            return
+        }
         val display = secondaryDisplay()
         if (display == null) {
             WajihaLog.d(WajihaTags.DISPLAY, "ensureSecondaryHome: no secondary display")
@@ -743,6 +1140,13 @@ class DisplayCoordinator(
     ) {
         if (store.forceSingleScreen) {
             WajihaLog.d(WajihaTags.DISPLAY, "launchSecondaryHomeOn: skip — forceSingleScreen")
+            return
+        }
+        if (yieldSecondaryToSystemHome) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "launchSecondaryHomeOn: skip — yielding to system home",
+            )
             return
         }
         var flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
@@ -788,7 +1192,7 @@ class DisplayCoordinator(
         WajihaLog.i(WajihaTags.DISPLAY, "dismissSecondaryHome")
         cancelSecondaryRecovery("dismiss-secondary")
         secondaryDisplayHost.hideOverlay()
-        secondaryTransitionCover.hide()
+        secondaryTransitionCover.hide(force = true)
         secondaryAppPackage = null
         SecondaryHomeActivity.finishIfRunning()
     }
@@ -808,6 +1212,13 @@ class DisplayCoordinator(
     override fun onDisplayAdded(displayId: Int) {
         WajihaLog.i(WajihaTags.DISPLAY, "onDisplayAdded: displayId=$displayId")
         refresh()
+        if (yieldSecondaryToSystemHome) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "onDisplayAdded: skip recovery — yielding to system home",
+            )
+            return
+        }
         if (displayId != secondaryDisplay()?.displayId) {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
@@ -853,10 +1264,30 @@ class DisplayCoordinator(
         private const val PRIMARY_HOME_MIN_INTERVAL_MS = 2_000L
         private const val SECONDARY_COVER_REMOVE_DELAY_MS = 120L
         private const val SECONDARY_COVER_TIMEOUT_MS = 2_000L
+
+        /** Max time the bitmap freeze may bridge Activity → live Overlay mount. */
+        private const val LAUNCH_COVER_PIN_MS = 1_200L
+
+        /** Frames for Overlay Compose to paint before dropping the bitmap freeze. */
+        private const val LAUNCH_OVERLAY_WARM_FRAMES = 3
+
+        /** After launch settle on live Overlay (same Grid UI), hand to Activity. */
+        private const val LAUNCH_COVER_AFTER_UI_MS = 400L
         private const val SECONDARY_SURFACE_RELEASE_DELAY_MS = 350L
         private const val PRIMARY_RECLAIM_AFTER_SURFACE_RELEASE_MS = 180L
         private const val PRIMARY_HOME_REQUEST_CODE = 4_004
         private const val FOCUS_DEBOUNCE_MS = 400L
+
+        /** Emulators known to retain a Thor display-4 Presentation sideband. */
+        private val DUAL_SCREEN_PRESENTATION_PACKAGES =
+            listOf(
+                "org.azahar_emu.azahar",
+                "io.github.azaharplus.android",
+                "io.github.lime3ds.android",
+                "org.citra.citra_emu",
+                "org.citra.citra_emu.canary",
+                "org.citra.emu",
+            )
 
         /** Let top-display emulator win before bottom HOME reclaim runs. */
         private const val GAME_LAUNCH_RECLAIM_DEFER_MS = 800L
@@ -870,12 +1301,17 @@ class DisplayCoordinator(
         packageName: String,
         displayId: Int,
     ): Boolean {
-        if (displayId != Display.DEFAULT_DISPLAY) {
-            secondaryDisplayHost.showActivity("app-on-secondary:$packageName")
-        }
         val launchIntent =
             context.packageManager.getLaunchIntentForPackage(packageName)
                 ?: return false
+        // Mark AppOnSecondary before startActivity — SecondaryHome onStop races
+        // synchronously and used to reclaim over the just-launched app.
+        if (displayId != Display.DEFAULT_DISPLAY && !store.forceSingleScreen) {
+            secondaryAppPackage = packageName
+            store.onAppSentToSecondary()
+            cancelSecondaryRecovery("app-on-secondary")
+            secondaryDisplayHost.showActivity("app-on-secondary:$packageName")
+        }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
         val options =
             ActivityOptions
@@ -883,13 +1319,20 @@ class DisplayCoordinator(
                 .setLaunchDisplayId(displayId)
         return try {
             context.startActivity(launchIntent, options.toBundle())
-            if (displayId != Display.DEFAULT_DISPLAY && !store.forceSingleScreen) {
-                secondaryAppPackage = packageName
-                store.onAppSentToSecondary()
-                cancelSecondaryRecovery("app-on-secondary")
-            }
+            WajihaLog.i(
+                WajihaTags.DISPLAY,
+                "launchOnDisplay: pkg=$packageName displayId=$displayId",
+            )
             true
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            if (displayId != Display.DEFAULT_DISPLAY && secondaryAppPackage == packageName) {
+                secondaryAppPackage = null
+                store.onSecondaryAppDismissed()
+            }
+            WajihaLog.w(
+                WajihaTags.DISPLAY,
+                "launchOnDisplay: failed pkg=$packageName displayId=$displayId — ${error.message}",
+            )
             false
         }
     }

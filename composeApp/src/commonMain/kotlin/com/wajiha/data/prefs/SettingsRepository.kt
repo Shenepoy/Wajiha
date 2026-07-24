@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.wajiha.data.WajihaJson
 import com.wajiha.log.WajihaLog
 import com.wajiha.state.NowPlayingDisplayMode
 import kotlinx.coroutines.flow.Flow
@@ -42,7 +43,21 @@ data class AppSettings(
     val gameDimPercent: Int = 90,
     /** Seconds before dim applies after gameplay starts, and before re-dimming after idle (0 = immediate / stay lifted). */
     val gameplayDimTimeoutSeconds: Int = 10,
-    val gridRows: Int = 2,
+    /** Primary (top) game grid rows. */
+    val gridRows: Int = GameGridPreferences.DEFAULT_ROWS,
+    /** Primary game grid art: cover / icon / logo. */
+    val gameGridArt: String = GameGridPreferences.DEFAULT_ART,
+    /** Primary game grid tile size tier. */
+    val gameGridTileSize: String = GameGridPreferences.DEFAULT_TILE_SIZE,
+    /** True once the user customized primary game-grid prefs. */
+    val gameGridConfigured: Boolean = false,
+    /** Secondary game grid art (falls back to primary when unset). */
+    val gameGridSecondaryArt: String = GameGridPreferences.DEFAULT_ART,
+    val gameGridSecondaryRows: Int = GameGridPreferences.DEFAULT_ROWS,
+    val gameGridSecondaryTileSize: String = GameGridPreferences.DEFAULT_TILE_SIZE,
+    val gameGridSecondaryConfigured: Boolean = false,
+    /** Per-display free-form hero layouts. */
+    val heroLayoutBundle: HeroLayoutBundle = HeroLayoutBundle(),
     val soundsEnabled: Boolean = true,
     val onboardingDone: Boolean = false,
     /**
@@ -105,8 +120,14 @@ data class AppSettings(
     /**
      * Shared Apps drawer favorites: ordered package names (first = leftmost/top).
      * Missing/uninstalled packages are skipped when sorting and pruned on reorder.
+     * Also drives the home dock pin strip.
      */
     val appDrawerFavoritePackages: List<String> = emptyList(),
+    /**
+     * Show the persistent home dock (favorite pins + Apps/System/Settings) above
+     * the gamepad action bar on GameGrid / single-display home.
+     */
+    val showHomeDock: Boolean = true,
     /** FocusBorderStyle name (Solid, Dotted, …, Neon). */
     val focusBorderStyle: String = "Solid",
     /** Focus ring color preset (theme, white, yellow, cyan, red, …) or custom #RRGGBB hex. */
@@ -164,7 +185,24 @@ class SettingsRepository(
                 gameDimOnlyOnNowPlaying = prefs[GAME_DIM_ONLY_ON_NOW_PLAYING] ?: true,
                 gameDimPercent = normalizeGameDimPercent(prefs[GAME_DIM_PERCENT]),
                 gameplayDimTimeoutSeconds = readGameplayDimTimeoutSeconds(prefs),
-                gridRows = prefs[GRID_ROWS] ?: 2,
+                gridRows = GameGridPreferences.normalizeRows(prefs[GRID_ROWS]),
+                gameGridArt = GameGridPreferences.normalizeArt(prefs[GAME_GRID_ART]),
+                gameGridTileSize = GameGridPreferences.normalizeTileSize(prefs[GAME_GRID_TILE_SIZE]),
+                gameGridConfigured = prefs[GAME_GRID_CONFIGURED] ?: false,
+                gameGridSecondaryArt =
+                    GameGridPreferences.normalizeArt(
+                        prefs[GAME_GRID_SECONDARY_ART] ?: prefs[GAME_GRID_ART],
+                    ),
+                gameGridSecondaryRows =
+                    GameGridPreferences.normalizeRows(
+                        prefs[GAME_GRID_SECONDARY_ROWS] ?: prefs[GRID_ROWS],
+                    ),
+                gameGridSecondaryTileSize =
+                    GameGridPreferences.normalizeTileSize(
+                        prefs[GAME_GRID_SECONDARY_TILE_SIZE] ?: prefs[GAME_GRID_TILE_SIZE],
+                    ),
+                gameGridSecondaryConfigured = prefs[GAME_GRID_SECONDARY_CONFIGURED] ?: false,
+                heroLayoutBundle = decodeHeroLayoutBundle(prefs),
                 soundsEnabled = prefs[SOUNDS_ENABLED] ?: true,
                 onboardingDone = prefs[ONBOARDING_DONE] ?: false,
                 singleScreen = prefs[SINGLE_SCREEN] ?: false,
@@ -211,6 +249,7 @@ class SettingsRepository(
                         ?: AppDrawerGridPreferences.DEFAULT_SHOW_LABELS,
                 appDrawerFavoritePackages =
                     AppDrawerGridPreferences.parseFavoritePackages(prefs[APP_DRAWER_FAVORITE_PACKAGES]),
+                showHomeDock = prefs[SHOW_HOME_DOCK] ?: true,
                 focusBorderStyle = normalizeFocusBorderStyle(prefs[FOCUS_BORDER_STYLE]),
                 focusColor = normalizeFocusColor(prefs[FOCUS_COLOR]),
                 focusThickness = normalizeFocusThickness(prefs[FOCUS_THICKNESS]),
@@ -270,7 +309,78 @@ class SettingsRepository(
             "gameplayDimTimeoutSeconds",
         )
 
-    suspend fun setGridRows(value: Int) = setPref(GRID_ROWS, value, "gridRows")
+    suspend fun setGridRows(value: Int) {
+        dataStore.edit {
+            it[GRID_ROWS] = GameGridPreferences.normalizeRows(value)
+            it[GAME_GRID_CONFIGURED] = true
+        }
+        WajihaLog.setting("gridRows", GameGridPreferences.normalizeRows(value))
+    }
+
+    suspend fun setGameGridArt(value: String) {
+        dataStore.edit {
+            it[GAME_GRID_ART] = GameGridPreferences.normalizeArt(value)
+            it[GAME_GRID_CONFIGURED] = true
+        }
+        WajihaLog.setting("gameGridArt", GameGridPreferences.normalizeArt(value))
+    }
+
+    suspend fun setGameGridTileSize(value: String) {
+        dataStore.edit {
+            it[GAME_GRID_TILE_SIZE] = GameGridPreferences.normalizeTileSize(value)
+            it[GAME_GRID_CONFIGURED] = true
+        }
+        WajihaLog.setting("gameGridTileSize", GameGridPreferences.normalizeTileSize(value))
+    }
+
+    suspend fun setGameGridSecondaryRows(value: Int) {
+        dataStore.edit {
+            it[GAME_GRID_SECONDARY_ROWS] = GameGridPreferences.normalizeRows(value)
+            it[GAME_GRID_SECONDARY_CONFIGURED] = true
+        }
+        WajihaLog.setting("gameGridSecondaryRows", GameGridPreferences.normalizeRows(value))
+    }
+
+    suspend fun setGameGridSecondaryArt(value: String) {
+        dataStore.edit {
+            it[GAME_GRID_SECONDARY_ART] = GameGridPreferences.normalizeArt(value)
+            it[GAME_GRID_SECONDARY_CONFIGURED] = true
+        }
+        WajihaLog.setting("gameGridSecondaryArt", GameGridPreferences.normalizeArt(value))
+    }
+
+    suspend fun setGameGridSecondaryTileSize(value: String) {
+        dataStore.edit {
+            it[GAME_GRID_SECONDARY_TILE_SIZE] = GameGridPreferences.normalizeTileSize(value)
+            it[GAME_GRID_SECONDARY_CONFIGURED] = true
+        }
+        WajihaLog.setting("gameGridSecondaryTileSize", GameGridPreferences.normalizeTileSize(value))
+    }
+
+    suspend fun setHeroLayoutBundle(bundle: HeroLayoutBundle) {
+        dataStore.edit {
+            it[HERO_LAYOUT_BUNDLE] =
+                WajihaJson.Settings.encodeToString(HeroLayoutBundle.serializer(), bundle)
+        }
+        WajihaLog.setting(
+            "heroLayoutBundle",
+            "primary=${bundle.primary.presetId}/${bundle.primary.configured} " +
+                "secondary=${bundle.secondary.presetId}/${bundle.secondary.configured}",
+        )
+    }
+
+    suspend fun updateHeroLayoutSlot(
+        slot: HeroDisplaySlot,
+        transform: (HeroLayout) -> HeroLayout,
+    ) {
+        dataStore.edit { prefs ->
+            val current = decodeHeroLayoutBundle(prefs)
+            val next = current.withSlot(slot, transform(current.slot(slot)))
+            prefs[HERO_LAYOUT_BUNDLE] =
+                WajihaJson.Settings.encodeToString(HeroLayoutBundle.serializer(), next)
+        }
+        WajihaLog.setting("heroLayoutSlot", slot.name)
+    }
 
     suspend fun setSoundsEnabled(value: Boolean) = setPref(SOUNDS_ENABLED, value, "soundsEnabled")
 
@@ -421,6 +531,8 @@ class SettingsRepository(
         }
         WajihaLog.setting("appDrawerFavoritePackages", "move:$pkg:$delta")
     }
+
+    suspend fun setShowHomeDock(value: Boolean) = setPref(SHOW_HOME_DOCK, value, "showHomeDock")
 
     suspend fun setFocusBorderStyle(value: String) = setPref(FOCUS_BORDER_STYLE, normalizeFocusBorderStyle(value), "focusBorderStyle")
 
@@ -619,6 +731,14 @@ class SettingsRepository(
         private val GAMEPLAY_DIM_DELAY_SECONDS = intPreferencesKey("gameplay_dim_delay_seconds")
         private val GAMEPLAY_DIM_IDLE_SECONDS = intPreferencesKey("gameplay_dim_idle_seconds")
         val GRID_ROWS = intPreferencesKey("grid_rows")
+        private val GAME_GRID_ART = stringPreferencesKey("game_grid_art")
+        private val GAME_GRID_TILE_SIZE = stringPreferencesKey("game_grid_tile_size")
+        private val GAME_GRID_CONFIGURED = booleanPreferencesKey("game_grid_configured")
+        private val GAME_GRID_SECONDARY_ART = stringPreferencesKey("game_grid_secondary_art")
+        private val GAME_GRID_SECONDARY_ROWS = intPreferencesKey("game_grid_secondary_rows")
+        private val GAME_GRID_SECONDARY_TILE_SIZE = stringPreferencesKey("game_grid_secondary_tile_size")
+        private val GAME_GRID_SECONDARY_CONFIGURED = booleanPreferencesKey("game_grid_secondary_configured")
+        private val HERO_LAYOUT_BUNDLE = stringPreferencesKey("hero_layout_bundle")
         val SOUNDS_ENABLED = booleanPreferencesKey("sounds_enabled")
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
         val SINGLE_SCREEN = booleanPreferencesKey("single_screen")
@@ -643,6 +763,7 @@ class SettingsRepository(
         private val APP_DRAWER_SECONDARY_ORIENTATION = stringPreferencesKey("app_drawer_secondary_orientation")
         private val APP_DRAWER_SECONDARY_SCROLL_MODE = stringPreferencesKey("app_drawer_secondary_scroll_mode")
         private val APP_DRAWER_SECONDARY_SHOW_LABELS = booleanPreferencesKey("app_drawer_secondary_show_labels")
+        private val SHOW_HOME_DOCK = booleanPreferencesKey("show_home_dock")
         private val APP_DRAWER_FAVORITE_PACKAGES = stringPreferencesKey("app_drawer_favorite_packages")
         private val FOCUS_BORDER_STYLE = stringPreferencesKey("focus_border_style")
         private val FOCUS_COLOR = stringPreferencesKey("focus_color")
@@ -666,6 +787,34 @@ class SettingsRepository(
         private val TOP_HERO_SECTION_HINT = booleanPreferencesKey("top_hero_section_hint")
         private val IGNORE_PATTERN_FILES_ENABLED = booleanPreferencesKey("ignore_pattern_files_enabled")
         private val IGNORE_FILE_NAME_PATTERNS = stringPreferencesKey("ignore_file_name_patterns")
+
+        private fun decodeHeroLayoutBundle(prefs: Preferences): HeroLayoutBundle {
+            val raw = prefs[HERO_LAYOUT_BUNDLE]
+            if (raw.isNullOrBlank()) {
+                // One-shot migrate from legacy topHero* booleans into Classic (unconfigured).
+                return HeroLayoutPresets.fromLegacyTopHero(
+                    AppSettings(
+                        topHeroBackdrop = prefs[TOP_HERO_BACKDROP] ?: true,
+                        topHeroCover = prefs[TOP_HERO_COVER] ?: true,
+                        topHeroCoverBorder = prefs[TOP_HERO_COVER_BORDER] ?: false,
+                        topHeroLogo = prefs[TOP_HERO_LOGO] ?: true,
+                        topHeroPlatformIcon = prefs[TOP_HERO_PLATFORM_ICON] ?: true,
+                        topHeroPlatform = prefs[TOP_HERO_PLATFORM] ?: true,
+                        topHeroTitle = prefs[TOP_HERO_TITLE] ?: true,
+                        topHeroMetadata = prefs[TOP_HERO_METADATA] ?: true,
+                        topHeroDescription = prefs[TOP_HERO_DESCRIPTION] ?: true,
+                        topHeroPlayStats = prefs[TOP_HERO_PLAY_STATS] ?: true,
+                        topHeroFavorite = prefs[TOP_HERO_FAVORITE] ?: true,
+                        topHeroSectionHint = prefs[TOP_HERO_SECTION_HINT] ?: false,
+                    ),
+                )
+            }
+            return try {
+                WajihaJson.Settings.decodeFromString(HeroLayoutBundle.serializer(), raw)
+            } catch (_: Exception) {
+                HeroLayoutBundle()
+            }
+        }
     }
 }
 

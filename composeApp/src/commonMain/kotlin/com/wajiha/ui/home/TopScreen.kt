@@ -10,9 +10,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,11 +39,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.wajiha.data.prefs.AppSettings
+import com.wajiha.data.prefs.HeroDisplaySlot
+import com.wajiha.data.prefs.HeroLayoutFitter
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.SystemControls
@@ -54,15 +59,17 @@ import com.wajiha.ui.gamedetail.GameDetailMetadataPanel
 import com.wajiha.ui.gamedetail.GameDetailViewModel
 import com.wajiha.ui.gamedetail.MetadataPanelStyle
 import com.wajiha.ui.gamedetail.MetadataPanelVisibility
+import com.wajiha.ui.home.hero.HeroCanvas
+import com.wajiha.ui.home.hero.HeroLayoutEditorCanvasFromStore
 import com.wajiha.ui.scraper.review.ScrapeReviewSlotHero
 import com.wajiha.ui.settings.SettingsFocusHero
 import com.wajiha.ui.settings.SettingsHeroDetailBody
-import com.wajiha.ui.theme.WajihaAlphas
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaElevation
 import com.wajiha.ui.theme.WajihaMotion
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
@@ -75,6 +82,7 @@ fun TopScreen(
     platformName: String?,
     heroContext: HeroContext = HeroContext.GameLibrary,
     contentFocusRequester: FocusRequester? = null,
+    displaySlot: HeroDisplaySlot = HeroDisplaySlot.Primary,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -82,6 +90,9 @@ fun TopScreen(
     val frameTop = if (isDark) WajihaColors.ScreenFrame else WajihaColors.ScreenFrameLight
     val settingsRepository = koinInject<SettingsRepository>()
     val settings by settingsRepository.settings.collectAsState(initial = AppSettings())
+    val dualStore = koinInject<DualScreenStore>()
+    val layoutEditing by dualStore.heroLayoutEditing.collectAsState()
+    val editorScope = rememberCoroutineScope()
     Box(
         modifier =
             modifier
@@ -92,48 +103,73 @@ fun TopScreen(
                     ),
                 ),
     ) {
-        AnimatedContent(
-            targetState = heroContext,
-            contentKey = { it.transitionKey },
-            transitionSpec = {
-                fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
-            },
-            label = "hero-context",
-        ) { context ->
-            when (context) {
-                is HeroContext.GameLibrary -> {
-                    GameLibraryHero(
-                        focused,
-                        platformName,
-                        settings,
-                        contentFocusRequester,
-                    )
-                }
+        if (layoutEditing) {
+            HeroLayoutEditorCanvasFromStore(
+                tile = focused,
+                platformName = platformName,
+                onExit = {
+                    // B on the hero canvas — persist before clearing edit mode.
+                    // Settings controls also save on dispose; this covers swap /
+                    // owner-teardown races where that path can miss a frame.
+                    val draft = dualStore.heroLayoutEditDraft.value
+                    val slot = dualStore.heroLayoutEditSlot.value
+                    if (draft != null) {
+                        editorScope.launch {
+                            settingsRepository.updateHeroLayoutSlot(slot) {
+                                draft.copy(configured = true)
+                            }
+                        }
+                    }
+                    dualStore.setHeroLayoutEditing(false)
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            AnimatedContent(
+                targetState = heroContext,
+                contentKey = { it.transitionKey },
+                transitionSpec = {
+                    fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
+                },
+                label = "hero-context",
+            ) { context ->
+                when (context) {
+                    is HeroContext.GameLibrary -> {
+                        GameLibraryHero(
+                            focused,
+                            platformName,
+                            settings,
+                            contentFocusRequester,
+                            displaySlot,
+                        )
+                    }
 
-                is HeroContext.Settings -> {
-                    SettingsHero(context, contentFocusRequester)
-                }
+                    is HeroContext.Settings -> {
+                        SettingsHero(context, contentFocusRequester)
+                    }
 
-                is HeroContext.Apps -> {
-                    AppsHero(context, contentFocusRequester)
-                }
+                    is HeroContext.Apps -> {
+                        AppsHero(context, contentFocusRequester)
+                    }
 
-                is HeroContext.System -> {
-                    SystemHero(context, contentFocusRequester)
-                }
+                    is HeroContext.System -> {
+                        SystemHero(context, contentFocusRequester)
+                    }
 
-                is HeroContext.GameDetail -> {
-                    GameDetailHero(
-                        context.gameId,
-                        settings,
-                        contentFocusRequester,
-                    )
-                }
+                    is HeroContext.GameDetail -> {
+                        GameDetailHero(
+                            context.gameId,
+                            settings,
+                            contentFocusRequester,
+                            displaySlot,
+                        )
+                    }
 
-                is HeroContext.ScrapeReview -> {
-                    ScrapeReviewSlotHero(
-                        contentFocusRequester = contentFocusRequester,
-                    )
+                    is HeroContext.ScrapeReview -> {
+                        ScrapeReviewSlotHero(
+                            contentFocusRequester = contentFocusRequester,
+                        )
+                    }
                 }
             }
         }
@@ -147,6 +183,7 @@ private fun GameLibraryHero(
     platformName: String?,
     settings: AppSettings,
     contentFocusRequester: FocusRequester? = null,
+    displaySlot: HeroDisplaySlot = HeroDisplaySlot.Primary,
 ) {
     Box(
         modifier =
@@ -172,7 +209,7 @@ private fun GameLibraryHero(
             if (!hasFocus) {
                 IdleHero()
             } else {
-                GameHero(requireNotNull(focused), platformName, settings)
+                GameHero(requireNotNull(focused), platformName, settings, displaySlot)
             }
         }
     }
@@ -287,6 +324,7 @@ private fun GameDetailHero(
     gameId: Long,
     settings: AppSettings,
     contentFocusRequester: FocusRequester? = null,
+    displaySlot: HeroDisplaySlot = HeroDisplaySlot.Primary,
 ) {
     val viewModel = koinInject<GameDetailViewModel>()
     val dualStore = koinInject<DualScreenStore>()
@@ -295,8 +333,6 @@ private fun GameDetailHero(
     val heroDetail by dualStore.settingsHeroDetail.collectAsState()
     val game = state.game
     val scheme = MaterialTheme.colorScheme
-    val boxartPath = state.media.firstOrNull { it.type == "boxart" }?.localPath
-    val heroPath = state.media.firstOrNull { it.type == "hero" }?.localPath
     val showFocusedHelp = settings.settingsHeroHelp && heroDetail != null
     val showActions = settings.settingsHeroActions
     val focusedHero = heroDetail
@@ -312,6 +348,7 @@ private fun GameDetailHero(
 
     val firstFocus = remember { FocusRequester() }
     val resolvedFocus = contentFocusRequester ?: firstFocus
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
 
     if (game == null) {
         Box(
@@ -338,6 +375,17 @@ private fun GameDetailHero(
         return
     }
 
+    val tile =
+        remember(state) {
+            GameTile(
+                game = game,
+                boxartPath = state.media.firstOrNull { it.type == "boxart" }?.localPath,
+                heroPath = state.media.firstOrNull { it.type == "hero" }?.localPath,
+                logoPath = state.media.firstOrNull { it.type == "logo" }?.localPath,
+                iconPath = state.media.firstOrNull { it.type == "icon" }?.localPath,
+            )
+        }
+
     Box(
         modifier =
             Modifier
@@ -352,151 +400,60 @@ private fun GameDetailHero(
                     },
                 ),
     ) {
-        if (settings.topHeroBackdrop) {
-            heroPath?.let { backdrop ->
-                AsyncImage(
-                    model = backdrop,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors =
-                                        listOf(
-                                            scheme.background.copy(
-                                                alpha = WajihaAlphas.surfaceMuted,
-                                            ),
-                                            scheme.background.copy(alpha = 0.92f),
-                                        ),
-                                ),
-                            ),
-                )
-            }
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val layout =
+                remember(settings.heroLayoutBundle, displaySlot, maxWidth, maxHeight, rtl) {
+                    HeroLayoutFitter
+                        .resolveForPaint(
+                            bundle = settings.heroLayoutBundle,
+                            slot = displaySlot,
+                            canvasWidthPx = constraints.maxWidth.toFloat(),
+                            canvasHeightPx = constraints.maxHeight.toFloat(),
+                            rtl = false, // HeroCanvas mirrors for RTL once
+                        ).copy(configured = true)
+                }
+            HeroCanvas(
+                tile = tile,
+                platformName = state.platform?.name,
+                layout = layout,
+                displaySlot = displaySlot,
+                playCoverVideo = false,
+                detailContext = true,
+                dimFreeform = interactive,
+                sectionHint =
+                    "Launch, emulator, and scraper on the bottom screen  ·  L1 / R1 switch tabs",
+                modifier = Modifier.fillMaxSize(),
+            )
         }
-        Row(
-            modifier = Modifier.fillMaxSize().padding(WajihaSpacing.lg),
-            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.lg),
-            verticalAlignment = Alignment.Top,
+        // Safe-band overlays for settings-hero help / full metadata.
+        Column(
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.42f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(WajihaSpacing.lg),
+            verticalArrangement = Arrangement.Bottom,
         ) {
-            if (settings.topHeroCover) {
-                val coverShape = WajihaShapes.heroInner
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxHeight()
-                            .aspectRatio(3f / 4f)
-                            .clip(coverShape)
-                            .then(
-                                if (settings.topHeroCoverBorder) {
-                                    Modifier.border(
-                                        width = WajihaSpacing.folderEdge,
-                                        color =
-                                            scheme.outline.copy(
-                                                alpha = WajihaAlphas.outlineSubtle,
-                                            ),
-                                        shape = coverShape,
-                                    )
-                                } else {
-                                    Modifier
-                                },
-                            ),
-                    contentAlignment = Alignment.Center,
+            if (showFocusedHelp && focusedHero != null) {
+                Surface(
+                    shape = WajihaShapes.dialog,
+                    color = scheme.surfaceContainerLow.copy(alpha = 0.92f),
+                    tonalElevation = WajihaElevation.low,
+                    shadowElevation = WajihaElevation.menu,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    if (boxartPath != null) {
-                        AsyncImage(
-                            model = boxartPath,
-                            contentDescription = game.displayName,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(scheme.surfaceVariant),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = game.displayName.take(2).uppercase(),
-                                style = MaterialTheme.typography.displayLarge,
-                                color = scheme.primary,
-                            )
-                        }
-                    }
-                }
-            }
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.Top,
-            ) {
-                if (settings.topHeroTitle) {
-                    Text(
-                        text = game.displayName,
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = scheme.onBackground,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (settings.topHeroPlatform) {
-                    state.platform?.name?.let { platform ->
-                        Text(
-                            text = platform,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = scheme.primary,
-                            modifier =
-                                Modifier.padding(
-                                    top = if (settings.topHeroTitle) WajihaSpacing.smHalf else 0.dp,
-                                ),
+                    Column(modifier = Modifier.padding(WajihaSpacing.md)) {
+                        SettingsHeroDetailBody(
+                            detail = focusedHero,
+                            showActions = showActions,
+                            firstFocusRequester = if (interactive) resolvedFocus else null,
+                            compact = true,
                         )
                     }
                 }
-                if (settings.topHeroFavorite && game.favorite) {
-                    Text(
-                        text = "★ Favorite",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = scheme.tertiary,
-                        modifier = Modifier.padding(top = WajihaSpacing.sm),
-                    )
-                }
-                if (showFocusedHelp && focusedHero != null) {
-                    Surface(
-                        shape = WajihaShapes.dialog,
-                        color = scheme.surfaceContainerLow.copy(alpha = 0.92f),
-                        tonalElevation = WajihaElevation.low,
-                        shadowElevation = WajihaElevation.menu,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = WajihaSpacing.smPlus),
-                    ) {
-                        Column(modifier = Modifier.padding(WajihaSpacing.md)) {
-                            SettingsHeroDetailBody(
-                                detail = focusedHero,
-                                showActions = showActions,
-                                firstFocusRequester = if (interactive) resolvedFocus else null,
-                                compact = true,
-                            )
-                        }
-                    }
-                } else if (settings.topHeroSectionHint) {
-                    Text(
-                        text = "Launch, emulator, and scraper on the bottom screen  ·  L1 / R1 switch tabs",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = scheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = WajihaSpacing.sm),
-                    )
-                }
+            } else {
                 GameDetailMetadataPanel(
                     game = game,
                     platformName = state.platform?.name,
@@ -504,16 +461,29 @@ private fun GameDetailHero(
                     style = MetadataPanelStyle.Full,
                     visibility =
                         MetadataPanelVisibility(
-                            metadata = settings.topHeroMetadata,
-                            description = settings.topHeroDescription,
-                            playStats = settings.topHeroPlayStats,
+                            metadata =
+                                layoutElementVisible(settings, displaySlot, com.wajiha.data.prefs.HeroElementId.Metadata),
+                            description =
+                                layoutElementVisible(settings, displaySlot, com.wajiha.data.prefs.HeroElementId.Description),
+                            playStats =
+                                layoutElementVisible(settings, displaySlot, com.wajiha.data.prefs.HeroElementId.PlayStats),
                         ),
-                    modifier = Modifier.padding(top = 12.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
     }
 }
+
+private fun layoutElementVisible(
+    settings: AppSettings,
+    slot: HeroDisplaySlot,
+    id: com.wajiha.data.prefs.HeroElementId,
+): Boolean =
+    settings.heroLayoutBundle
+        .slot(slot)
+        .element(id)
+        ?.visible ?: true
 
 @Composable
 private fun AppsHero(
@@ -621,145 +591,30 @@ private fun GameHero(
     tile: GameTile,
     platformName: String?,
     settings: AppSettings,
+    displaySlot: HeroDisplaySlot = HeroDisplaySlot.Primary,
 ) {
-    val scheme = MaterialTheme.colorScheme
-    val backdrop = tile.heroPath ?: tile.boxartPath
-    val showCover = settings.topHeroCover
-    val showLogo = settings.topHeroLogo && showCover
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (settings.topHeroBackdrop) {
-            HeroArtworkTransition(
-                tile = tile,
-                modifier = Modifier.fillMaxSize(),
-            ) { current ->
-                val currentBackdrop = current.heroPath ?: current.boxartPath
-                if (currentBackdrop != null) {
-                    AsyncImage(
-                        model = currentBackdrop,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val layout =
+            remember(settings.heroLayoutBundle, displaySlot, maxWidth, maxHeight, rtl) {
+                HeroLayoutFitter
+                    .resolveForPaint(
+                        bundle = settings.heroLayoutBundle,
+                        slot = displaySlot,
+                        canvasWidthPx = constraints.maxWidth.toFloat(),
+                        canvasHeightPx = constraints.maxHeight.toFloat(),
+                        rtl = false, // HeroCanvas mirrors for RTL once
+                    ).copy(configured = true) // paint-only; keep ephemeral auto-fit from mutating twice
             }
-            if (backdrop != null) {
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors =
-                                        listOf(
-                                            scheme.background.copy(
-                                                alpha = WajihaAlphas.surfaceMuted,
-                                            ),
-                                            scheme.background.copy(alpha = 0.92f),
-                                        ),
-                                ),
-                            ),
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxSize().padding(WajihaSpacing.lg),
-            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.lg),
-        ) {
-            if (showCover) {
-                val coverShape = WajihaShapes.heroInner
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxHeight()
-                            .aspectRatio(3f / 4f)
-                            .clip(coverShape)
-                            .then(
-                                if (settings.topHeroCoverBorder) {
-                                    Modifier.border(
-                                        width = WajihaSpacing.folderEdge,
-                                        color =
-                                            scheme.outline.copy(
-                                                alpha = WajihaAlphas.outlineSubtle,
-                                            ),
-                                        shape = coverShape,
-                                    )
-                                } else {
-                                    Modifier
-                                },
-                            ),
-                ) {
-                    HeroArtworkTransition(
-                        tile = tile,
-                        modifier = Modifier.fillMaxSize(),
-                    ) { current ->
-                        when {
-                            current.videoPath != null -> {
-                                VideoPreview(
-                                    path = current.videoPath,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
-
-                            current.boxartPath != null -> {
-                                AsyncImage(
-                                    model = current.boxartPath,
-                                    contentDescription = current.game.displayName,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
-
-                            else -> {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier =
-                                        Modifier
-                                            .fillMaxSize()
-                                            .background(scheme.surfaceVariant),
-                                ) {
-                                    Text(
-                                        text =
-                                            current.game.displayName
-                                                .take(2)
-                                                .uppercase(),
-                                        style = MaterialTheme.typography.displayLarge,
-                                        color = scheme.primary,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    if (showLogo) {
-                        HeroArtworkTransition(
-                            tile = tile,
-                            modifier =
-                                Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth(0.85f)
-                                    .padding(12.dp),
-                        ) { current ->
-                            current.logoPath?.let { logo ->
-                                AsyncImage(
-                                    model = logo,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Fit,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            HeroMetadataTransition(
-                tile = tile,
-                modifier =
-                    Modifier
-                        .fillMaxHeight()
-                        .weight(1f),
-            ) { current ->
-                GameHeroMetadata(current, platformName, settings)
-            }
-        }
+        HeroCanvas(
+            tile = tile,
+            platformName = platformName,
+            layout = layout,
+            displaySlot = displaySlot,
+            playCoverVideo = true,
+            detailContext = false,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

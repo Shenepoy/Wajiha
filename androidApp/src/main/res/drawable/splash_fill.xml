@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solid splash glyph so Android 12+ does not show the adaptive launcher icon
+     on a dark starting window (reads as a black flash on Thor bottom). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/wajiha_background_light" />
+</shape>

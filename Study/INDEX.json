@@ -1,6 +1,6 @@
 {
   "purpose": "Machine-readable index of Study corpus for Wajiha emulation launcher",
-  "updated": "2026-07-20",
+  "updated": "2026-07-22",
   "wajiha": {
     "root": "../",
     "stack": "Kotlin Multiplatform, Compose Multiplatform, Gradle",
@@ -52,17 +52,40 @@
     },
     {
       "id": "cocoon",
-      "path": "cocoon-beta-2-2.apk",
-      "extracted": "_extracted/cocoon/",
+      "path": "cocoon-3.apk",
+      "extracted": "_extracted/cocoon-3/",
+      "priorPath": "cocoon-beta-2-2.apk",
+      "priorExtracted": "_extracted/cocoon/",
       "type": "apk",
-      "stack": ["Kotlin", "Jetpack Compose", "Room", "Discord SDK", "rcheevos"],
+      "stack": [
+        "Kotlin 2.2",
+        "Jetpack Compose",
+        "Room 2.8",
+        "Ktor",
+        "Discord SDK",
+        "rcheevos",
+        "JavaSteam",
+        "LaunchBox DB"
+      ],
       "package": "rip.moth.cocoonshell",
-      "versionName": "b2.2",
+      "versionName": "3.0",
       "versionCode": 1,
       "minSdk": 24,
       "targetSdk": 36,
+      "roomSchemaVersion": 35,
       "dualDisplay": true,
+      "dualDisplayFeatures": ["SECONDARY_HOME", "ExternalDisplayActivity", "ScreenType grid"],
       "homeLauncher": true,
+      "features": [
+        "widget grid + zoom placement",
+        "smart folders",
+        "liquid glass",
+        "dock + icon packs",
+        "pending game sessions",
+        "Picnic/Log/Silk pods",
+        "notification listener",
+        "category backup"
+      ],
       "doc": "docs/05-cocoon-apk.md"
     },
     {

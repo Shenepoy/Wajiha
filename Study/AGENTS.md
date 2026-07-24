@@ -32,7 +32,8 @@ Do **not** assume iOS/desktop parity for launcher features; Android is the prima
 | Native Compose dual-screen HOME | RetroHrai `SecondaryDisplayActivity`; **iiSU** `SecondaryHomeActivity` + `DualDisplayStateMachine` |
 | Dual-display power UX (Thor) | **iiSU** `blackOutUnusedDisplayOnLaunch`, `LauncherKeepAliveService` — `docs/09-iisu-apk.md` |
 | iiSU emulator JSON (173 consoles) | `Study/_extracted/iisu/assets/emuladores_default.json` |
-| Widget grid + smart folders | Cocoon APK Room schema (`folders`, `widgets`, `grid_positions`) |
+| Widget grid + smart folders | Cocoon **3.0** Room schema (`grid_layout`/`grid_placement`, `widgets`, smart `folders`) — `docs/05-cocoon-apk.md` |
+| Pending play-session recovery | Cocoon `pending_game_sessions` + FG_* focus logs |
 | RetroAchievements | All study apps integrate RA; NeoStation has fullest open-source implementation |
 | Icon packs / appfilter / shapes | `lawnchair/` + `docs/10-lawnchair-icons.md` (Apache; reimplement GPL-header shape files) |
 

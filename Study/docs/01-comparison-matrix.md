@@ -54,7 +54,9 @@ Quick reference for choosing patterns when implementing Wajiha features.
 | ScreenScraper | Yes | DSESS | Yes | ScrapeActivity | Yes |
 | Cloud / server ROM sync | NeoSync | — | — | — | **RomM** |
 | Discord | — | — | — | Yes | Yes |
-| SteamGridDB | — | — | — | — | Yes |
+| SteamGridDB | — | — | — | Yes | Yes |
+| LaunchBox / HLTB | — | — | — | Yes (3.0) | — |
+| Notification listener UI | — | — | — | Yes (3.0) | — |
 | Google Calendar | — | — | — | — | Yes |
 
 ## Best reference per Wajiha feature
@@ -68,5 +70,6 @@ Quick reference for choosing patterns when implementing Wajiha features.
 | Dual-screen (max documented code) | NeoStation `MainActivity.kt` + `secondary_screen.dart` |
 | Platform JSON import | RetroHrai `assets/platforms/`, Daijishō GitHub |
 | Intent launch edge cases | `EmulatorLauncher.kt` |
-| Widget home screen | Cocoon Room `widgets` / `widget_columns` |
+| Widget home screen | Cocoon **3.0** `widgets` + zoom `grid_layout`/`grid_placement` |
+| Durable play-session recovery | Cocoon `pending_game_sessions` |
 | Gamepad focus stack | NeoStation `game_service.dart` (`GamepadNavigationManager`) |

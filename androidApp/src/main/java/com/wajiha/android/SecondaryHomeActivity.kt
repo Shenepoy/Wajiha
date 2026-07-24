@@ -9,11 +9,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.display.SecondaryDisplayHost
-import com.wajiha.android.display.SecondaryRenderSurface
 import com.wajiha.android.input.GamepadGate
 import com.wajiha.android.input.GamepadKeyRouter
 import com.wajiha.android.input.TriggerAxisHandler
@@ -96,12 +93,10 @@ class SecondaryHomeActivity : ComponentActivity() {
         // their own Compose BackHandlers on top of this).
         onBackPressedDispatcher.addCallback(this) { }
         hideSystemStatusBar()
-        setContent {
-            val renderSurface by secondaryDisplayHost.surface.collectAsState()
-            if (renderSurface == SecondaryRenderSurface.Activity) {
-                SecondaryApp()
-            }
-        }
+        // Always keep Activity Compose mounted. When the live Overlay Presentation
+        // owns the panel, Activity still paints underneath so Overlay → Activity
+        // handoff never remounts into an empty/black first frame.
+        setContent { SecondaryApp() }
         window.decorView.post {
             triggerAxisHandler.installOn(this, gamepadGate)
         }
@@ -239,6 +234,8 @@ class SecondaryHomeActivity : ComponentActivity() {
         private var instanceRef: WeakReference<SecondaryHomeActivity>? = null
 
         fun taskIdForDisplay(displayId: Int): Int? = displayTaskIds[displayId]
+
+        fun instance(): SecondaryHomeActivity? = instanceRef?.get()
 
         fun registerTask(
             displayId: Int,

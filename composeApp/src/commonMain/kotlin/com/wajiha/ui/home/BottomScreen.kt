@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -41,6 +42,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -79,6 +81,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
+import com.wajiha.data.prefs.GameGridPreferences
 import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
@@ -86,10 +89,19 @@ import com.wajiha.input.rememberedFocusTarget
 import com.wajiha.input.requestContentFocus
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
+import com.wajiha.platform.LaunchableApp
 import com.wajiha.state.GamepadOwner
 import com.wajiha.state.NowPlayingState
+import com.wajiha.ui.apps.AppContextMenu
+import com.wajiha.ui.apps.AppContextTarget
+import com.wajiha.ui.components.DockShellAction
+import com.wajiha.ui.components.DockSlot
+import com.wajiha.ui.components.WajihaDock
 import com.wajiha.ui.components.WajihaEmptyState
 import com.wajiha.ui.components.WajihaScreen
+import com.wajiha.ui.components.buildDockSlots
+import com.wajiha.ui.components.dockPinSlotCount
+import com.wajiha.ui.components.dockPinStartIndex
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.GamepadHintGlyph
@@ -119,7 +131,9 @@ import kotlin.math.roundToInt
 @Composable
 fun BottomScreen(
     state: HomeUiState,
-    gridRows: Int = 2,
+    gridRows: Int = GameGridPreferences.DEFAULT_ROWS,
+    gameGridArt: String = GameGridPreferences.DEFAULT_ART,
+    gameGridTileSize: String = GameGridPreferences.DEFAULT_TILE_SIZE,
     onSelectPlatform: (String?) -> Unit,
     onFocusGame: (Long?) -> Unit,
     onLaunchGame: (Long) -> Unit,
@@ -148,6 +162,17 @@ fun BottomScreen(
     onOpenSession: (String) -> Unit = {},
     onCloseSession: (String) -> Unit = {},
     showSessionGrid: Boolean = true,
+    /** Persistent home dock above the gamepad action bar. */
+    showHomeDock: Boolean = true,
+    dockApps: List<LaunchableApp> = emptyList(),
+    dockFavoritePackages: List<String> = emptyList(),
+    dockIconShape: String = "system",
+    onLaunchDockApp: (String) -> Unit = {},
+    onLaunchDockAppOnDisplay: (String, Int) -> Unit = { pkg, _ -> onLaunchDockApp(pkg) },
+    onRemoveDockFavorite: (String) -> Unit = {},
+    onMoveDockFavorite: (String, Int) -> Unit = { _, _ -> },
+    onOpenDockAppInfo: (String) -> Unit = {},
+    onLoadDockApps: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val rememberedGameId = rememberedFocusTarget("home_grid") as? Long
@@ -163,25 +188,88 @@ fun BottomScreen(
                     ?.id,
         )
     }
+
+    /** Clamped rows from measure-time resolve — D-pad must match LazyHorizontalGrid. */
+    var effectiveGridRows by remember(gridRows) { mutableStateOf(gridRows.coerceAtLeast(1)) }
     var selectedSessionPackage by remember { mutableStateOf<String?>(null) }
     var previousGameIds by remember { mutableStateOf(state.tiles.map { it.game.id }) }
     var contextMenuTarget by remember { mutableStateOf<GameContextTarget?>(null) }
     var contextMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
     var sessionContextMenuTarget by remember { mutableStateOf<SessionContextTarget?>(null) }
     var sessionContextMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
+    var dockFocused by remember { mutableStateOf(false) }
+    var selectedDockIndex by remember { mutableStateOf(0) }
+    var dockContextMenuTarget by remember { mutableStateOf<AppContextTarget?>(null) }
+    var dockContextMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
     val tileBoundsById = remember { mutableStateMapOf<Long, Rect>() }
     val sessionTileBoundsByPackage = remember { mutableStateMapOf<String, Rect>() }
+    val dockTileBoundsByIndex = remember { mutableStateMapOf<Int, Rect>() }
+    val dockTileBoundsByPackage = remember { mutableStateMapOf<String, Rect>() }
     var restoringGridFocus by remember { mutableStateOf(false) }
     var restoreFocusGameId by remember { mutableStateOf<Long?>(null) }
     var restoringSessionFocus by remember { mutableStateOf(false) }
     var restoreFocusSessionPackage by remember { mutableStateOf<String?>(null) }
     val tileFocusRequesters = remember { mutableStateMapOf<Long, FocusRequester>() }
     val sessionFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
+    val dockFocusRequesters = remember { mutableStateMapOf<Int, FocusRequester>() }
     val emptyActionFocus = remember { FocusRequester() }
-    val menuOpen = contextMenuTarget != null || sessionContextMenuTarget != null
+    val menuOpen =
+        contextMenuTarget != null ||
+            sessionContextMenuTarget != null ||
+            dockContextMenuTarget != null
     val sessionFocused = selectedSessionPackage != null
     val gridSessions = if (showSessionGrid) sessions else emptyList()
     val focusManager = LocalFocusManager.current
+    val dockPins =
+        remember(dockApps, dockFavoritePackages) {
+            val byPkg = dockApps.associateBy { it.packageName }
+            dockFavoritePackages.mapNotNull { byPkg[it] }
+        }
+    val dockSlots = remember(dockPins) { buildDockSlots(pins = dockPins) }
+    val showDock = showHomeDock
+    val dockMenuPackage = dockContextMenuTarget?.packageName
+    val dockMenuPinIndex =
+        remember(dockMenuPackage, dockSlots) {
+            if (dockMenuPackage == null) {
+                -1
+            } else {
+                dockSlots.indexOfFirst {
+                    it is DockSlot.Pin && it.app.packageName == dockMenuPackage
+                }
+            }
+        }
+    val dockMenuPinBounds =
+        dockMenuPackage?.let { dockTileBoundsByPackage[it] }
+    LaunchedEffect(showDock) {
+        if (showDock) onLoadDockApps()
+    }
+    LaunchedEffect(dockSlots.size) {
+        dockSlots.indices.forEach { index ->
+            if (dockFocusRequesters[index] == null) {
+                dockFocusRequesters[index] = FocusRequester()
+            }
+        }
+        if (selectedDockIndex !in dockSlots.indices && dockSlots.isNotEmpty()) {
+            selectedDockIndex = 0
+        }
+    }
+    // Keep selection + menu cutout on the same pin while favorites reorder.
+    LaunchedEffect(dockMenuPackage, dockMenuPinIndex, dockMenuPinBounds) {
+        if (dockMenuPackage == null || dockMenuPinIndex < 0) return@LaunchedEffect
+        if (selectedDockIndex != dockMenuPinIndex) {
+            selectedDockIndex = dockMenuPinIndex
+        }
+        if (dockMenuPinBounds != null && dockContextMenuAnchorBounds != dockMenuPinBounds) {
+            dockContextMenuAnchorBounds = dockMenuPinBounds
+        }
+    }
+    LaunchedEffect(showDock) {
+        if (!showDock) {
+            dockFocused = false
+            dockContextMenuTarget = null
+            dockContextMenuAnchorBounds = null
+        }
+    }
     val initiallySelectedGameIndex = state.tiles.indexOfFirst { it.game.id == selectedGameId }
     val initialLibraryIndex =
         if (initiallySelectedGameIndex >= 0) {
@@ -368,6 +456,7 @@ fun BottomScreen(
 
     fun exitSessionFocusToLibrary(): Boolean {
         selectedSessionPackage = null
+        dockFocused = false
         val gameId =
             selectedGameId ?: state.tiles
                 .firstOrNull()
@@ -377,6 +466,117 @@ fun BottomScreen(
         selectedGameId = gameId
         onFocusGame(gameId)
         return true
+    }
+
+    fun enterDock(preferredIndex: Int = 0): Boolean {
+        if (!showDock || dockSlots.isEmpty()) return false
+        selectedSessionPackage = null
+        dockFocused = true
+        selectedDockIndex = preferredIndex.coerceIn(0, dockSlots.lastIndex)
+        try {
+            dockFocusRequesters[selectedDockIndex]?.requestFocus()
+        } catch (_: Exception) {
+        }
+        return true
+    }
+
+    /** Enter dock from the library, landing on a pin aligned to the focused column. */
+    fun enterDockFromLibrary(): Boolean {
+        val ids = state.tiles.map { it.game.id }
+        val index = selectedGameId?.let { ids.indexOf(it) } ?: -1
+        val rows = effectiveGridRows.coerceAtLeast(1)
+        val col = if (index >= 0) index / rows else 0
+        val pinCount = dockPinSlotCount(dockPins)
+        val pinLocal = col.coerceIn(0, pinCount - 1)
+        return enterDock(dockPinStartIndex() + pinLocal)
+    }
+
+    fun exitDockToLibrary(): Boolean {
+        if (!dockFocused) return false
+        dockFocused = false
+        dockContextMenuTarget = null
+        dockContextMenuAnchorBounds = null
+        val gameId =
+            selectedGameId ?: state.tiles
+                .firstOrNull()
+                ?.game
+                ?.id
+        if (gameId != null) {
+            selectedGameId = gameId
+            onFocusGame(gameId)
+            try {
+                tileFocusRequesters[gameId]?.requestFocus()
+            } catch (_: Exception) {
+            }
+            return true
+        }
+        if (gridSessions.isNotEmpty()) {
+            val pkg = gridSessions.first().packageName
+            selectedSessionPackage = pkg
+            onFocusSession(pkg)
+            try {
+                sessionFocusRequesters[pkg]?.requestFocus()
+            } catch (_: Exception) {
+            }
+            return true
+        }
+        return true
+    }
+
+    fun moveDockFocus(delta: Int): Boolean {
+        if (!dockFocused || dockSlots.isEmpty()) return false
+        val next = (selectedDockIndex + delta).coerceIn(0, dockSlots.lastIndex)
+        if (next == selectedDockIndex) return true
+        selectedDockIndex = next
+        try {
+            dockFocusRequesters[next]?.requestFocus()
+        } catch (_: Exception) {
+        }
+        return true
+    }
+
+    fun activateDockIndex(index: Int): Boolean {
+        when (val slot = dockSlots.getOrNull(index)) {
+            is DockSlot.Pin -> {
+                onLaunchDockApp(slot.app.packageName)
+            }
+
+            DockSlot.Add -> {
+                onOpenApps()
+            }
+
+            is DockSlot.Shell -> {
+                when (slot.action) {
+                    DockShellAction.Apps -> onOpenApps()
+                    DockShellAction.Settings -> onOpenSettings()
+                }
+            }
+
+            null -> {
+                return false
+            }
+        }
+        return true
+    }
+
+    fun openDockPinMenu(index: Int): Boolean {
+        val pin = dockSlots.getOrNull(index) as? DockSlot.Pin ?: return false
+        selectedDockIndex = index
+        dockContextMenuAnchorBounds =
+            dockTileBoundsByPackage[pin.app.packageName] ?: dockTileBoundsByIndex[index]
+        dockContextMenuTarget = AppContextTarget(pin.app.packageName, pin.app.label)
+        return true
+    }
+
+    fun dismissDockContextMenu() {
+        dockContextMenuTarget = null
+        dockContextMenuAnchorBounds = null
+        if (dockFocused) {
+            try {
+                dockFocusRequesters[selectedDockIndex]?.requestFocus()
+            } catch (_: Exception) {
+            }
+        }
     }
 
     /**
@@ -460,12 +660,17 @@ fun BottomScreen(
         val currentId = selectedGameId ?: return false
         val index = ids.indexOf(currentId)
         if (index < 0) return false
-        val rows = gridRows.coerceAtLeast(1)
+        val rows = effectiveGridRows.coerceAtLeast(1)
         val row = index % rows
         val col = index / rows
         val nextRow = row + deltaRow
         val nextCol = col + deltaCol
-        if (nextRow !in 0 until rows) return true
+        if (nextRow !in 0 until rows) {
+            if (deltaRow > 0 && showDock && row == rows - 1) {
+                return enterDockFromLibrary()
+            }
+            return true
+        }
         if (nextCol < 0) {
             if (gridSessions.isEmpty()) return true
             val lastSessionCol = (gridSessions.lastIndex) / rows
@@ -516,10 +721,30 @@ fun BottomScreen(
     }
 
     val gamepadHints =
-        remember(state.platforms, menuOpen, sessionFocused, gridSessions.size, dualDisplay) {
+        remember(
+            state.platforms,
+            menuOpen,
+            sessionFocused,
+            dockFocused,
+            gridSessions.size,
+            dualDisplay,
+            showDock,
+            dockSlots,
+            selectedDockIndex,
+        ) {
             buildList {
                 if (menuOpen) {
                     add(GamepadHint(GamepadHintButton.B, "Back"))
+                } else if (dockFocused) {
+                    add(GamepadHint(GamepadHintButton.A, "Launch"))
+                    if (dockSlots.getOrNull(selectedDockIndex) is DockSlot.Pin) {
+                        add(GamepadHint(GamepadHintButton.X, "Edit"))
+                    }
+                    add(GamepadHint(GamepadHintButton.B, "Games"))
+                    if (dualDisplay) {
+                        add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
+                        add(GamepadHint(GamepadHintButton.Select, "Swap"))
+                    }
                 } else if (sessionFocused) {
                     add(GamepadHint(GamepadHintButton.A, "Switch"))
                     add(GamepadHint(GamepadHintButton.Y, "Close"))
@@ -557,6 +782,16 @@ fun BottomScreen(
     WajihaScreen(
         modifier = modifier.fillMaxSize(),
         layerId = "home_grid",
+        // BUTTON_B is routed via the activity back dispatcher (not preview keys).
+        onBack =
+            if (dockFocused && showDock) {
+                {
+                    exitDockToLibrary()
+                    Unit
+                }
+            } else {
+                null
+            },
         showActionBar = true,
         gamepadHints = gamepadHints,
         gamepadOwner = gamepadOwner,
@@ -569,52 +804,111 @@ fun BottomScreen(
             },
         onOwnerGainedFocus = {
             if (!menuOpen) {
-                val sessionPkg = selectedSessionPackage
-                if (sessionPkg != null) {
-                    val sessionIndex = gridSessions.indexOfFirst { it.packageName == sessionPkg }
-                    val sessionIsVisible =
-                        libraryGridState.layoutInfo.visibleItemsInfo.any { info ->
-                            info.key == "session-$sessionPkg" &&
-                                info.hasCenterInViewport(
-                                    libraryGridState.layoutInfo,
-                                    horizontalScroll = true,
-                                )
-                        }
-                    if (sessionIndex >= 0 && !sessionIsVisible) {
-                        libraryGridState.scrollToItem(sessionIndex)
-                        withFrameNanos { }
-                    }
-                    sessionFocusRequesters[sessionPkg]?.requestContentFocus()
+                if (dockFocused && showDock) {
+                    dockFocusRequesters[selectedDockIndex]?.requestContentFocus()
                 } else {
-                    val gameId =
-                        selectedGameId ?: state.tiles
-                            .firstOrNull()
-                            ?.game
-                            ?.id
-                    if (gameId != null) {
-                        val gameIsVisible =
+                    val sessionPkg = selectedSessionPackage
+                    if (sessionPkg != null) {
+                        val sessionIndex = gridSessions.indexOfFirst { it.packageName == sessionPkg }
+                        val sessionIsVisible =
                             libraryGridState.layoutInfo.visibleItemsInfo.any { info ->
-                                info.key == gameId &&
+                                info.key == "session-$sessionPkg" &&
                                     info.hasCenterInViewport(
                                         libraryGridState.layoutInfo,
                                         horizontalScroll = true,
                                     )
                             }
-                        if (!gameIsVisible) {
-                            libraryLazyIndexForGame(gameId)?.let { lazyIndex ->
-                                // Fallback for mutations or an already-mounted grid
-                                // whose viewport predates the role swap.
-                                libraryGridState.scrollToItem(lazyIndex)
-                                withFrameNanos { }
-                            }
+                        if (sessionIndex >= 0 && !sessionIsVisible) {
+                            libraryGridState.scrollToItem(sessionIndex)
+                            withFrameNanos { }
                         }
-                        tileFocusRequesters[gameId]?.requestContentFocus()
+                        sessionFocusRequesters[sessionPkg]?.requestContentFocus()
+                    } else {
+                        val gameId =
+                            selectedGameId ?: state.tiles
+                                .firstOrNull()
+                                ?.game
+                                ?.id
+                        if (gameId != null) {
+                            val gameIsVisible =
+                                libraryGridState.layoutInfo.visibleItemsInfo.any { info ->
+                                    info.key == gameId &&
+                                        info.hasCenterInViewport(
+                                            libraryGridState.layoutInfo,
+                                            horizontalScroll = true,
+                                        )
+                                }
+                            if (!gameIsVisible) {
+                                libraryLazyIndexForGame(gameId)?.let { lazyIndex ->
+                                    // Fallback for mutations or an already-mounted grid
+                                    // whose viewport predates the role swap.
+                                    libraryGridState.scrollToItem(lazyIndex)
+                                    withFrameNanos { }
+                                }
+                            }
+                            tileFocusRequesters[gameId]?.requestContentFocus()
+                        } else if (showDock) {
+                            enterDock()
+                        }
                     }
                 }
             }
         },
         onPreviewKey = { event ->
             if (menuOpen) return@WajihaScreen false
+            if (dockFocused && showDock) {
+                return@WajihaScreen when {
+                    GamepadKeys.isLeft(event.type, event.key) -> {
+                        moveDockFocus(-1)
+                    }
+
+                    GamepadKeys.isRight(event.type, event.key) -> {
+                        moveDockFocus(1)
+                    }
+
+                    GamepadKeys.isUp(event.type, event.key) -> {
+                        exitDockToLibrary()
+                    }
+
+                    GamepadKeys.isDown(event.type, event.key) -> {
+                        true
+                    }
+
+                    GamepadKeys.isConfirm(event.type, event.key) -> {
+                        activateDockIndex(selectedDockIndex)
+                    }
+
+                    GamepadKeys.isX(event.type, event.key) -> {
+                        openDockPinMenu(selectedDockIndex)
+                        // Consume even on Add/shell — hints hide Edit there; don't leak X.
+                        true
+                    }
+
+                    GamepadKeys.isBack(event.type, event.key) -> {
+                        exitDockToLibrary()
+                    }
+
+                    GamepadKeys.isL1(event.type, event.key) -> {
+                        cyclePlatformFilter(
+                            state = state,
+                            delta = -1,
+                            onSelectPlatform = onSelectPlatform,
+                        )
+                    }
+
+                    GamepadKeys.isR1(event.type, event.key) -> {
+                        cyclePlatformFilter(
+                            state = state,
+                            delta = 1,
+                            onSelectPlatform = onSelectPlatform,
+                        )
+                    }
+
+                    else -> {
+                        false
+                    }
+                }
+            }
             selectedSessionPackage?.let { pkg ->
                 when {
                     GamepadKeys.isLeft(event.type, event.key) -> {
@@ -630,7 +924,13 @@ fun BottomScreen(
                     }
 
                     GamepadKeys.isDown(event.type, event.key) -> {
-                        cycleSessionFocus(1) || gridSessions.size == 1
+                        if (cycleSessionFocus(1)) {
+                            true
+                        } else if (showDock) {
+                            enterDockFromLibrary()
+                        } else {
+                            gridSessions.size == 1
+                        }
                     }
 
                     GamepadKeys.isX(event.type, event.key) -> {
@@ -723,6 +1023,9 @@ fun BottomScreen(
                         onOpenSettings = onOpenSettings,
                         onOpenSystem = onOpenSystem,
                         overlayOnHero = false,
+                        // Dock owns Apps/Settings; System stays top-right when available.
+                        showAppsAction = !showDock,
+                        showSettingsAction = !showDock,
                         // Center only in single + no-hero when the game name is shown.
                         // Dual and name-hidden single keep filters parked on the left.
                         centerFilters = !dualDisplay && focusedGameTitle != null,
@@ -734,7 +1037,7 @@ fun BottomScreen(
                     WajihaEmptyState(
                         title = "No games yet",
                         subtitle = "Add a platform, then point Wajiha at a ROM folder",
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         action = {
                             LaunchedEffect(onAddGames) {
                                 withFrameNanos { }
@@ -792,7 +1095,7 @@ fun BottomScreen(
                             }
                             previousGameIds = ids
                             if (!menuOpen && !restoringGridFocus && !restoringSessionFocus &&
-                                !sessionFocused && selectedGameId != null
+                                !sessionFocused && !dockFocused && selectedGameId != null
                             ) {
                                 try {
                                     tileFocusRequesters[selectedGameId]?.requestFocus()
@@ -831,220 +1134,316 @@ fun BottomScreen(
                             }
                         }
 
-                        LazyHorizontalGrid(
-                            rows = GridCells.Fixed(gridRows),
-                            state = libraryGridState,
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    // Track finger-down in Initial pass so LazyGrid scroll
-                                    // still reaches us; scroll-while-down arms viewport snap.
-                                    .pointerInput(Unit) {
-                                        awaitEachGesture {
-                                            awaitFirstDown(
-                                                requireUnconsumed = false,
-                                                pass = PointerEventPass.Initial,
-                                            )
-                                            libraryPointerDown.set(true)
-                                            // Capture side only for a fresh snap cycle. A second
-                                            // swipe after the tile has drifted left must not
-                                            // overwrite trailing=true from the original right-side
-                                            // selection.
-                                            if (!pendingLibraryViewportSnapLatest.value) {
-                                                val preferTrailing =
-                                                    selectionOnTrailingHalfOfViewport(
-                                                        selectedGameIdForSnap.value,
+                        val gridSlot =
+                            remember(gameGridArt, gridRows, gameGridTileSize) {
+                                GameGridPreferences.Slot(
+                                    art = gameGridArt,
+                                    rows = gridRows,
+                                    tileSize = gameGridTileSize,
+                                    configured = true,
+                                )
+                            }
+                        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                            val resolvedGrid =
+                                remember(gridSlot, maxHeight) {
+                                    GameGridPreferences.resolve(gridSlot, maxHeight)
+                                }
+                            val tileAspect = resolvedGrid.aspectRatio
+                            val tileScale = resolvedGrid.contentScale
+                            val tileArt = resolvedGrid.art
+                            val tileHeightFrac = resolvedGrid.sizeFactor.coerceIn(0.70f, 1f)
+                            // Keep D-pad math in lockstep with LazyHorizontalGrid rows —
+                            // LaunchedEffect lags one frame and can send Down into the dock
+                            // while the visible grid still has a lower row.
+                            SideEffect {
+                                if (effectiveGridRows != resolvedGrid.rows) {
+                                    effectiveGridRows = resolvedGrid.rows
+                                }
+                            }
+                            LaunchedEffect(resolvedGrid.rows, tileArt, resolvedGrid.tileSize) {
+                                // Density/art change: keep selection, re-snap viewport + focus.
+                                val gameId = selectedGameId ?: return@LaunchedEffect
+                                val index = state.tiles.indexOfFirst { it.game.id == gameId }
+                                if (index >= 0) {
+                                    val sessionOffset =
+                                        if (gridSessions.isNotEmpty()) {
+                                            gridSessions.size + 1
+                                        } else {
+                                            0
+                                        }
+                                    runCatching {
+                                        libraryGridState.scrollToItem(sessionOffset + index)
+                                    }
+                                }
+                                withFrameNanos { }
+                                runCatching { tileFocusRequesters[gameId]?.requestFocus() }
+                            }
+                            LazyHorizontalGrid(
+                                rows = GridCells.Fixed(resolvedGrid.rows),
+                                state = libraryGridState,
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        // Track finger-down in Initial pass so LazyGrid scroll
+                                        // still reaches us; scroll-while-down arms viewport snap.
+                                        .pointerInput(Unit) {
+                                            awaitEachGesture {
+                                                awaitFirstDown(
+                                                    requireUnconsumed = false,
+                                                    pass = PointerEventPass.Initial,
+                                                )
+                                                libraryPointerDown.set(true)
+                                                // Capture side only for a fresh snap cycle. A second
+                                                // swipe after the tile has drifted left must not
+                                                // overwrite trailing=true from the original right-side
+                                                // selection.
+                                                if (!pendingLibraryViewportSnapLatest.value) {
+                                                    val preferTrailing =
+                                                        selectionOnTrailingHalfOfViewport(
+                                                            selectedGameIdForSnap.value,
+                                                        )
+                                                    librarySnapPreferTrailing.set(preferTrailing)
+                                                    WajihaLog.i(
+                                                        WajihaTags.DEBUG,
+                                                        "gridFocus: capture snapSide trailing=$preferTrailing " +
+                                                            "sel=${selectedGameIdForSnap.value}",
                                                     )
-                                                librarySnapPreferTrailing.set(preferTrailing)
-                                                WajihaLog.i(
-                                                    WajihaTags.DEBUG,
-                                                    "gridFocus: capture snapSide trailing=$preferTrailing " +
-                                                        "sel=${selectedGameIdForSnap.value}",
-                                                )
-                                            } else {
-                                                WajihaLog.i(
-                                                    WajihaTags.DEBUG,
-                                                    "gridFocus: keep snapSide trailing=${librarySnapPreferTrailing.get()} " +
-                                                        "sel=${selectedGameIdForSnap.value}",
-                                                )
-                                            }
-                                            try {
-                                                while (true) {
-                                                    val event =
-                                                        awaitPointerEvent(PointerEventPass.Initial)
-                                                    if (event.changes.none { it.pressed }) break
+                                                } else {
+                                                    WajihaLog.i(
+                                                        WajihaTags.DEBUG,
+                                                        "gridFocus: keep snapSide trailing=${librarySnapPreferTrailing.get()} " +
+                                                            "sel=${selectedGameIdForSnap.value}",
+                                                    )
                                                 }
-                                            } finally {
-                                                libraryPointerDown.set(false)
-                                                if (!libraryGridState.isScrollInProgress &&
-                                                    pendingLibraryViewportSnapLatest.value
-                                                ) {
-                                                    pendingLibraryViewportSnap = false
-                                                    snapLibraryFocusToVisibleViewport()
+                                                try {
+                                                    while (true) {
+                                                        val event =
+                                                            awaitPointerEvent(PointerEventPass.Initial)
+                                                        if (event.changes.none { it.pressed }) break
+                                                    }
+                                                } finally {
+                                                    libraryPointerDown.set(false)
+                                                    if (!libraryGridState.isScrollInProgress &&
+                                                        pendingLibraryViewportSnapLatest.value
+                                                    ) {
+                                                        pendingLibraryViewportSnap = false
+                                                        snapLibraryFocusToVisibleViewport()
+                                                    }
+                                                    // Keep Compose focus on the selected tile (only it
+                                                    // is focusable). clearFocus here used to drop key
+                                                    // delivery so the post-scroll D-pad never snapped.
                                                 }
-                                                // Keep Compose focus on the selected tile (only it
-                                                // is focusable). clearFocus here used to drop key
-                                                // delivery so the post-scroll D-pad never snapped.
                                             }
+                                        },
+                                contentPadding =
+                                    PaddingValues(
+                                        start = WajihaSpacing.md + WajihaSpacing.xs,
+                                        top = WajihaSpacing.md + WajihaSpacing.xs,
+                                        // Extra end/bottom so D-pad can rest the last column/row
+                                        // fully on-screen (focus ring + selected scale).
+                                        end = WajihaSpacing.xl,
+                                        bottom = WajihaSpacing.xl,
+                                    ),
+                                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.md),
+                                verticalArrangement = Arrangement.spacedBy(WajihaSpacing.md),
+                            ) {
+                                if (gridSessions.isNotEmpty()) {
+                                    items(gridSessions, key = { "session-${it.packageName}" }) { session ->
+                                        val isSelected =
+                                            session.packageName ==
+                                                (sessionContextMenuTarget?.packageName ?: selectedSessionPackage)
+                                        val sessionFocus =
+                                            remember(session.packageName) {
+                                                sessionFocusRequesters.getOrPut(session.packageName) { FocusRequester() }
+                                            }
+                                        val isMenuSession =
+                                            menuOpen &&
+                                                sessionContextMenuTarget?.packageName == session.packageName
+                                        val isRestoreSession =
+                                            restoringSessionFocus &&
+                                                (restoreFocusSessionPackage ?: selectedSessionPackage) ==
+                                                session.packageName
+                                        SessionGridTile(
+                                            session = session,
+                                            isOnTop = topDisplayPackage == session.packageName,
+                                            isFeatured = featuredSessionPackage == session.packageName,
+                                            selected = isSelected && !dockFocused,
+                                            onSelect = {
+                                                if (selectionLocked) return@SessionGridTile
+                                                if (gamepadOwner != null) {
+                                                    onClaimGamepad?.invoke(gamepadOwner)
+                                                }
+                                                dockFocused = false
+                                                selectedSessionPackage = session.packageName
+                                                selectedGameId = null
+                                                onFocusSession(session.packageName)
+                                            },
+                                            onOpen = { onOpenSession(session.packageName) },
+                                            onClose = { onCloseSession(session.packageName) },
+                                            onLongPress = {
+                                                if (selectionLocked) return@SessionGridTile
+                                                if (gamepadOwner != null) {
+                                                    onClaimGamepad?.invoke(gamepadOwner)
+                                                }
+                                                dockFocused = false
+                                                selectedSessionPackage = session.packageName
+                                                selectedGameId = null
+                                                onFocusSession(session.packageName)
+                                                openSessionContextMenu(session.packageName)
+                                            },
+                                            focusRequester = sessionFocus,
+                                            gamepadFocusable =
+                                                when {
+                                                    menuOpen || dockFocused -> false
+
+                                                    restoringSessionFocus -> isRestoreSession
+
+                                                    // Only the selected session accepts Compose focus —
+                                                    // prevents scroll from parking focus on a peek tile.
+                                                    else -> isSelected
+                                                },
+                                            navHighlighted = (isMenuSession || isRestoreSession) && isSelected,
+                                            artStyle = tileArt,
+                                            contentScale = tileScale,
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxHeight(tileHeightFrac)
+                                                    .aspectRatio(tileAspect)
+                                                    .then(
+                                                        if (isMenuSession) Modifier.zIndex(1f) else Modifier,
+                                                    ).onGloballyPositioned { coords ->
+                                                        sessionTileBoundsByPackage[session.packageName] =
+                                                            coords.boundsInRoot()
+                                                    },
+                                        )
+                                    }
+                                    item(
+                                        key = "session-divider",
+                                        span = { GridItemSpan(maxLineSpan) },
+                                    ) {
+                                        VerticalDivider(
+                                            modifier = Modifier.fillMaxSize(),
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                                        )
+                                    }
+                                }
+                                items(state.tiles, key = { it.game.id }) { tile ->
+                                    val lockedGameId = contextMenuTarget?.gameId ?: selectedGameId
+                                    val isSelected = tile.game.id == lockedGameId
+                                    val tileFocus =
+                                        remember(tile.game.id) {
+                                            tileFocusRequesters.getOrPut(tile.game.id) { FocusRequester() }
                                         }
-                                    },
-                            contentPadding =
-                                PaddingValues(
-                                    start = WajihaSpacing.md + WajihaSpacing.xs,
-                                    top = WajihaSpacing.md + WajihaSpacing.xs,
-                                    // Extra end/bottom so D-pad can rest the last column/row
-                                    // fully on-screen (focus ring + selected scale).
-                                    end = WajihaSpacing.xl,
-                                    bottom = WajihaSpacing.xl,
-                                ),
-                            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.md),
-                            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.md),
-                        ) {
-                            if (gridSessions.isNotEmpty()) {
-                                items(gridSessions, key = { "session-${it.packageName}" }) { session ->
-                                    val isSelected =
-                                        session.packageName ==
-                                            (sessionContextMenuTarget?.packageName ?: selectedSessionPackage)
-                                    val sessionFocus =
-                                        remember(session.packageName) {
-                                            sessionFocusRequesters.getOrPut(session.packageName) { FocusRequester() }
-                                        }
-                                    val isMenuSession =
-                                        menuOpen &&
-                                            sessionContextMenuTarget?.packageName == session.packageName
-                                    val isRestoreSession =
-                                        restoringSessionFocus &&
-                                            (restoreFocusSessionPackage ?: selectedSessionPackage) ==
-                                            session.packageName
-                                    SessionGridTile(
-                                        session = session,
-                                        isOnTop = topDisplayPackage == session.packageName,
-                                        isFeatured = featuredSessionPackage == session.packageName,
-                                        selected = isSelected,
+                                    val isMenuTile = menuOpen && contextMenuTarget?.gameId == tile.game.id
+                                    val isRestoreTile =
+                                        restoringGridFocus &&
+                                            (restoreFocusGameId ?: selectedGameId) == tile.game.id
+                                    GameTileCard(
+                                        tile = tile,
+                                        selected = isSelected && !dockFocused,
+                                        artStyle = tileArt,
+                                        contentScale = tileScale,
                                         onSelect = {
-                                            if (selectionLocked) return@SessionGridTile
+                                            if (selectionLocked) return@GameTileCard
                                             if (gamepadOwner != null) {
                                                 onClaimGamepad?.invoke(gamepadOwner)
                                             }
-                                            selectedSessionPackage = session.packageName
-                                            selectedGameId = null
-                                            onFocusSession(session.packageName)
+                                            // Touch pick owns the origin — don't snap on next D-pad.
+                                            pendingLibraryViewportSnap = false
+                                            dockFocused = false
+                                            selectedSessionPackage = null
+                                            selectedGameId = tile.game.id
+                                            onFocusGame(tile.game.id)
                                         },
-                                        onOpen = { onOpenSession(session.packageName) },
-                                        onClose = { onCloseSession(session.packageName) },
+                                        onLaunch = { onLaunchGame(tile.game.id) },
                                         onLongPress = {
-                                            if (selectionLocked) return@SessionGridTile
+                                            if (selectionLocked) return@GameTileCard
                                             if (gamepadOwner != null) {
                                                 onClaimGamepad?.invoke(gamepadOwner)
                                             }
-                                            selectedSessionPackage = session.packageName
-                                            selectedGameId = null
-                                            onFocusSession(session.packageName)
-                                            openSessionContextMenu(session.packageName)
+                                            dockFocused = false
+                                            selectedGameId = tile.game.id
+                                            onFocusGame(tile.game.id)
+                                            openContextMenu(tile.game.id)
                                         },
-                                        focusRequester = sessionFocus,
+                                        onFocusChanged = { focused ->
+                                            WajihaLog.i(
+                                                WajihaTags.DEBUG,
+                                                "gridFocus: tileFocus gameId=${tile.game.id} " +
+                                                    "name=${tile.game.displayName} focused=$focused " +
+                                                    "selected=$isSelected " +
+                                                    libraryGridState.debugScrollSnapshot(tile.game.id),
+                                            )
+                                        },
+                                        focusRequester = tileFocus,
                                         gamepadFocusable =
                                             when {
-                                                menuOpen -> false
+                                                menuOpen || dockFocused -> false
 
-                                                restoringSessionFocus -> isRestoreSession
+                                                restoringGridFocus -> isRestoreTile
 
-                                                // Only the selected session accepts Compose focus —
-                                                // prevents scroll from parking focus on a peek tile.
+                                                // Only the selected tile is focusable. Touch-scroll
+                                                // otherwise moves Compose focus onto the first/peek
+                                                // tile while selectedGameId stays elsewhere — user
+                                                // sees "first" then D-pad snap jumps to the real edge.
                                                 else -> isSelected
                                             },
-                                        navHighlighted = (isMenuSession || isRestoreSession) && isSelected,
+                                        navHighlighted = (isMenuTile || isRestoreTile) && isSelected,
                                         modifier =
                                             Modifier
-                                                .aspectRatio(3f / 4f)
+                                                .fillMaxHeight(tileHeightFrac)
+                                                .aspectRatio(tileAspect)
                                                 .then(
-                                                    if (isMenuSession) Modifier.zIndex(1f) else Modifier,
+                                                    if (isMenuTile) Modifier.zIndex(1f) else Modifier,
                                                 ).onGloballyPositioned { coords ->
-                                                    sessionTileBoundsByPackage[session.packageName] =
-                                                        coords.boundsInRoot()
+                                                    tileBoundsById[tile.game.id] = coords.boundsInRoot()
                                                 },
                                     )
                                 }
-                                item(
-                                    key = "session-divider",
-                                    span = { GridItemSpan(maxLineSpan) },
-                                ) {
-                                    VerticalDivider(
-                                        modifier = Modifier.fillMaxSize(),
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
-                                    )
-                                }
-                            }
-                            items(state.tiles, key = { it.game.id }) { tile ->
-                                val lockedGameId = contextMenuTarget?.gameId ?: selectedGameId
-                                val isSelected = tile.game.id == lockedGameId
-                                val tileFocus =
-                                    remember(tile.game.id) {
-                                        tileFocusRequesters.getOrPut(tile.game.id) { FocusRequester() }
-                                    }
-                                val isMenuTile = menuOpen && contextMenuTarget?.gameId == tile.game.id
-                                val isRestoreTile =
-                                    restoringGridFocus &&
-                                        (restoreFocusGameId ?: selectedGameId) == tile.game.id
-                                GameTileCard(
-                                    tile = tile,
-                                    selected = isSelected,
-                                    onSelect = {
-                                        if (selectionLocked) return@GameTileCard
-                                        if (gamepadOwner != null) {
-                                            onClaimGamepad?.invoke(gamepadOwner)
-                                        }
-                                        // Touch pick owns the origin — don't snap on next D-pad.
-                                        pendingLibraryViewportSnap = false
-                                        selectedSessionPackage = null
-                                        selectedGameId = tile.game.id
-                                        onFocusGame(tile.game.id)
-                                    },
-                                    onLaunch = { onLaunchGame(tile.game.id) },
-                                    onLongPress = {
-                                        if (selectionLocked) return@GameTileCard
-                                        if (gamepadOwner != null) {
-                                            onClaimGamepad?.invoke(gamepadOwner)
-                                        }
-                                        selectedGameId = tile.game.id
-                                        onFocusGame(tile.game.id)
-                                        openContextMenu(tile.game.id)
-                                    },
-                                    onFocusChanged = { focused ->
-                                        WajihaLog.i(
-                                            WajihaTags.DEBUG,
-                                            "gridFocus: tileFocus gameId=${tile.game.id} " +
-                                                "name=${tile.game.displayName} focused=$focused " +
-                                                "selected=$isSelected " +
-                                                libraryGridState.debugScrollSnapshot(tile.game.id),
-                                        )
-                                    },
-                                    focusRequester = tileFocus,
-                                    gamepadFocusable =
-                                        when {
-                                            menuOpen -> false
-
-                                            restoringGridFocus -> isRestoreTile
-
-                                            // Only the selected tile is focusable. Touch-scroll
-                                            // otherwise moves Compose focus onto the first/peek
-                                            // tile while selectedGameId stays elsewhere — user
-                                            // sees "first" then D-pad snap jumps to the real edge.
-                                            else -> isSelected
-                                        },
-                                    navHighlighted = (isMenuTile || isRestoreTile) && isSelected,
-                                    modifier =
-                                        Modifier
-                                            .aspectRatio(3f / 4f)
-                                            .then(
-                                                if (isMenuTile) Modifier.zIndex(1f) else Modifier,
-                                            ).onGloballyPositioned { coords ->
-                                                tileBoundsById[tile.game.id] = coords.boundsInRoot()
-                                            },
-                                )
                             }
                         }
                     }
+                }
+
+                if (showDock) {
+                    WajihaDock(
+                        pins = dockPins,
+                        selectedIndex = selectedDockIndex,
+                        dockFocused = dockFocused,
+                        iconShape = dockIconShape,
+                        onSelectIndex = { index ->
+                            dockFocused = true
+                            selectedSessionPackage = null
+                            selectedDockIndex = index
+                        },
+                        onActivateIndex = { index ->
+                            dockFocused = true
+                            selectedDockIndex = index
+                            activateDockIndex(index)
+                        },
+                        onLongPressIndex = { index ->
+                            dockFocused = true
+                            selectedDockIndex = index
+                            if (!openDockPinMenu(index)) {
+                                activateDockIndex(index)
+                            }
+                        },
+                        focusRequesters = dockFocusRequesters,
+                        onSlotBoundsChanged = { index, bounds ->
+                            dockTileBoundsByIndex[index] = bounds
+                            when (val slot = dockSlots.getOrNull(index)) {
+                                is DockSlot.Pin -> {
+                                    dockTileBoundsByPackage[slot.app.packageName] = bounds
+                                }
+
+                                else -> {
+                                    Unit
+                                }
+                            }
+                        },
+                        // Keep pin selection chrome while the menu owns Compose focus.
+                        claimFocus = dockContextMenuTarget == null,
+                    )
                 }
             }
 
@@ -1066,6 +1465,38 @@ fun BottomScreen(
                 anchorBounds = sessionContextMenuAnchorBounds,
                 onDismiss = ::dismissSessionContextMenu,
                 onCloseSession = onCloseSession,
+                modifier = Modifier.zIndex(2f),
+            )
+
+            AppContextMenu(
+                target = dockContextMenuTarget,
+                anchorBounds = dockContextMenuAnchorBounds,
+                onDismiss = ::dismissDockContextMenu,
+                onOpenAppInfo = onOpenDockAppInfo,
+                onLaunchOnDisplay = onLaunchDockAppOnDisplay,
+                dualDisplay = dualDisplay,
+                topDisplayId = 0,
+                bottomDisplayId = secondaryDisplayId ?: 4,
+                isFavorite = true,
+                canMoveFavoriteUp =
+                    dockContextMenuTarget?.let { target ->
+                        dockPins.indexOfFirst { it.packageName == target.packageName } > 0
+                    } ?: false,
+                canMoveFavoriteDown =
+                    dockContextMenuTarget?.let { target ->
+                        val idx = dockPins.indexOfFirst { it.packageName == target.packageName }
+                        idx >= 0 && idx < dockPins.lastIndex
+                    } ?: false,
+                onToggleFavorite = { pkg ->
+                    onRemoveDockFavorite(pkg)
+                    dismissDockContextMenu()
+                },
+                onMoveFavoriteUp = { pkg ->
+                    onMoveDockFavorite(pkg, -1)
+                },
+                onMoveFavoriteDown = { pkg ->
+                    onMoveDockFavorite(pkg, 1)
+                },
                 modifier = Modifier.zIndex(2f),
             )
         }
@@ -1113,6 +1544,9 @@ private fun GameGridHeroBackdrop(path: String) {
  * [centerFilters] — filter centered with optional [gameTitle] on the left
  * (single-screen, hero off, name shown). Dual / name-hidden single use a left-
  * parked filter row.
+ *
+ * When the home dock is shown, Apps/Settings move to the dock corners and only
+ * System remains here (top-right).
  */
 @Composable
 fun HomeChromeBar(
@@ -1122,10 +1556,16 @@ fun HomeChromeBar(
     onOpenSettings: () -> Unit,
     onOpenSystem: (() -> Unit)? = null,
     overlayOnHero: Boolean,
+    showAppsAction: Boolean = true,
+    showSettingsAction: Boolean = true,
     centerFilters: Boolean = false,
     gameTitle: String? = null,
     modifier: Modifier = Modifier,
 ) {
+    val showChromeActions =
+        showAppsAction ||
+            showSettingsAction ||
+            onOpenSystem != null
     if (overlayOnHero) {
         Box(
             modifier =
@@ -1152,17 +1592,21 @@ fun HomeChromeBar(
                 modifier =
                     Modifier
                         .align(Alignment.BottomCenter)
-                        .fillMaxWidth(0.62f),
+                        .fillMaxWidth(if (showChromeActions) 0.62f else 0.86f),
                 contentPadding = PaddingValues(horizontal = WajihaSpacing.sm),
                 fadeEdges = true,
                 centerContent = true,
             )
-            HomeChromeActions(
-                onOpenApps = onOpenApps,
-                onOpenSettings = onOpenSettings,
-                onOpenSystem = onOpenSystem,
-                modifier = Modifier.align(Alignment.BottomEnd),
-            )
+            if (showChromeActions) {
+                HomeChromeActions(
+                    onOpenApps = onOpenApps,
+                    onOpenSettings = onOpenSettings,
+                    onOpenSystem = onOpenSystem,
+                    showApps = showAppsAction,
+                    showSettings = showSettingsAction,
+                    modifier = Modifier.align(Alignment.BottomEnd),
+                )
+            }
         }
     } else if (centerFilters && gameTitle != null) {
         // True-center filters against Settings. Name width tracks free space
@@ -1228,16 +1672,20 @@ fun HomeChromeBar(
                         .width(nameWidth)
                         .zIndex(1f),
             )
-            HomeChromeActions(
-                onOpenApps = onOpenApps,
-                onOpenSettings = onOpenSettings,
-                onOpenSystem = onOpenSystem,
-                modifier =
-                    Modifier
-                        .align(Alignment.CenterEnd)
-                        .zIndex(2f)
-                        .onSizeChanged { actionsWidthPx = it.width },
-            )
+            if (showChromeActions) {
+                HomeChromeActions(
+                    onOpenApps = onOpenApps,
+                    onOpenSettings = onOpenSettings,
+                    onOpenSystem = onOpenSystem,
+                    showApps = showAppsAction,
+                    showSettings = showSettingsAction,
+                    modifier =
+                        Modifier
+                            .align(Alignment.CenterEnd)
+                            .zIndex(2f)
+                            .onSizeChanged { actionsWidthPx = it.width },
+                )
+            }
         }
     } else {
         // Dual, or single with hero off and no game name: filters parked left.
@@ -1260,11 +1708,15 @@ fun HomeChromeBar(
                 fadeEdges = true,
                 centerContent = false,
             )
-            HomeChromeActions(
-                onOpenApps = onOpenApps,
-                onOpenSettings = onOpenSettings,
-                onOpenSystem = onOpenSystem,
-            )
+            if (showChromeActions) {
+                HomeChromeActions(
+                    onOpenApps = onOpenApps,
+                    onOpenSettings = onOpenSettings,
+                    onOpenSystem = onOpenSystem,
+                    showApps = showAppsAction,
+                    showSettings = showSettingsAction,
+                )
+            }
         }
     }
 }
@@ -1548,23 +2000,27 @@ private fun HomeChromeActions(
     onOpenApps: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSystem: (() -> Unit)?,
+    showApps: Boolean = true,
+    showSettings: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.focusProperties { canFocus = false }) {
-            TextButton(onClick = onOpenApps) {
-                Text("Apps")
-            }
-            // Overlay on the Apps button only; does not expand the row.
-            Box(modifier = Modifier.matchParentSize()) {
-                GamepadHintGlyph(
-                    button = GamepadHintButton.L3,
-                    size = 12.dp,
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 2.dp, end = 2.dp),
-                )
+        if (showApps) {
+            Box(modifier = Modifier.focusProperties { canFocus = false }) {
+                TextButton(onClick = onOpenApps) {
+                    Text("Apps")
+                }
+                // Overlay on the Apps button only; does not expand the row.
+                Box(modifier = Modifier.matchParentSize()) {
+                    GamepadHintGlyph(
+                        button = GamepadHintButton.L3,
+                        size = 12.dp,
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 2.dp, end = 2.dp),
+                    )
+                }
             }
         }
         if (onOpenSystem != null) {
@@ -1573,20 +2029,22 @@ private fun HomeChromeActions(
                 modifier = Modifier.focusProperties { canFocus = false },
             ) { Text("System") }
         }
-        Box(modifier = Modifier.focusProperties { canFocus = false }) {
-            TextButton(onClick = onOpenSettings) {
-                Text("Settings")
-            }
-            // Overlay on the Settings button only; does not expand the row.
-            Box(modifier = Modifier.matchParentSize()) {
-                GamepadHintGlyph(
-                    button = GamepadHintButton.Start,
-                    size = 12.dp,
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 2.dp, end = 2.dp),
-                )
+        if (showSettings) {
+            Box(modifier = Modifier.focusProperties { canFocus = false }) {
+                TextButton(onClick = onOpenSettings) {
+                    Text("Settings")
+                }
+                // Overlay on the Settings button only; does not expand the row.
+                Box(modifier = Modifier.matchParentSize()) {
+                    GamepadHintGlyph(
+                        button = GamepadHintButton.Start,
+                        size = 12.dp,
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 2.dp, end = 2.dp),
+                    )
+                }
             }
         }
     }
@@ -1621,8 +2079,17 @@ private fun GameTileCard(
     focusRequester: FocusRequester? = null,
     gamepadFocusable: Boolean = true,
     navHighlighted: Boolean = false,
+    artStyle: String = GameGridPreferences.DEFAULT_ART,
+    contentScale: ContentScale = ContentScale.Crop,
     modifier: Modifier = Modifier,
 ) {
+    val artPath =
+        GameGridPreferences.resolveArtPath(
+            art = artStyle,
+            boxartPath = tile.boxartPath,
+            iconPath = tile.iconPath,
+            logoPath = tile.logoPath,
+        )
     GamepadTile(
         selected = selected,
         onSelect = onSelect,
@@ -1643,12 +2110,21 @@ private fun GameTileCard(
             shape = WajihaShapes.tile,
         ) {
             Box {
-                if (tile.boxartPath != null) {
+                if (artPath != null) {
                     AsyncImage(
-                        model = tile.boxartPath,
+                        model = artPath,
                         contentDescription = tile.game.displayName,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+                        contentScale = contentScale,
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    if (contentScale == ContentScale.Fit) {
+                                        WajihaSpacing.sm
+                                    } else {
+                                        0.dp
+                                    },
+                                ),
                     )
                     Box(
                         modifier =

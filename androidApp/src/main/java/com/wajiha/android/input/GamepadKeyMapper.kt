@@ -2,6 +2,8 @@ package com.wajiha.android.input
 
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import com.wajiha.input.GamepadBackPreview
+import com.wajiha.input.dispatchTopLayerPreviewKey
 import com.wajiha.input.tryDispatchTopLayerPreviewKey
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
@@ -43,7 +45,22 @@ fun handleGamepadKey(
         }
 
         KeyEvent.KEYCODE_BUTTON_B -> {
+            // Let screen preview handle B-down first (e.g. dock → games). If consumed,
+            // skip the UP back so we don't also fire activity BackHandler.
+            if (
+                event.action == KeyEvent.ACTION_DOWN &&
+                event.repeatCount == 0 &&
+                dispatchTopLayerPreviewKey(event)
+            ) {
+                GamepadBackPreview.consumeNextBUp = true
+                WajihaLog.d(WajihaTags.GAMEPAD, "map: BUTTON_B → preview consumed")
+                return true
+            }
             if (event.action == KeyEvent.ACTION_UP) {
+                if (GamepadBackPreview.consumeNextBUp) {
+                    GamepadBackPreview.consumeNextBUp = false
+                    return true
+                }
                 WajihaLog.d(WajihaTags.GAMEPAD, "map: BUTTON_B → back")
                 activity.onBackPressedDispatcher.onBackPressed()
             }

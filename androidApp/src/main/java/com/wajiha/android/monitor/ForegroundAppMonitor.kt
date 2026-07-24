@@ -118,7 +118,7 @@ class ForegroundAppMonitor(
                 "switchToSession: no cache for $packageName (task switch only)",
             )
         }
-        store.setTopDisplayForeground(packageName)
+        publishTopDisplayForeground(packageName)
         lastForeground = packageName
         pendingTopHidePackage = null
         lastSeenForegroundAt[packageName] = System.currentTimeMillis()
@@ -153,7 +153,7 @@ class ForegroundAppMonitor(
         sessionController.onSessionStarted(packageName)
         lastForeground = packageName
         pendingTopHidePackage = null
-        store.setTopDisplayForeground(packageName)
+        publishTopDisplayForeground(packageName)
         lastSeenForegroundAt[packageName] = System.currentTimeMillis()
         SessionTaskRegistry.captureTaskId(context, packageName)
         WajihaLog.i(WajihaTags.NOW_PLAYING, "onSessionStarted: $packageName")
@@ -419,11 +419,17 @@ class ForegroundAppMonitor(
         reason: String,
     ) {
         if (packageName == previous) return
-        store.setTopDisplayForeground(packageName)
+        publishTopDisplayForeground(packageName)
         WajihaLog.d(
             WajihaTags.NOW_PLAYING,
             "topDisplay: ${previous ?: "none"} -> $packageName ($reason)",
         )
+    }
+
+    /** UI clocks + persisted playtime pause/resume for non-top sessions. */
+    private fun publishTopDisplayForeground(packageName: String?) {
+        store.setTopDisplayForeground(packageName)
+        sessionTracker.syncTopDisplayForeground(packageName)
     }
 
     /** Session actually on display 0 — distinct from grid-featured [DualScreenStore.nowPlaying]. */
@@ -729,6 +735,7 @@ class ForegroundAppMonitor(
                 boxartPath = preserve?.boxartPath,
                 heroPath = preserve?.heroPath,
                 logoPath = preserve?.logoPath,
+                iconPath = preserve?.iconPath,
                 sessionStartedAt = preserve?.sessionStartedAt ?: System.currentTimeMillis(),
                 sessionElapsedMs = preserve?.sessionElapsedMs ?: 0L,
                 sessionResumedAt = preserve?.sessionResumedAt ?: 0L,
@@ -778,6 +785,7 @@ class ForegroundAppMonitor(
                 boxartPath = resolved.boxartPath ?: cached.boxartPath,
                 heroPath = resolved.heroPath ?: cached.heroPath,
                 logoPath = resolved.logoPath ?: cached.logoPath,
+                iconPath = resolved.iconPath ?: cached.iconPath,
             )
         if (enriched == cached) return
         store.updateGameSession(enriched)

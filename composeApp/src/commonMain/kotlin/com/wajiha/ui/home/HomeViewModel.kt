@@ -185,6 +185,21 @@ class HomeViewModel(
         appActions.launchApp(packageName)
     }
 
+    /**
+     * Home dock pins open on the bottom/secondary display when dual-screen is
+     * active; single-screen falls back to the primary display.
+     */
+    fun launchDockApp(packageName: String) {
+        if (!tryBeginLaunch()) return
+        appActions.playSound(UiSound.Open)
+        val secondaryId = dualScreenStore.secondaryDisplayId.value
+        if (secondaryId != null && !dualScreenStore.forceSingleScreen) {
+            appActions.launchAppOnDisplay(packageName, secondaryId)
+        } else {
+            appActions.launchApp(packageName)
+        }
+    }
+
     fun launchAppOnDisplay(
         packageName: String,
         displayId: Int,

@@ -1,8 +1,6 @@
 package com.wajiha.android.launch
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.view.Display
 import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.monitor.ForegroundAppMonitor
@@ -19,6 +17,8 @@ import com.wajiha.log.WajihaLogKind
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.NowPlayingState
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 /**
  * Resolves a game to a [LaunchSpec] (per-game emulator override → platform
@@ -38,7 +38,6 @@ class GameLauncher(
     private val displayCoordinator: DisplayCoordinator,
 ) {
     private val json = WajihaJson.Default
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     suspend fun launchGame(gameId: Long): LaunchResult {
         val game =
@@ -108,11 +107,21 @@ class GameLauncher(
                 boxartPath = media.firstOrNull { it.type == "boxart" }?.localPath,
                 heroPath = media.firstOrNull { it.type == "hero" }?.localPath,
                 logoPath = media.firstOrNull { it.type == "logo" }?.localPath,
+                iconPath = media.firstOrNull { it.type == "icon" }?.localPath,
                 sessionStartedAt = now,
                 sessionResumedAt = now,
                 launchedByWajiha = true,
             )
+        // Keep GameGrid on a live Overlay through startActivity (bitmap freeze
+        // alone flashed black when dismissed onto a paused Activity). Preferred
+        // mode (Now Playing) is applied on the Overlay after launch, then we
+        // hand Overlay → Activity once both trees already show the same UI.
         dualScreenStore.beginGameSession(session, deferSecondaryUi = true)
+        suspendCancellableCoroutine { cont ->
+            displayCoordinator.armSecondaryLiveCoverForLaunch {
+                if (cont.isActive) cont.resume(Unit)
+            }
+        }
         WajihaLog.i(
             WajihaLogKind.LAUNCH,
             "launchGame: start pkg=$packageName displayId=$resolvedDisplay " +
@@ -127,15 +136,12 @@ class GameLauncher(
             foregroundAppMonitor.onSessionStarted(packageName)
             displayCoordinator.focusGameOnPrimary(packageName)
             KeepAliveService.start(context)
-            // Apply Now Playing / preferred bottom UI after the emulator attaches —
-            // doing it inside beginGameSession flashes the bottom screen black.
-            mainHandler.postDelayed(
-                { dualScreenStore.applyDeferredSecondaryModeAfterLaunch() },
-                SECONDARY_UI_AFTER_LAUNCH_MS,
-            )
+            dualScreenStore.applyDeferredSecondaryModeAfterLaunch()
+            displayCoordinator.finishLaunchCoverAfterSecondaryUi()
             WajihaLog.i(WajihaLogKind.LAUNCH, "launchGame: ok pkg=$packageName gameId=${game.id}")
         } else {
             dualScreenStore.endGameSession(packageName)
+            displayCoordinator.finishLaunchCoverAfterSecondaryUi()
             WajihaLog.w(
                 WajihaLogKind.LAUNCH,
                 "launchGame: failed pkg=$packageName gameId=${game.id} result=$result",
@@ -215,8 +221,6 @@ class GameLauncher(
     }
 
     private companion object {
-        /** Let startActivity / first emulator frame settle before bottom UI swap. */
-        private const val SECONDARY_UI_AFTER_LAUNCH_MS = 450L
         val pathTokens = listOf("{file.path}", "%ROM%", "%ROM_PATH%", "%ROMRAW%")
         val uriTokens = listOf("{file.uri}", "%ROM_URI%", "%ROM_CONTENT%")
     }

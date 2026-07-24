@@ -10,12 +10,12 @@ import com.wajiha.android.launch.GameLauncher
 import com.wajiha.android.launch.LaunchResult
 import com.wajiha.android.library.RomFileDeleter
 import com.wajiha.android.monitor.ForegroundAppMonitor
-import com.wajiha.android.monitor.SessionTaskRegistry
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.platform.AppActions
 import com.wajiha.platform.LaunchableApp
 import com.wajiha.platform.SoundAssets
 import com.wajiha.platform.UiSound
+import com.wajiha.state.DualScreenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +28,7 @@ class AndroidAppActions(
     private val gameLauncher: GameLauncher,
     private val displayCoordinator: DisplayCoordinator,
     private val monitor: ForegroundAppMonitor,
+    private val dualScreenStore: DualScreenStore,
     private val gameRepository: GameRepository,
     private val romFileDeleter: RomFileDeleter,
     private val iconResolver: IconResolver,
@@ -185,8 +186,6 @@ class AndroidAppActions(
 
     override fun focusApp(packageName: String) {
         monitor.switchToSession(packageName)
-        // Explicit user action — cold-start allowed if the task was lost.
-        SessionTaskRegistry.moveToFront(context, packageName, allowColdStart = true)
         displayCoordinator.focusGameOnPrimary(packageName)
         monitor.scheduleTopDisplayRefresh()
     }

@@ -60,7 +60,10 @@ import com.wajiha.platform.SystemControls
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.GlobalContext
@@ -117,7 +120,34 @@ class WajihaApplication :
             }.crossfade(true)
             .build()
 
+    override fun attachBaseContext(base: android.content.Context) {
+        // Before Application.onCreate / splash: force DayNight to last-known theme.
+        // System night mode on Thor is often YES while the user preference is light —
+        // without this, values-night paints #0B101B for the starting window.
+        val bootDark =
+            com.wajiha.android.ui.BootTheme
+                .isDark(base)
+        AppCompatDelegate.setDefaultNightMode(
+            if (bootDark) {
+                AppCompatDelegate.MODE_NIGHT_YES
+            } else {
+                AppCompatDelegate.MODE_NIGHT_NO
+            },
+        )
+        super.attachBaseContext(base)
+    }
+
     override fun onCreate() {
+        // Re-assert before activities (attachBaseContext already set this).
+        applyNightMode(
+            if (com.wajiha.android.ui.BootTheme
+                    .isDark(this)
+            ) {
+                "dark"
+            } else {
+                "light"
+            },
+        )
         super.onCreate()
         WajihaLogGate.verbose = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
         WajihaLog.i(WajihaLogKind.WORK, "appStart: verbose=${WajihaLogGate.verbose}")
@@ -137,7 +167,7 @@ class WajihaApplication :
                 single { PlaySessionTracker(get(), get()) }
                 single { GameLauncher(this@WajihaApplication, get(), get(), get(), get(), get(), get()) }
                 single { SecondaryDisplayHost() }
-                single { DisplayCoordinator(this@WajihaApplication, get(), get()) }
+                single { DisplayCoordinator(this@WajihaApplication, get(), get(), get()) }
                 single(named("applicationScope")) { appScope }
                 single {
                     com.wajiha.android.input.GamepadDeviceRegistry(
@@ -196,7 +226,18 @@ class WajihaApplication :
                 single { IconResolver(this@WajihaApplication, get(), get()) }
                 single { AndroidIconPackActions(this@WajihaApplication, get()) } binds
                     arrayOf(IconPackActions::class)
-                single { AndroidAppActions(this@WajihaApplication, get(), get(), get(), get(), get(), get()) } binds
+                single {
+                    AndroidAppActions(
+                        this@WajihaApplication,
+                        get(),
+                        get(),
+                        get(),
+                        get(),
+                        get(),
+                        get(),
+                        get(),
+                    )
+                } binds
                     arrayOf(AppActions::class)
                 single { AndroidLibraryActions(this@WajihaApplication, get(), get()) } binds
                     arrayOf(LibraryActions::class)
@@ -218,9 +259,41 @@ class WajihaApplication :
         }
 
         GlobalContext.get().get<com.wajiha.android.input.GamepadDeviceRegistry>().start()
+        // Block briefly so the first Activity gets the real theme (not default-dark).
+        syncBootThemeFromDataStore()
         seedDefaultsIfNeeded()
         mirrorSettings()
         registerComponentCallbacks(memoryTrimCallbacks)
+    }
+
+    private fun syncBootThemeFromDataStore() {
+        runCatching {
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeout(800L) {
+                    val settings =
+                        GlobalContext
+                            .get()
+                            .get<SettingsRepository>()
+                            .settings
+                            .first()
+                    applyNightMode(settings.theme)
+                    com.wajiha.android.ui.BootTheme
+                        .persist(this@WajihaApplication, settings.theme)
+                }
+            }
+        }
+    }
+
+    private fun applyNightMode(theme: String) {
+        val nightMode =
+            when (theme) {
+                "dark" -> AppCompatDelegate.MODE_NIGHT_YES
+                "light" -> AppCompatDelegate.MODE_NIGHT_NO
+                else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            }
+        if (AppCompatDelegate.getDefaultNightMode() != nightMode) {
+            AppCompatDelegate.setDefaultNightMode(nightMode)
+        }
     }
 
     /** Keeps host-side flags (sounds, detection, night mode) in sync with persisted settings. */
@@ -243,15 +316,9 @@ class WajihaApplication :
                 }
                 // Force the same night mode on both Thor displays so Compose
                 // "system" and any residual platform chrome stay in lockstep.
-                val nightMode =
-                    when (settings.theme) {
-                        "dark" -> AppCompatDelegate.MODE_NIGHT_YES
-                        "light" -> AppCompatDelegate.MODE_NIGHT_NO
-                        else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                    }
-                if (AppCompatDelegate.getDefaultNightMode() != nightMode) {
-                    AppCompatDelegate.setDefaultNightMode(nightMode)
-                }
+                applyNightMode(settings.theme)
+                com.wajiha.android.ui.BootTheme
+                    .persist(this@WajihaApplication, settings.theme)
             }
         }
     }

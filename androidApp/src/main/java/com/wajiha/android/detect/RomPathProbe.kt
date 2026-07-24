@@ -33,6 +33,7 @@ data class ResolvedGame(
     val boxartPath: String? = null,
     val heroPath: String? = null,
     val logoPath: String? = null,
+    val iconPath: String? = null,
     val confidence: MatchConfidence,
     val source: String,
 )

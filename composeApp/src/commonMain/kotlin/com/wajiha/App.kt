@@ -52,6 +52,7 @@ import com.wajiha.ui.scraper.ScraperViewModel
 import com.wajiha.ui.secondary.NowPlayingBackdrop
 import com.wajiha.ui.secondary.NowPlayingOverlay
 import com.wajiha.ui.secondary.NowPlayingPanel
+import com.wajiha.ui.secondary.homeDockNowPlayingInset
 import com.wajiha.ui.secondary.nowPlayingOverlayPlacement
 import com.wajiha.ui.secondary.rememberOpenSession
 import com.wajiha.ui.settings.PlatformPickerScreen
@@ -95,6 +96,13 @@ fun App() {
     val systemControls = koinInject<SystemControls>()
     val appActions = koinInject<AppActions>()
     val settings by settingsViewModel.settings.collectAsState()
+    val settingsLoaded by settingsViewModel.settingsLoaded.collectAsState()
+
+    // Empty until DataStore loads — window background (BootTheme) fills the gap.
+    // Do not mount WajihaTheme with AppSettings() default theme=dark.
+    if (!settingsLoaded) {
+        return
+    }
 
     WajihaTheme(
         darkTheme = themeIsDark(settings.theme),
@@ -118,12 +126,6 @@ fun App() {
         var onboardingDismissed by remember { mutableStateOf(false) }
         val snackbarHostState = rememberWajihaSnackbarHostState()
         val snackbarScope = rememberCoroutineScope()
-        val settingsLoaded by settingsViewModel.settingsLoaded.collectAsState()
-
-        if (!settingsLoaded) {
-            Box(modifier = Modifier.fillMaxSize())
-            return@WajihaTheme
-        }
 
         val dualStore = viewModel.dualScreenStore
         val isDual = screenState != DualScreenState.SingleDisplay
@@ -263,6 +265,8 @@ fun App() {
             BottomScreen(
                 state = state,
                 gridRows = settings.gridRows,
+                gameGridArt = settings.gameGridArt,
+                gameGridTileSize = settings.gameGridTileSize,
                 onSelectPlatform = viewModel::selectPlatform,
                 onFocusGame = viewModel::focusGame,
                 onLaunchGame = viewModel::launchGame,
@@ -304,6 +308,22 @@ fun App() {
                 onOpenSession = openSession,
                 onCloseSession = { appActions.killApp(it) },
                 showSessionGrid = dualStore.nowPlayingDisplay.showsGridTiles,
+                showHomeDock = settings.showHomeDock,
+                dockApps = apps,
+                dockFavoritePackages = settings.appDrawerFavoritePackages,
+                dockIconShape = settings.iconShape,
+                onLaunchDockApp = viewModel::launchDockApp,
+                onLaunchDockAppOnDisplay = viewModel::launchAppOnDisplay,
+                onRemoveDockFavorite = settingsViewModel::removeAppDrawerFavorite,
+                onMoveDockFavorite = { pkg, delta ->
+                    settingsViewModel.moveAppDrawerFavorite(
+                        packageName = pkg,
+                        delta = delta,
+                        installedPackages = apps.map { it.packageName },
+                    )
+                },
+                onOpenDockAppInfo = systemControls::openAppInfo,
+                onLoadDockApps = viewModel::loadApps,
                 modifier = gridModifier,
             )
         }
@@ -669,6 +689,8 @@ fun App() {
                                             route = Route.System
                                         },
                                         overlayOnHero = true,
+                                        showAppsAction = !settings.showHomeDock,
+                                        showSettingsAction = !settings.showHomeDock,
                                         modifier = Modifier.align(Alignment.BottomCenter),
                                     )
                                 }
@@ -697,7 +719,10 @@ fun App() {
             if (!isDual && route == Route.Home && primaryShowsMenu) {
                 NowPlayingOverlay(
                     store = dualStore,
-                    modifier = nowPlayingOverlayPlacement(),
+                    modifier =
+                        nowPlayingOverlayPlacement(
+                            contentBottomInset = homeDockNowPlayingInset(settings.showHomeDock),
+                        ),
                     onOpenNowPlaying = {
                         viewModel.playOpen()
                         route = Route.NowRunning

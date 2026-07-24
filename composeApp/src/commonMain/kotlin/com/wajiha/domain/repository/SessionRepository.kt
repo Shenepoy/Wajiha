@@ -31,6 +31,16 @@ class SessionRepository(
         sessionDao.close(id, endedAt, duration)
     }
 
+    /** Persist duration from tracked active play ms (pauses while backgrounded). */
+    suspend fun closeSessionWithActiveMs(
+        id: Long,
+        endedAt: Long,
+        activeMs: Long,
+    ) {
+        val duration = (activeMs / 1000).coerceAtLeast(0)
+        sessionDao.close(id, endedAt, duration)
+    }
+
     suspend fun latestOpenSession(): PlaySessionEntity? = sessionDao.latestOpen()
 
     suspend fun latestOpenSessionForPackage(packageName: String): PlaySessionEntity? = sessionDao.latestOpenForPackage(packageName)

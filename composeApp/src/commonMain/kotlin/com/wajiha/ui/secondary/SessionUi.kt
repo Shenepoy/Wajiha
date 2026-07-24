@@ -18,11 +18,21 @@ fun rememberOpenSession(
 ): (String) -> Unit =
     remember(store, appActions, topDisplayPackage) {
         { pkg ->
-            if (topDisplayPackage != pkg) {
-                appActions.focusApp(pkg)
-            } else {
-                store.switchToSession(pkg)
-            }
-            store.requestNavigateToNowPlaying()
+            openSessionSurface(store, appActions, topDisplayPackage, pkg)
         }
     }
+
+/** Pill / session tile: focus last launch display if bg, then open Now Running. */
+fun openSessionSurface(
+    store: DualScreenStore,
+    appActions: AppActions,
+    topDisplayPackage: String?,
+    packageName: String,
+) {
+    if (topDisplayPackage != packageName) {
+        appActions.focusApp(packageName)
+    } else {
+        store.switchToSession(packageName)
+    }
+    store.requestNavigateToNowPlaying()
+}

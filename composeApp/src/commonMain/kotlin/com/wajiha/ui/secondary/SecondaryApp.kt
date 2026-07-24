@@ -1,6 +1,7 @@
 package com.wajiha.ui.secondary
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -82,6 +83,8 @@ import org.koin.compose.koinInject
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
+
+private const val MODE_CROSSFADE_MS = 220
 
 /**
  * Root of the secondary-display experience (AYN Thor bottom screen).
@@ -496,7 +499,15 @@ fun SecondaryApp() {
             foreground = { gameplayDimScrimVisible ->
                 NowPlayingOverlay(
                     store = store,
-                    modifier = nowPlayingOverlayPlacement(),
+                    modifier =
+                        nowPlayingOverlayPlacement(
+                            contentBottomInset =
+                                homeDockNowPlayingInset(
+                                    showHomeDock =
+                                        settings.showHomeDock &&
+                                            mode == SecondaryMode.GameGrid,
+                                ),
+                        ),
                     hiddenByGameplayDim = gameplayDimScrimVisible,
                 )
             },
@@ -519,7 +530,13 @@ fun SecondaryApp() {
                 ) {
                     AnimatedContent(
                         targetState = mode,
-                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        // Crossfade over the opaque backdrop. Instant swap read as a
+                        // hard flash; Activity Compose stays mounted under the live
+                        // Overlay so mid-fade no longer hits an empty window.
+                        transitionSpec = {
+                            fadeIn(tween(MODE_CROSSFADE_MS)) togetherWith
+                                fadeOut(tween(MODE_CROSSFADE_MS))
+                        },
                         label = "secondaryMode",
                         modifier = Modifier.fillMaxSize(),
                     ) { animatedMode ->
@@ -560,7 +577,9 @@ fun SecondaryApp() {
                                 val openSession = rememberOpenSession(store, appActions, topPackage)
                                 BottomScreen(
                                     state = state,
-                                    gridRows = settings.gridRows,
+                                    gridRows = settings.gameGridSecondaryRows,
+                                    gameGridArt = settings.gameGridSecondaryArt,
+                                    gameGridTileSize = settings.gameGridSecondaryTileSize,
                                     onSelectPlatform = viewModel::selectPlatform,
                                     onFocusGame = viewModel::focusGame,
                                     onLaunchGame = viewModel::launchGame,
@@ -594,6 +613,22 @@ fun SecondaryApp() {
                                     onOpenSession = openSession,
                                     onCloseSession = { appActions.killApp(it) },
                                     showSessionGrid = store.nowPlayingDisplay.showsGridTiles,
+                                    showHomeDock = settings.showHomeDock,
+                                    dockApps = apps,
+                                    dockFavoritePackages = settings.appDrawerFavoritePackages,
+                                    dockIconShape = settings.iconShape,
+                                    onLaunchDockApp = viewModel::launchDockApp,
+                                    onLaunchDockAppOnDisplay = viewModel::launchAppOnDisplay,
+                                    onRemoveDockFavorite = settingsViewModel::removeAppDrawerFavorite,
+                                    onMoveDockFavorite = { pkg, delta ->
+                                        settingsViewModel.moveAppDrawerFavorite(
+                                            packageName = pkg,
+                                            delta = delta,
+                                            installedPackages = apps.map { it.packageName },
+                                        )
+                                    },
+                                    onOpenDockAppInfo = systemControls::openAppInfo,
+                                    onLoadDockApps = viewModel::loadApps,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }

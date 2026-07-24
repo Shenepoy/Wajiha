@@ -3,6 +3,8 @@ package com.wajiha.android.launch
 import com.wajiha.data.db.GameEntity
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.SessionRepository
+import com.wajiha.log.WajihaLog
+import com.wajiha.log.WajihaTags
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,11 +18,16 @@ data class ActiveLaunch(
     val gameId: Long?,
     val packageName: String,
     val startedAt: Long,
+    /** Active play ms before the current segment. */
+    val accumulatedActiveMs: Long = 0L,
+    /** Wall time when the current active segment started (0 = paused). */
+    val segmentStartedAt: Long = 0L,
 )
 
 /**
  * Tracks running game sessions for playtime persistence. Supports multiple
  * concurrent sessions keyed by package — aligned with [DualScreenStore.sessionCache].
+ * Duration pauses while the session is not the top-display foreground.
  */
 class PlaySessionTracker(
     private val sessionRepository: SessionRepository,
@@ -63,6 +70,36 @@ class PlaySessionTracker(
         }
     }
 
+    /**
+     * Align DB clocks with top-display foreground: only [topPackage] accumulates;
+     * every other tracked session pauses.
+     */
+    fun syncTopDisplayForeground(topPackage: String?) {
+        val now = System.currentTimeMillis()
+        val next = _activeSessions.value.toMutableMap()
+        var changed = false
+        next.keys.toList().forEach { pkg ->
+            val launch = next[pkg] ?: return@forEach
+            val updated =
+                if (pkg == topPackage) {
+                    resumeLaunch(launch, now)
+                } else {
+                    pauseLaunch(launch, now)
+                }
+            if (updated != launch) {
+                next[pkg] = updated
+                changed = true
+            }
+        }
+        if (changed) {
+            _activeSessions.value = next
+            WajihaLog.d(
+                WajihaTags.NOW_PLAYING,
+                "playtimeSync: top=${topPackage ?: "none"} tracked=${next.size}",
+            )
+        }
+    }
+
     fun onGameEnded(packageName: String) {
         if (!isTracking(packageName)) return
         scope.launch { closeSession(packageName) }
@@ -84,9 +121,52 @@ class PlaySessionTracker(
             val sessionId = sessionRepository.startSession(gameId, packageName, startedAt, origin)
             _activeSessions.value =
                 _activeSessions.value.toMutableMap().apply {
-                    put(packageName, ActiveLaunch(sessionId, gameId, packageName, startedAt))
+                    put(
+                        packageName,
+                        ActiveLaunch(
+                            sessionId = sessionId,
+                            gameId = gameId,
+                            packageName = packageName,
+                            startedAt = startedAt,
+                            accumulatedActiveMs = 0L,
+                            segmentStartedAt = startedAt,
+                        ),
+                    )
                 }
         }
+    }
+
+    private fun pauseLaunch(
+        launch: ActiveLaunch,
+        now: Long,
+    ): ActiveLaunch {
+        if (launch.segmentStartedAt <= 0L) return launch
+        val segment = (now - launch.segmentStartedAt).coerceAtLeast(0L)
+        return launch.copy(
+            accumulatedActiveMs = launch.accumulatedActiveMs + segment,
+            segmentStartedAt = 0L,
+        )
+    }
+
+    private fun resumeLaunch(
+        launch: ActiveLaunch,
+        now: Long,
+    ): ActiveLaunch {
+        if (launch.segmentStartedAt > 0L) return launch
+        return launch.copy(segmentStartedAt = now)
+    }
+
+    private fun activeDurationMs(
+        launch: ActiveLaunch,
+        now: Long,
+    ): Long {
+        val open =
+            if (launch.segmentStartedAt > 0L) {
+                (now - launch.segmentStartedAt).coerceAtLeast(0L)
+            } else {
+                0L
+            }
+        return launch.accumulatedActiveMs + open
     }
 
     private suspend fun closeSession(packageName: String) {
@@ -96,7 +176,8 @@ class PlaySessionTracker(
                 return
             }
         val endedAt = System.currentTimeMillis()
-        sessionRepository.closeSession(launch.sessionId, endedAt, launch.startedAt)
+        val activeMs = activeDurationMs(launch, endedAt)
+        sessionRepository.closeSessionWithActiveMs(launch.sessionId, endedAt, activeMs)
         launch.gameId?.let { gameRepository.recordPlay(it, endedAt) }
         _activeSessions.value =
             _activeSessions.value.toMutableMap().apply {
@@ -109,6 +190,7 @@ class PlaySessionTracker(
         packages.forEach { closeSession(it) }
         sessionRepository.allOpenSessions().forEach { orphan ->
             if (orphan.packageName !in _activeSessions.value) {
+                // Orphans have no pause tracking — fall back to wall clock.
                 sessionRepository.closeSession(
                     orphan.id,
                     System.currentTimeMillis(),

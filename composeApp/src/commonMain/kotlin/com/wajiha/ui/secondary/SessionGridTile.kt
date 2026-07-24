@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -30,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.wajiha.data.prefs.GameGridPreferences
 import com.wajiha.input.GamepadKeys
 import com.wajiha.state.NowPlayingState
 import com.wajiha.ui.components.gamepad.GamepadTile
@@ -37,7 +37,7 @@ import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 
-/** Session tile for the unified game grid — same [GamepadTile] shell and 3:4 aspect as game tiles. */
+/** Session tile for the unified game grid — same [GamepadTile] shell as game tiles. */
 @Composable
 fun SessionGridTile(
     session: NowPlayingState,
@@ -51,12 +51,21 @@ fun SessionGridTile(
     focusRequester: FocusRequester? = null,
     gamepadFocusable: Boolean = true,
     navHighlighted: Boolean = false,
+    artStyle: String = GameGridPreferences.DEFAULT_ART,
+    contentScale: ContentScale = ContentScale.Crop,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     val displayName = sessionDisplayLabel(session) ?: session.packageName
     val elapsedMs = rememberSessionElapsedMs(session)
     val statusLabel = formatSessionElapsed(elapsedMs)
+    val artPath =
+        GameGridPreferences.resolveSessionArtPath(
+            art = artStyle,
+            boxartPath = session.boxartPath,
+            iconPath = session.iconPath,
+            logoPath = session.logoPath,
+        )
 
     GamepadTile(
         selected = selected,
@@ -70,7 +79,6 @@ fun SessionGridTile(
         navHighlighted = navHighlighted || (isFeatured && selected),
         modifier =
             modifier
-                .aspectRatio(3f / 4f)
                 .focusProperties {
                     left = FocusRequester.Cancel
                 }.onPreviewKeyEvent { event ->
@@ -97,12 +105,21 @@ fun SessionGridTile(
             shape = WajihaShapes.tile,
         ) {
             Box {
-                if (session.boxartPath != null) {
+                if (artPath != null) {
                     AsyncImage(
-                        model = session.boxartPath,
+                        model = artPath,
                         contentDescription = displayName,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+                        contentScale = contentScale,
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    if (contentScale == ContentScale.Fit) {
+                                        WajihaSpacing.sm
+                                    } else {
+                                        0.dp
+                                    },
+                                ),
                     )
                     if (!isOnTop) {
                         Box(

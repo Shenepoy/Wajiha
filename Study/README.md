@@ -11,7 +11,8 @@ Read this index first, then the docs under `docs/`. For machine-readable metadat
 | `neostation-frontend/` | Open source (Flutter) | Full source | [docs/02-neostation-frontend.md](./docs/02-neostation-frontend.md) |
 | `Daijishou/` | Open source (assets/docs only) | Platform JSON, themes, docs (`git pull` if empty) | [docs/03-daijishou.md](./docs/03-daijishou.md) |
 | `RetroHrai-v0.5.1.apk` | Closed source APK | Dissected → `_extracted/retrohrai/` | [docs/04-retrohrai-apk.md](./docs/04-retrohrai-apk.md) |
-| `cocoon-beta-2-2.apk` | Closed source APK (beta) | Dissected → `_extracted/cocoon/` | [docs/05-cocoon-apk.md](./docs/05-cocoon-apk.md) |
+| `cocoon-3.apk` | Closed source APK (**3.0**) | Dissected → `_extracted/cocoon-3/` | [docs/05-cocoon-apk.md](./docs/05-cocoon-apk.md) |
+| `cocoon-beta-2-2.apk` | Prior beta (kept for diff) | `_extracted/cocoon/` | same doc (delta section) |
 | `iiSU-Alpha-0.0.7.3.apk` | Closed source APK (alpha) | Dissected → `_extracted/iisu/` | [docs/09-iisu-apk.md](./docs/09-iisu-apk.md) |
 | `lawnchair/` | Open source (Apache 2.0) | Icon packs / shapes reference | [docs/10-lawnchair-icons.md](./docs/10-lawnchair-icons.md) |
 
@@ -59,7 +60,8 @@ git clone --depth 1 --branch 15-dev \
 Binary extracts live in `_extracted/` (not required for git; regenerate with unzip):
 
 ```bash
-mkdir -p Study/_extracted/cocoon Study/_extracted/retrohrai Study/_extracted/iisu
+mkdir -p Study/_extracted/cocoon-3 Study/_extracted/cocoon Study/_extracted/retrohrai Study/_extracted/iisu
+unzip -qo Study/cocoon-3.apk -d Study/_extracted/cocoon-3
 unzip -qo Study/cocoon-beta-2-2.apk -d Study/_extracted/cocoon
 unzip -qo Study/RetroHrai-v0.5.1.apk -d Study/_extracted/retrohrai
 unzip -qo Study/iiSU-Alpha-0.0.7.3.apk -d Study/_extracted/iisu
@@ -68,7 +70,7 @@ unzip -qo Study/iiSU-Alpha-0.0.7.3.apk -d Study/_extracted/iisu
 Manifest dump (requires Android SDK `apkanalyzer`):
 
 ```bash
-apkanalyzer manifest print Study/cocoon-beta-2-2.apk
+apkanalyzer manifest print Study/cocoon-3.apk
 apkanalyzer manifest print Study/RetroHrai-v0.5.1.apk
 apkanalyzer manifest print Study/iiSU-Alpha-0.0.7.3.apk
 ```
@@ -76,7 +78,7 @@ apkanalyzer manifest print Study/iiSU-Alpha-0.0.7.3.apk
 Dex string mining (no decompiler):
 
 ```bash
-strings Study/_extracted/cocoon/classes.dex | rg 'rip/moth/cocoonshell'
+strings Study/_extracted/cocoon-3/classes*.dex | rg 'rip/moth/cocoonshell'
 strings Study/_extracted/retrohrai/classes*.dex | rg 'com/retrohrai/launcher'
 strings Study/_extracted/iisu/classes*.dex | rg 'com/iisulauncher'
 ```

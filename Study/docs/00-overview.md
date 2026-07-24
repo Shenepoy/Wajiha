@@ -30,7 +30,7 @@ The `Study/` folder remains reference material for patterns not yet ported or fo
 | **NeoStation** | Only **full open-source** stack: Flutter UI + documented architecture + production-grade Android launcher/dual-screen/emulator launch code |
 | **Daijishō** | **De facto standard** for platform/player JSON; huge community platform packs; conceptual model (platform → player → ROM paths) |
 | **RetroHrai** | Modern **native Compose** launcher with explicit **dual-screen** (`SecondaryDisplayActivity`, `SECONDARY_HOME`) and Daijishō-compatible assets baked in |
-| **Cocoon** | Beta **Compose + Room** shell with **widget grid**, Discord/RA, **ExternalDisplayActivity** |
+| **Cocoon** | **3.0** Compose + Room shell: zoomable **widget grid**, smart folders, Liquid Glass, Picnic/Log pods, Discord/RA, **ExternalDisplayActivity** |
 | **iiSU** | **Thor-oriented** Compose HOME: **SECONDARY_HOME**, display blackout on launch, keep-alive restore, XMB browser, RomM, 173-console JSON |
 
 ## Architectural families
