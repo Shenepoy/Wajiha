@@ -33,6 +33,7 @@ class ScrapeGapFillTest {
         val existing =
             listOf(
                 media("boxart"),
+                media("square"),
                 media("logo"),
                 media("hero"),
                 media("icon"),
@@ -47,13 +48,28 @@ class ScrapeGapFillTest {
     }
 
     @Test
+    fun needsGapFill_trueWhenOnlySquareMissing() {
+        val existing = listOf(media("boxart"), media("logo"), media("hero"))
+        assertTrue(game().needsGapFill(existing))
+        assertEquals(listOf(MediaType.Square), existing.missingGapTypes())
+    }
+
+    @Test
     fun needsGapFill_trueWhenNeverScraped() {
         assertTrue(game(scrapedAt = null).needsGapFill(emptyList()))
     }
 
     @Test
     fun missingGapTypes_ignoresSecondaryArtwork() {
-        val existing = listOf(media("boxart"), media("logo"), media("hero"))
+        val existing =
+            listOf(
+                media("boxart"),
+                media("square"),
+                media("logo"),
+                media("hero"),
+                media("icon"),
+                media("screenshot"),
+            )
         assertEquals(emptyList(), existing.missingGapTypes())
     }
 

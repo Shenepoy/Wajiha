@@ -34,6 +34,7 @@ data class ResolvedGame(
     val heroPath: String? = null,
     val logoPath: String? = null,
     val iconPath: String? = null,
+    val squarePath: String? = null,
     val confidence: MatchConfidence,
     val source: String,
 )

@@ -13,6 +13,17 @@ import androidx.compose.ui.unit.dp
 val SettingsCompactRowMinHeight = 44.dp
 
 /**
+ * Fixed width for paired trailing actions (Edit | Rescan).
+ */
+val SettingsTrailingActionWidth = 88.dp
+
+/**
+ * Fixed width for single stacked trailing actions (Add / Rescan / Open).
+ * Matches one paired trailing button so Actions and Platforms share a rhythm.
+ */
+val SettingsSingleTrailingActionWidth = SettingsTrailingActionWidth
+
+/**
  * Minimum height for settings-family rows/buttons/tabs.
  * Default is [SettingsCompactRowMinHeight] so System, Apps, and Settings match.
  */

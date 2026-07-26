@@ -53,6 +53,12 @@ adb shell am broadcast -a com.wajiha.DEBUG_CLEAR_SUPPRESS
 
 # Simulate external foreground package (no real launch)
 adb shell am broadcast -a com.wajiha.DEBUG_SIMULATE_FOREGROUND --es package com.retroarch
+
+# Flip primary ↔ secondary gamepad owner (dual display)
+adb shell am broadcast -a com.wajiha.DEBUG_TOGGLE_GAMEPAD_OWNER
+
+# Dump gamepad owner / device registry snapshot
+adb shell am broadcast -a com.wajiha.DEBUG_DUMP_GAMEPAD
 ```
 
 ## Suppress list

@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -150,26 +151,51 @@ fun FocusRingOverlayHost(
                     val item = current.boundsInRoot
                     if (item.width <= 0f || item.height <= 0f) return@drawWithContent
                     val viewport = current.viewportBoundsInRoot
-                    // Soft cull: hide only when fully outside the settings viewport so
-                    // partially scrolled rows keep a visible Outside ring (no hard cut-off).
+                    // Settings panel: hide when fully scrolled away; hard-clip otherwise so
+                    // Outside / glow chrome cannot paint past the panel edge.
                     if (viewport != null && !item.overlaps(viewport)) return@drawWithContent
-                    drawFocusChrome(
-                        itemTopLeft =
-                            Offset(
-                                item.left - hostBounds.left,
-                                item.top - hostBounds.top,
-                            ),
-                        itemSize = Size(item.width, item.height),
-                        color = current.color,
-                        thickness = current.thickness,
-                        borderStyle = current.borderStyle,
-                        shape = current.shape,
-                        placementOutside = current.placementOutside,
-                        pulseAlpha = pulseAlpha,
-                        marchPhase = marchPhase,
-                        gradientPhase = gradientPhase,
-                        compact = current.compact,
-                    )
+                    val itemTopLeft =
+                        Offset(
+                            item.left - hostBounds.left,
+                            item.top - hostBounds.top,
+                        )
+                    val itemSize = Size(item.width, item.height)
+                    if (viewport != null) {
+                        clipRect(
+                            left = viewport.left - hostBounds.left,
+                            top = viewport.top - hostBounds.top,
+                            right = viewport.right - hostBounds.left,
+                            bottom = viewport.bottom - hostBounds.top,
+                        ) {
+                            drawFocusChrome(
+                                itemTopLeft = itemTopLeft,
+                                itemSize = itemSize,
+                                color = current.color,
+                                thickness = current.thickness,
+                                borderStyle = current.borderStyle,
+                                shape = current.shape,
+                                placementOutside = current.placementOutside,
+                                pulseAlpha = pulseAlpha,
+                                marchPhase = marchPhase,
+                                gradientPhase = gradientPhase,
+                                compact = current.compact,
+                            )
+                        }
+                    } else {
+                        drawFocusChrome(
+                            itemTopLeft = itemTopLeft,
+                            itemSize = itemSize,
+                            color = current.color,
+                            thickness = current.thickness,
+                            borderStyle = current.borderStyle,
+                            shape = current.shape,
+                            placementOutside = current.placementOutside,
+                            pulseAlpha = pulseAlpha,
+                            marchPhase = marchPhase,
+                            gradientPhase = gradientPhase,
+                            compact = current.compact,
+                        )
+                    }
                 },
     ) {
         content()

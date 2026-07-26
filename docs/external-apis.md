@@ -17,17 +17,19 @@ Wajiha is a client app — these are third-party services called from scraper so
 
 - **Base:** `https://retroachievements.org/API/`
 - **Media:** `https://media.retroachievements.org` (icons, badges)
-- **Auth:** `z` (username) + `y` (web API key) on every request
-- **Endpoints:** `API_GetUserProfile.php`, `API_GetGameInfoByHash.php`, `API_GetGameInfoAndUserProgress.php`
-- **Notes:** JSON uses PascalCase keys (`ID`, `Title`, …)
+- **Auth:** Web API authenticates with `y` (web API key). Clients also send `z` (username) for parity with the official JS client. User-targeted endpoints take `u` (username or ULID — prefer ULID after profile login).
+- **Endpoints:** `API_GetUserProfile.php`, `API_GetGameList.php` (`f=1` achievements-only, `h=1` hashes), `API_GetGame.php`, `API_GetGameInfoAndUserProgress.php`
+- **Caching / pacing:** GetGameList hash libraries are disk-cached (~7 days) plus in-memory; game summaries ~24h memory; progress ~12 min memory. Real HTTP is spaced (~400ms) with a cooldown on 429/5xx. There is **no** public Web `GetGameInfoByHash` — hash→game uses GetGameList (title fallback when ROM MD5 ≠ RA hash).
+- **Notes:** JSON uses PascalCase keys (`ID`, `Title`, …). Web API only (not Connect/`dorequest.php`).
 
 ## SteamGridDB
 
 - **Base:** `https://www.steamgriddb.com/api/v2/`
 - **Auth:** `Authorization: Bearer <api_key>`
 - **Endpoints:** `/search/autocomplete/{term}` (cheap game search), `/grids|heroes|logos|icons/game/{id}` (lazy art)
-- **Ranking fields:** asset `score` (likes) and `author.{name,steam64}` — used by `MediaRanker` with Settings prefer/blacklist authors
-- **Notes:** Auto-scrape fetches art only for the chosen game id and needed media types (not all autocomplete hits). Role: modern art (grids→boxart, heroes, logos, icons).
+- **Grids → two media types:** unfiltered grids map to **Boxart**; Square requests the same `/grids` endpoint with `dimensions=1024x1024,512x512` (Cocoon-style 1:1) and stores as `MediaType.Square` — parallel to boxart, not a replacement
+- **Ranking fields:** per-type style preference (`steamGridDb*Styles`) then asset `score` (likes), then `author.{name,steam64}` via `MediaRanker` prefer/blacklist
+- **Notes:** Auto-scrape fetches art only for the chosen game id and needed media types (not all autocomplete hits). Role: modern art (grids→boxart + square, heroes, logos, icons).
 
 ## libretro thumbnails
 
@@ -47,3 +49,4 @@ Wajiha is a client app — these are third-party services called from scraper so
 - **Path:** User-configured folder
 - **Layout:** `<root>/<platformId>/<covers|marquees|screenshots|fanart|videos|...>/<rom base name>.<ext>`
 - **Auth:** None (local files)
+- **Notes:** `MediaType.Square` is listed in source priority defaults but has no ES-DE folder mapping yet — local square lookups miss until folders are added.

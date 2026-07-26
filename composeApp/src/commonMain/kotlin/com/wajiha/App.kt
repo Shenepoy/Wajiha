@@ -267,6 +267,8 @@ fun App() {
                 gridRows = settings.gridRows,
                 gameGridArt = settings.gameGridArt,
                 gameGridTileSize = settings.gameGridTileSize,
+                gameGridShowTitles = settings.gameGridShowTitles,
+                gameGridShowTileChrome = settings.gameGridShowTileChrome,
                 onSelectPlatform = viewModel::selectPlatform,
                 onFocusGame = viewModel::focusGame,
                 onLaunchGame = viewModel::launchGame,

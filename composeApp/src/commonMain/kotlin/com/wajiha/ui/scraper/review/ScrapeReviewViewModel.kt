@@ -3,6 +3,7 @@ package com.wajiha.ui.scraper.review
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wajiha.data.db.GameEntity
+import com.wajiha.data.scraper.GameScrapeOutcome
 import com.wajiha.data.scraper.MatchConfidence
 import com.wajiha.data.scraper.MatchRankPolicy
 import com.wajiha.data.scraper.MediaCandidate
@@ -25,8 +26,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Shared review picker / queue controller used by platform scraper, game detail,
- * and Settings → Scraper manual match.
+ * Shared review picker / queue controller used by platform scraper and game detail.
  */
 class ScrapeReviewViewModel(
     private val engine: ScrapeEngine,
@@ -48,7 +48,7 @@ class ScrapeReviewViewModel(
     }
 
     /**
-     * Single-game review. [lockedSlots] non-null = single-element Manual.
+     * Single-game review. [lockedSlots] non-null = single-slot review.
      * [openPickerImmediately] opens the first locked slot's picker (preview entry).
      */
     fun openGame(
@@ -570,7 +570,7 @@ class ScrapeReviewViewModel(
                 val (msg, ok) = result.userMessage(verb = "Scraped")
                 onDone?.invoke(
                     msg,
-                    ok || result.outcome == com.wajiha.data.scraper.GameScrapeOutcome.Partial,
+                    ok || result.outcome == GameScrapeOutcome.Partial,
                 )
             } catch (e: Exception) {
                 onDone?.invoke(e.message ?: "Scrape failed", false)

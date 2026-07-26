@@ -36,12 +36,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -68,6 +68,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.wajiha.data.prefs.AppSettings
+import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.input.FocusClaimSource
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.LocalFocusContinuityController
@@ -81,11 +83,55 @@ import com.wajiha.ui.theme.WajihaElevation
 import com.wajiha.ui.theme.WajihaIconSize
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
+import org.koin.compose.koinInject
 
 /** Compact row height for multi-choice list items (denser than [SettingsCompactRowMinHeight]). */
 private val MultiChoiceItemMinHeight = 34.dp
+
+/** Keep focus on the header until the list has finished opening under the row. */
+private const val MultiChoiceExpandMillis = 180
+
+/**
+ * Inline row subtitles stay off while Settings hero help is enabled (detail lives on the
+ * other display). When help is off, show only for the active/focused row.
+ */
+@Composable
+private fun rememberShowSettingRowDescription(rowActive: Boolean): Boolean {
+    val settingsRepository = koinInject<SettingsRepository>()
+    val settings by settingsRepository.settings.collectAsState(initial = AppSettings())
+    return rowActive && !settings.settingsHeroHelp
+}
+
+@Composable
+private fun SettingRowDescription(
+    description: String?,
+    visible: Boolean,
+) {
+    if (description.isNullOrBlank()) return
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically(),
+    ) {
+        Text(
+            text = description,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier =
+                Modifier.padding(
+                    start = WajihaSpacing.sm,
+                    end = WajihaSpacing.sm,
+                    top = WajihaSpacing.xs / 2,
+                    bottom = WajihaSpacing.micro,
+                ),
+        )
+    }
+}
 
 @Composable
 internal fun SettingExpansionIcon(
@@ -507,6 +553,20 @@ fun GamepadSettingRow(
                 )
 
                 when {
+                    type == SettingType.BinaryChoice && options.isNotEmpty() -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+                        ) {
+                            SegmentedChoice(
+                                options = options,
+                                selected = selected,
+                                onSelect = onSelect,
+                            )
+                            content?.invoke()
+                        }
+                    }
+
                     content != null -> {
                         content()
                     }
@@ -550,19 +610,16 @@ fun GamepadSettingRow(
             }
         }
 
-        if (!description.isNullOrBlank()) {
-            Text(
-                text = description,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier =
-                    Modifier.padding(
-                        start = WajihaSpacing.sm,
-                        end = WajihaSpacing.sm,
-                        top = WajihaSpacing.xs / 2,
-                    ),
-            )
-        }
+        val descriptionActive =
+            if (useCustomNav && type == SettingType.BinaryChoice) {
+                highlight
+            } else {
+                focused
+            }
+        SettingRowDescription(
+            description = description,
+            visible = rememberShowSettingRowDescription(descriptionActive),
+        )
     }
 }
 
@@ -586,7 +643,9 @@ private fun MultiChoiceSettingRow(
     var expanded by remember { mutableStateOf(false) }
     var headerFocused by remember { mutableStateOf(false) }
     val useCustomNav = LocalGamepadNavController.current != null
-    val headerHighlight = !useCustomNav && headerFocused && !expanded
+    // Keep the header ring while the list opens under this row; moving focus early
+    // paints the option ring at its final Y while expandVertically is still clipping.
+    val headerHighlight = !useCustomNav && headerFocused
     val canReset = onReset != null && !isAtDefault
     val feedback = LocalUiFeedback.current
     val selectedOption = options.firstOrNull { it.value == selected }
@@ -599,8 +658,6 @@ private fun MultiChoiceSettingRow(
         }
 
     val headerFocusRequester = focusRequester ?: remember { FocusRequester() }
-    val sectionScroll = LocalSettingSectionScroll.current
-    var headerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val listFocusRequesters =
         remember(options.size) {
             List(options.size) { FocusRequester() }
@@ -624,13 +681,12 @@ private fun MultiChoiceSettingRow(
         collapse()
     }
 
+    // Expand in place under the row (no scrollHeaderToTop). Hand off focus only after
+    // the list has finished opening so the ring does not jump ahead of the reveal.
     LaunchedEffect(expanded) {
         if (!expanded) return@LaunchedEffect
-        val header = headerCoordinates
-        if (sectionScroll != null && header != null) {
-            sectionScroll.scrollHeaderToTop(header)
-        }
-        withFrameNanos { }
+        delay(MultiChoiceExpandMillis.toLong())
+        if (!expanded) return@LaunchedEffect
         val selectedIndex =
             options
                 .indexOfFirst { it.value == selected && it.enabled }
@@ -656,7 +712,6 @@ private fun MultiChoiceSettingRow(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .onGloballyPositioned { headerCoordinates = it }
                     .wajihaFocusIndicator(
                         highlighted = headerHighlight,
                         focusAnchor = headerAnchor,
@@ -742,24 +797,23 @@ private fun MultiChoiceSettingRow(
             )
         }
 
-        if (!description.isNullOrBlank()) {
-            Text(
-                text = description,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier =
-                    Modifier.padding(
-                        start = WajihaSpacing.sm,
-                        end = WajihaSpacing.sm,
-                        top = WajihaSpacing.xs / 2,
-                    ),
-            )
-        }
+        SettingRowDescription(
+            description = description,
+            visible = rememberShowSettingRowDescription(headerFocused && !expanded),
+        )
 
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut(),
+            enter =
+                expandVertically(
+                    expandFrom = Alignment.Top,
+                    animationSpec = tween(MultiChoiceExpandMillis),
+                ) + fadeIn(animationSpec = tween(MultiChoiceExpandMillis)),
+            exit =
+                shrinkVertically(
+                    shrinkTowards = Alignment.Top,
+                    animationSpec = tween(120),
+                ) + fadeOut(animationSpec = tween(120)),
         ) {
             MultiChoicePickerPanel(
                 options = options,
@@ -792,7 +846,7 @@ private fun MultiChoicePickerPanel(
             Modifier
                 .fillMaxWidth()
                 .padding(top = WajihaSpacing.xs / 2),
-        shape = RectangleShape,
+        shape = WajihaShapes.card,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = WajihaElevation.low,
     ) {

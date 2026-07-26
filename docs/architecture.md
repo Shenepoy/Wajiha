@@ -38,7 +38,11 @@ Room KMP (`com.wajiha.data.db`), bundled SQLite driver. Tables:
 
 Indices: `games(uri)` unique, `games(platformId, displayName)`, hash columns, `game_media(gameId, type)`, session times.
 
-Settings are two DataStore blobs: `SettingsRepository` (typed keys for app/dual-screen options) and `ScraperSettingsRepository` (a single JSON-serialized `ScraperSettings`).
+Settings are two DataStore blobs: `SettingsRepository` (typed keys for app/dual-screen options) and `ScraperSettingsRepository` (a single JSON-serialized `ScraperSettings`). Notable typed prefs:
+
+- `HeroLayoutBundle` — independent `HeroLayout` for primary vs secondary (`HeroDisplaySlot`); presets + custom element geometry in `HeroLayout.kt` / `HeroLayoutFitter`
+- `GameGridPreferences` — art / rows / tile size / titles / chrome, separate primary vs secondary keys (edited for whichever display hosts Settings)
+- Home dock, icon pack package, icon shape (`IconAppearancePreferences`)
 
 ## Platform/emulator configs
 
@@ -76,13 +80,17 @@ When **Settings → detect external games** is enabled, `ExternalGameResolver` p
 
 ## Dual-screen engine
 
-`DualScreenStore` is the single source of truth. States: `SingleDisplay`, `DualBrowsing`, `GameRunning`, `AppOnSecondary`, `BlackoutSecondary`. Secondary modes: `GameGrid`, `NowPlaying`, `AppDock`, `RunningApps`, `QuickSettings`, `Achievements`, `Clock`, `Off`.
+`DualScreenStore` is the single source of truth. States: `SingleDisplay`, `DualBrowsing`, `GameRunning`, `AppOnSecondary`, `BlackoutSecondary`. User-facing secondary modes while a game runs: `NowPlaying`, `QuickSettings`, `RunningApps`, `Clock`, `Off` (blackout). Also: `GameGrid` (library), `AppDock` (Apps drawer on secondary). `Achievements` remains in the enum for legacy prefs and remaps to `NowPlaying`.
 
 - `DisplayCoordinator` listens to `DisplayManager` and feeds `onDisplaysChanged` — this is what collapses to the single-display combined layout.
 - `SecondaryHomeActivity` (`SECONDARY_HOME` intent category) renders `SecondaryApp()`, which switches on the current mode. Android launches it on the second display automatically when Wajiha is the default home.
 - `ForegroundAppMonitor` polls `UsageStatsManager.queryEvents` every **2 s idle / 750 ms when sessions are active** (or gets instant events from the opt-in `GameDetectAccessibilityService`), matches packages against known emulator lists + `CATEGORY_GAME` apps, and maintains multi-session state in `DualScreenStore.sessionCache`. See [sessions.md](sessions.md) and [debug.md](debug.md).
 - `KeepAliveService` (foreground, `specialUse`) keeps the process alive while an external game is up.
 - Options mirrored into the store synchronously (blackout-on-launch, preferred game mode) so state transitions don't need async reads.
+
+### Hero layout
+
+Per-display layouts live in `HeroLayoutBundle` (Settings → Screens → Hero layout). `HeroCanvas` renders elements (`Backdrop`, `Cover`, `Logo`, …) with `HeroLayoutFitter`. **Customize layout** opens `HeroLayoutEditor` as a Settings fullscreen drill-in; the draft and selection sit on `DualScreenStore` until save via `SettingsRepository.updateHeroLayoutSlot`. Presets: Classic, Cover focus, Logo focus, Minimal, Text only, Empty, Custom.
 
 ## Scraping
 
@@ -99,7 +107,7 @@ Sources and their quirks (see also [external-apis.md](external-apis.md)):
 | Source | Auth | Match | Notes |
 |---|---|---|---|
 | `screenscraper` | user account (+ optional dev creds) | hash+systeme → cleaned name → search → `gameid` hydrate | region/language chains; `romtype` / `systemeid` required without CRC |
-| `steamgriddb` | API key | autocomplete only; lazy art for chosen id | parses `score` + `author`; grids→boxart, heroes, logos, icons |
+| `steamgriddb` | API key | autocomplete only; lazy art for chosen id | parses `score` + `author`; grids→boxart **and** square (1:1 dims), heroes, logos, icons |
 | `libretro` | none | filename convention | needs `platforms.libretroName`; HEAD-checks thumbnail URLs |
 | `ra` | username + web API key | md5 | responses use PascalCase keys (`ID`, `Title`, ...) — keep the `@SerialName`s |
 | `romm` | server URL + basic auth | name search | lenient JSON (numbers as strings) |
@@ -107,7 +115,11 @@ Sources and their quirks (see also [external-apis.md](external-apis.md)):
 
 ## RetroAchievements
 
-`RaClient` wraps the RA Web API (`API_GetUserProfile`, `API_GetGameInfoByHash`, `API_GetGameInfoAndUserProgress`). `RaRepository` handles credential checks, persists hash-links to `games.raGameId`, and caches per-game progress in memory. `RaViewModel` follows `DualScreenStore.nowPlaying` so the `AchievementsPanel` secondary mode auto-loads the running game's badge list.
+`RaClient` wraps the RA Web API (`API_GetUserProfile`, `API_GetGameList` with hashes, `API_GetGame`, `API_GetGameInfoAndUserProgress`). Auth uses `y` (API key) plus `z` (username) like the official client; progress/`u` prefers a stored ULID after login. Hash libraries are disk-cached aggressively (GetGameList guideline); HTTP is paced. There is no public Web `GetGameInfoByHash` — hash→game uses GetGameList (title fallback when ROM MD5 ≠ RA hash). `RaRepository` persists hash/title-links to `games.raGameId` and caches progress briefly in memory. Scraper source `ra` and game-detail / progress UI consume the same client; the old Achievements secondary tab was removed (legacy enum → Now Playing).
+
+## Settings UI composition
+
+Settings uses folder chrome (`WajihaFolderSettingChrome` + `FolderTabRow`): Library, Scraper, Screens, Appearance, System. Dense sections open as fullscreen drill-ins (`WajihaSettingFullscreenPage` — Back + title, no folder tabs) — e.g. Scraper hub pages, Screens → Dual display / Now Running / Hero layout / editor, Appearance → Focus ring / Glyphs. Prefer shared `Wajiha*Setting` / `GamepadSettingRow` primitives; see `.cursor/rules/wajiha-ui-library.mdc`.
 
 ## System control
 
@@ -123,7 +135,7 @@ Sources and their quirks (see also [external-apis.md](external-apis.md)):
 
 ## Adding things
 
-- **A scraper source**: implement `ScraperSource`, add it to the list in `scraperModule`, add its id to `ScraperSettings.enabledSources`/priority defaults, and surface credentials in `ScraperScreen`'s Sources tab.
-- **A secondary-screen mode**: add to `SecondaryMode`, render it in `SecondaryApp`, and (optionally) list it in the Settings `ChoiceRow` for the game-running mode.
+- **A scraper source**: implement `ScraperSource`, add it to the list in `scraperModule`, add its id to `ScraperSettings.enabledSources`/priority defaults, and surface credentials under Scraper → Accounts / Sources.
+- **A secondary-screen mode**: add to `SecondaryMode`, render it in `SecondaryApp`, and (optionally) list it in Settings → Screens → Dual display preferred-mode choices.
 - **An emulator/platform**: prefer editing/adding a Daijishō-format JSON and importing it; the DB schema stores everything the launcher needs per emulator.
 - **A permission in onboarding**: extend `PermissionStates` + `SystemController.permissionStates()`, add a `PermissionRow`.

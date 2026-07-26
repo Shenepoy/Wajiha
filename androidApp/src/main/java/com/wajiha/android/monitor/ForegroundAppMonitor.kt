@@ -629,6 +629,8 @@ class ForegroundAppMonitor(
             SessionTaskRegistry.clear(packageName)
         }
         if (sessionStartedAt > 0L && isUsageTimelineActive(packageName, sessionStartedAt)) return true
+        // UsageStats RESUMED within the poll window (Thor ATM often hides foreign tasks).
+        if (queryLatestForegroundPackage() == packageName) return true
         return false
     }
 
@@ -664,7 +666,11 @@ class ForegroundAppMonitor(
         return System.currentTimeMillis() - seenAt < RECENT_FOREGROUND_MS
     }
 
-    /** True when the latest usage event for [packageName] is a resume, not a stop. */
+    /**
+     * True while any activity of [packageName] is still resumed in the usage
+     * timeline. Per-activity tracking — a root ACTIVITY_STOPPED after a child
+     * SetupWizard resume must not look like the whole package died.
+     */
     private fun isUsageTimelineActive(
         packageName: String,
         since: Long,
@@ -674,24 +680,28 @@ class ForegroundAppMonitor(
             val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
             val events = usm.queryEvents(since, System.currentTimeMillis())
             val event = UsageEvents.Event()
-            var lastResume = 0L
-            var lastStop = 0L
+            val collected = ArrayList<UsageTimelineEvent>()
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
                 if (event.packageName != packageName) continue
                 when (event.eventType) {
                     UsageEvents.Event.ACTIVITY_RESUMED,
                     UsageEvents.Event.MOVE_TO_FOREGROUND,
+                    UsageEvents.Event.ACTIVITY_PAUSED,
+                    UsageEvents.Event.MOVE_TO_BACKGROUND,
+                    UsageEvents.Event.ACTIVITY_STOPPED,
                     -> {
-                        if (event.timeStamp >= lastResume) lastResume = event.timeStamp
-                    }
-
-                    UsageEvents.Event.ACTIVITY_STOPPED -> {
-                        if (event.timeStamp >= lastStop) lastStop = event.timeStamp
+                        collected.add(
+                            UsageTimelineEvent(
+                                eventType = event.eventType,
+                                className = event.className,
+                                timeStamp = event.timeStamp,
+                            ),
+                        )
                     }
                 }
             }
-            return lastResume > lastStop
+            return UsageTimelineActive.isActive(collected)
         } catch (_: Exception) {
         }
         return false
@@ -736,6 +746,7 @@ class ForegroundAppMonitor(
                 heroPath = preserve?.heroPath,
                 logoPath = preserve?.logoPath,
                 iconPath = preserve?.iconPath,
+                squarePath = preserve?.squarePath,
                 sessionStartedAt = preserve?.sessionStartedAt ?: System.currentTimeMillis(),
                 sessionElapsedMs = preserve?.sessionElapsedMs ?: 0L,
                 sessionResumedAt = preserve?.sessionResumedAt ?: 0L,
@@ -786,6 +797,7 @@ class ForegroundAppMonitor(
                 heroPath = resolved.heroPath ?: cached.heroPath,
                 logoPath = resolved.logoPath ?: cached.logoPath,
                 iconPath = resolved.iconPath ?: cached.iconPath,
+                squarePath = resolved.squarePath ?: cached.squarePath,
             )
         if (enriched == cached) return
         store.updateGameSession(enriched)
@@ -811,7 +823,19 @@ class ForegroundAppMonitor(
             lastForeground = null
         }
         if (!store.hasActiveSessions()) {
-            displayCoordinator.restorePrimaryHero()
+            // False session-end (multi-activity usage timeline, Thor task blindness):
+            // never yank the hero over a package that is still foreground / alive.
+            if (queryLatestForegroundPackage() == packageName ||
+                hasRunningProcess(packageName) ||
+                hasRunningTask(packageName)
+            ) {
+                WajihaLog.w(
+                    WajihaTags.NOW_PLAYING,
+                    "endSession: skip hero restore — $packageName still live ($trigger)",
+                )
+            } else {
+                displayCoordinator.restorePrimaryHero()
+            }
         }
     }
 

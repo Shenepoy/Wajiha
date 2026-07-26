@@ -1,20 +1,14 @@
 package com.wajiha.ui.scraper
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import com.wajiha.data.scraper.ScrapeRunMode
 import com.wajiha.data.scraper.ScrapeRunPolicy
-import com.wajiha.ui.components.gamepad.GamepadButton
-import com.wajiha.ui.components.gamepad.GamepadChip
-import com.wajiha.ui.theme.WajihaSpacing
+import com.wajiha.ui.components.gamepad.GamepadSettingRow
+import com.wajiha.ui.components.gamepad.SettingType
+import com.wajiha.ui.components.gamepad.SettingsTrailingActionButton
 
 /** UI mode including interactive Review (not a WorkManager policy). */
 enum class ScrapeUiMode {
@@ -40,7 +34,7 @@ fun ScrapeUiMode.helperText(): String =
 /** Single-game copy for game detail (not batch). */
 fun ScrapeUiMode.singleGameHelperText(): String =
     when (this) {
-        ScrapeUiMode.FillGaps -> "Only fetch missing boxart, logo, or hero."
+        ScrapeUiMode.FillGaps -> "Only fetch missing boxart, square, logo, or hero."
         ScrapeUiMode.Force -> "Overwrite metadata and media from all sources."
         ScrapeUiMode.Review -> "Pick match and artwork from every source, then apply."
     }
@@ -60,22 +54,22 @@ fun ScrapeUiMode.batchChipLabel(): String =
     }
 
 /**
- * Mode chips and the primary Run action on one row.
- * Focus order: first chip → other chips → action button.
+ * Mode chips + trailing Run on one settings row.
+ * L/R changes mode; A or the trailing button starts the run.
  */
 @Composable
 fun ScrapeModeSelector(
     selected: ScrapeUiMode,
     onSelect: (ScrapeUiMode) -> Unit,
-    actionLabel: String,
     onAction: () -> Unit,
     modifier: Modifier = Modifier,
+    actionLabel: String = "Run",
     showReview: Boolean = true,
     firstFocusRequester: FocusRequester? = null,
     enabled: Boolean = true,
     actionEnabled: Boolean = enabled,
     helperText: String = selected.helperText(),
-    /** When true, chips read Scrape | Force | Manual (game detail). */
+    /** When true, choices read Scrape | Force | Manual (game detail). */
     singleGameLabels: Boolean = false,
 ) {
     val modes =
@@ -84,48 +78,40 @@ fun ScrapeModeSelector(
         } else {
             listOf(ScrapeUiMode.FillGaps, ScrapeUiMode.Force)
         }
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                modes.forEachIndexed { index, mode ->
-                    GamepadChip(
-                        label =
-                            if (singleGameLabels) {
-                                mode.singleGameChipLabel()
-                            } else {
-                                mode.batchChipLabel()
-                            },
-                        selected = selected == mode,
-                        onClick = { if (enabled) onSelect(mode) },
-                        focusRequester = if (index == 0) firstFocusRequester else null,
-                    )
+    val options =
+        modes.map { mode ->
+            mode.name to
+                if (singleGameLabels) {
+                    mode.singleGameChipLabel()
+                } else {
+                    mode.batchChipLabel()
                 }
-            }
-            GamepadButton(
+        }
+    GamepadSettingRow(
+        label = "Mode",
+        description = helperText,
+        type = SettingType.BinaryChoice,
+        options = options,
+        selected = selected.name,
+        onSelect = { id ->
+            if (!enabled) return@GamepadSettingRow
+            modes.firstOrNull { it.name == id }?.let(onSelect)
+        },
+        onActivate = if (actionEnabled) onAction else null,
+        onReset = {
+            if (enabled) onSelect(ScrapeUiMode.FillGaps)
+        },
+        isAtDefault = selected == ScrapeUiMode.FillGaps,
+        focusRequester = firstFocusRequester,
+        modifier = modifier.fillMaxWidth(),
+        content = {
+            SettingsTrailingActionButton(
                 text = actionLabel,
                 onClick = onAction,
                 enabled = actionEnabled,
             )
-        }
-        if (helperText.isNotBlank()) {
-            Text(
-                text = helperText,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+        },
+    )
 }
 
 /** Maps batch policy mode for estimates (Review uses FillGaps filter by default). */

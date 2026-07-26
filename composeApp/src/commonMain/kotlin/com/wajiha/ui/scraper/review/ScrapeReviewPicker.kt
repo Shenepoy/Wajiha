@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -25,11 +27,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -73,6 +71,7 @@ import coil3.compose.AsyncImagePainter
 import com.wajiha.data.scraper.MediaCandidate
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeCandidate
+import com.wajiha.data.scraper.previewThumb
 import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
@@ -86,12 +85,16 @@ import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.CriticalChangeActions
+import com.wajiha.ui.components.WajihaContextMenuMetrics
 import com.wajiha.ui.components.WajihaLoadingState
 import com.wajiha.ui.components.gamepad.GamepadButton
+import com.wajiha.ui.components.gamepad.GamepadFocusable
 import com.wajiha.ui.components.gamepad.GamepadSafeTextField
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
 import com.wajiha.ui.components.gamepad.withoutDualScreenChrome
+import com.wajiha.ui.components.softOutlineBorder
 import com.wajiha.ui.theme.WajihaColors
+import com.wajiha.ui.theme.WajihaElevation
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -201,6 +204,10 @@ fun ScrapeReviewPicker(
 
     BackHandler {
         when {
+            optionsOpen -> {
+                optionsOpen = false
+            }
+
             inPicker -> {
                 viewModel.closeSlot()
             }
@@ -264,6 +271,11 @@ fun ScrapeReviewPicker(
 
                             GamepadKeys.isBack(event.type, event.key) -> {
                                 when {
+                                    optionsOpen -> {
+                                        optionsOpen = false
+                                        true
+                                    }
+
                                     searchOpen -> {
                                         releaseSearchFocus()
                                         searchOpen = false
@@ -402,31 +414,20 @@ fun ScrapeReviewPicker(
                                     onClick = { optionsOpen = true },
                                     outlined = true,
                                 )
-                                DropdownMenu(
-                                    expanded = optionsOpen,
-                                    onDismissRequest = { optionsOpen = false },
-                                ) {
-                                    if (state.lockedSlots == null) {
-                                        DropdownMenuItem(
-                                            text = { Text("Auto-fill") },
-                                            onClick = {
-                                                optionsOpen = false
-                                                viewModel.autoFillFromPriorities()
-                                            },
-                                        )
-                                    }
-                                    if (showSkip && state.queueTotal > 1) {
-                                        DropdownMenuItem(
-                                            text = { Text("Skip game") },
-                                            onClick = {
-                                                optionsOpen = false
-                                                skipGame()
-                                            },
-                                        )
-                                    }
-                                    DropdownMenuItem(
-                                        text = { Text("Close") },
-                                        onClick = {
+                                if (optionsOpen) {
+                                    ReviewOptionsPopup(
+                                        showAutoFill = state.lockedSlots == null,
+                                        showSkip = showSkip && state.queueTotal > 1,
+                                        onDismiss = { optionsOpen = false },
+                                        onAutoFill = {
+                                            optionsOpen = false
+                                            viewModel.autoFillFromPriorities()
+                                        },
+                                        onSkip = {
+                                            optionsOpen = false
+                                            skipGame()
+                                        },
+                                        onClose = {
                                             optionsOpen = false
                                             dismiss()
                                         },
@@ -828,7 +829,7 @@ private fun ReviewSearchBar(
                 label = "Search",
                 modifier = Modifier.weight(1f),
             )
-            CompactFilledButton(
+            GamepadButton(
                 text = if (searching) "…" else "Go",
                 onClick = {
                     dismissTextEdit()
@@ -882,7 +883,7 @@ private fun ReviewOverview(
         return
     }
 
-    // Wireframe mosaic: left Icon/Boxart | center Metadata/Logo+Fanart/Banner | right Hero/Screenshots
+    // Wireframe mosaic: left Icon+Square/Boxart | center Metadata/Logo+Fanart/Banner | right Hero/Screenshots
     Row(
         modifier = modifier.padding(WajihaSpacing.smPlus),
         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
@@ -891,16 +892,31 @@ private fun ReviewOverview(
             modifier = Modifier.weight(0.85f).fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
         ) {
-            OverviewTile(
-                slot = ReviewSlot.Icon,
-                state = state,
-                focused = focusedSlot == ReviewSlot.Icon,
-                onFocus = { onFocusSlot(ReviewSlot.Icon) },
-                onOpen = { onOpenSlot(ReviewSlot.Icon) },
-                onClear = { onClearSlot(ReviewSlot.Icon) },
+            Row(
                 modifier = Modifier.weight(0.32f).fillMaxWidth(),
-                focusRequester = tileRequester(ReviewSlot.Icon),
-            )
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+            ) {
+                OverviewTile(
+                    slot = ReviewSlot.Icon,
+                    state = state,
+                    focused = focusedSlot == ReviewSlot.Icon,
+                    onFocus = { onFocusSlot(ReviewSlot.Icon) },
+                    onOpen = { onOpenSlot(ReviewSlot.Icon) },
+                    onClear = { onClearSlot(ReviewSlot.Icon) },
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    focusRequester = tileRequester(ReviewSlot.Icon),
+                )
+                OverviewTile(
+                    slot = ReviewSlot.Square,
+                    state = state,
+                    focused = focusedSlot == ReviewSlot.Square,
+                    onFocus = { onFocusSlot(ReviewSlot.Square) },
+                    onOpen = { onOpenSlot(ReviewSlot.Square) },
+                    onClear = { onClearSlot(ReviewSlot.Square) },
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    focusRequester = tileRequester(ReviewSlot.Square),
+                )
+            }
             OverviewTile(
                 slot = ReviewSlot.Boxart,
                 state = state,
@@ -1008,11 +1024,7 @@ private fun OverviewTile(
     val url =
         when (slot) {
             ReviewSlot.Metadata -> {
-                state.metadataFrom?.thumbnailUrl
-                    ?: state.metadataFrom
-                        ?.media
-                        ?.firstOrNull()
-                        ?.url
+                state.metadataFrom?.previewThumb()?.url
             }
 
             else -> {
@@ -1381,7 +1393,7 @@ private fun MediaPickerGrid(
 /** Adaptive cell width — icons denser, heroes / banners wider. */
 private fun mediaGridMinSize(type: MediaType): Dp =
     when (type) {
-        MediaType.Icon -> 72.dp
+        MediaType.Icon, MediaType.Square -> 72.dp
         MediaType.Logo -> 128.dp
         MediaType.Hero, MediaType.Banner -> 168.dp
         MediaType.Screenshot, MediaType.Fanart -> 140.dp
@@ -1391,7 +1403,7 @@ private fun mediaGridMinSize(type: MediaType): Dp =
 /** Fallback aspect (width/height) when API omits dimensions. */
 private fun mediaTypeDefaultAspect(type: MediaType): Float =
     when (type) {
-        MediaType.Icon -> 1f
+        MediaType.Icon, MediaType.Square -> 1f
         MediaType.Logo -> 16f / 9f
         MediaType.Hero, MediaType.Banner -> 3f
         MediaType.Screenshot, MediaType.Fanart -> 16f / 9f
@@ -1449,14 +1461,23 @@ private fun CompactCandidateRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.smPlus),
     ) {
+        val thumb = remember(candidate) { candidate.previewThumb() }
         AsyncImage(
-            model = candidate.thumbnailUrl ?: candidate.media.firstOrNull()?.url,
+            model = thumb.url,
             contentDescription = candidate.name,
             contentScale = ContentScale.Crop,
             modifier =
                 Modifier
-                    .size(WajihaSpacing.touchMin)
-                    .clip(RoundedCornerShape(3.dp))
+                    .then(
+                        if (thumb.square) {
+                            Modifier.size(WajihaSpacing.touchMin)
+                        } else {
+                            Modifier.size(
+                                width = WajihaSpacing.touchMin,
+                                height = WajihaSpacing.xl * 2,
+                            )
+                        },
+                    ).clip(WajihaShapes.tile)
                     .background(MaterialTheme.colorScheme.surfaceVariant),
         )
         Column(modifier = Modifier.weight(1f)) {
@@ -1682,19 +1703,94 @@ private fun CompactChip(
 }
 
 @Composable
-private fun CompactFilledButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
+private fun ReviewOptionsPopup(
+    showAutoFill: Boolean,
+    showSkip: Boolean,
+    onDismiss: () -> Unit,
+    onAutoFill: () -> Unit,
+    onSkip: () -> Unit,
+    onClose: () -> Unit,
 ) {
-    androidx.compose.material3.Button(
-        onClick = onClick,
-        enabled = enabled,
-        contentPadding = PaddingValues(horizontal = WajihaSpacing.smPlus, vertical = 0.dp),
-        modifier = modifier.height(WajihaSpacing.actionBarHeight),
-        colors = ButtonDefaults.buttonColors(),
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        firstFocus.requestContentFocus()
+    }
+    Popup(
+        alignment = Alignment.TopStart,
+        onDismissRequest = onDismiss,
+        properties =
+            PopupProperties(
+                focusable = true,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+            ),
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium)
+        Surface(
+            shape = WajihaShapes.card,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = WajihaElevation.low,
+            modifier =
+                Modifier
+                    .width(WajihaContextMenuMetrics.width)
+                    .border(border = softOutlineBorder(), shape = WajihaShapes.card)
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown &&
+                            GamepadKeys.isBack(event.type, event.key)
+                        ) {
+                            onDismiss()
+                            true
+                        } else {
+                            false
+                        }
+                    },
+        ) {
+            val items =
+                buildList {
+                    if (showAutoFill) add("Auto-fill" to onAutoFill)
+                    if (showSkip) add("Skip game" to onSkip)
+                    add("Close" to onClose)
+                }
+            Column {
+                items.forEachIndexed { index, (label, action) ->
+                    ReviewOptionsItem(
+                        label = label,
+                        onClick = action,
+                        focusRequester = if (index == 0) firstFocus else null,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewOptionsItem(
+    label: String,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
+    GamepadFocusable(
+        onClick = onClick,
+        focusId = "review_options_$label",
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .then(
+                    if (focusRequester != null) {
+                        Modifier.focusRequester(focusRequester)
+                    } else {
+                        Modifier
+                    },
+                ),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = WajihaContextMenuMetrics.rowHeight)
+                    .padding(horizontal = WajihaSpacing.smPlus, vertical = WajihaSpacing.sm),
+        )
     }
 }

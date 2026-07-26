@@ -1,6 +1,8 @@
 package com.wajiha.di
 
+import com.wajiha.data.ra.NoopRaHashLibraryStore
 import com.wajiha.data.ra.RaClient
+import com.wajiha.data.ra.RaHashLibraryStore
 import com.wajiha.data.ra.RaRepository
 import com.wajiha.data.scraper.BatchProgressStore
 import com.wajiha.data.scraper.BatchScraper
@@ -56,6 +58,14 @@ val scraperModule: Module =
         }
 
         single {
+            RaClient(
+                http = get(),
+                hashLibraryStore = getOrNull<RaHashLibraryStore>() ?: NoopRaHashLibraryStore,
+            )
+        }
+        single { RaRepository(get(), get(), get(), get()) }
+
+        single {
             val creds = getOrNull<ScreenScraperDevCredentials>() ?: ScreenScraperDevCredentials()
             listOf<ScraperSource>(
                 ScreenScraperSource(get(), creds.devId, creds.devPassword),
@@ -83,7 +93,4 @@ val scraperModule: Module =
 
         single { BatchProgressStore(get()) }
         single { BatchScraper(get(), get(), get(), get()) }
-
-        single { RaClient(get()) }
-        single { RaRepository(get(), get(), get()) }
     }

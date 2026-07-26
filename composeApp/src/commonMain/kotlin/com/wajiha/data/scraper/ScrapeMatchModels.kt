@@ -48,6 +48,8 @@ data class RankedGameMatch(
     val name: String,
     val confidence: MatchConfidence,
     val candidate: ScrapeCandidate,
+    /** Normalized name similarity vs the search query (`0f..1f`). */
+    val nameScore: Float = 1f,
 )
 
 /** One media option after cross-source ranking. */
@@ -76,6 +78,13 @@ data class MatchBundle(
      * Used by Review infinite scroll.
      */
     val steamGridDbHasMoreByType: Map<MediaType, Boolean> = emptyMap(),
+    /**
+     * Auto only: hits dropped by [NameMatchScorer.AutoConfidenceThreshold].
+     * Review keeps weak matches for manual choice.
+     */
+    val rejectedLowConfidenceCount: Int = 0,
+    /** Best name score among Auto rejects (for diagnostics). */
+    val bestRejectedNameScore: Float? = null,
 )
 
 /** Result of [com.wajiha.data.scraper.ScrapeEngine.gatherReviewMedia] for one media type. */

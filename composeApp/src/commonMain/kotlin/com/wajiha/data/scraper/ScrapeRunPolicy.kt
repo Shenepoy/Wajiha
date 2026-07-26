@@ -69,6 +69,7 @@ data class ScrapeSelection(
 val GapFillMediaTypes: List<MediaType> =
     listOf(
         MediaType.Boxart,
+        MediaType.Square,
         MediaType.Logo,
         MediaType.Hero,
     )

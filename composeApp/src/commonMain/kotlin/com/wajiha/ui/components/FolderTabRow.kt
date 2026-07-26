@@ -203,9 +203,14 @@ private fun FolderTab(
         if (selected) {
             MaterialTheme.colorScheme.onSurface
         } else {
-            outlinedColors.contentColor
+            outlinedColors.contentColor.copy(alpha = 0.78f)
         }
     val topPadding = if (selected) 0.dp else WajihaSpacing.xs
+    val unselectedBorder =
+        BorderStroke(
+            chromeBorder.width,
+            outlineColor.copy(alpha = 0.55f),
+        )
 
     Box(
         modifier = modifier.padding(top = topPadding),
@@ -225,7 +230,7 @@ private fun FolderTab(
                                 corner,
                             )
                         } else {
-                            Modifier.border(border = chromeBorder, shape = shape)
+                            Modifier.border(border = unselectedBorder, shape = shape)
                         },
                     ).pointerInput(onClick) {
                         detectTapGestures(
@@ -241,7 +246,7 @@ private fun FolderTab(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = labelColor,
                 maxLines = 1,
                 softWrap = false,

@@ -580,6 +580,8 @@ fun SecondaryApp() {
                                     gridRows = settings.gameGridSecondaryRows,
                                     gameGridArt = settings.gameGridSecondaryArt,
                                     gameGridTileSize = settings.gameGridSecondaryTileSize,
+                                    gameGridShowTitles = settings.gameGridSecondaryShowTitles,
+                                    gameGridShowTileChrome = settings.gameGridSecondaryShowTileChrome,
                                     onSelectPlatform = viewModel::selectPlatform,
                                     onFocusGame = viewModel::focusGame,
                                     onLaunchGame = viewModel::launchGame,

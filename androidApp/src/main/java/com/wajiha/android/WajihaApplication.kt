@@ -37,6 +37,7 @@ import com.wajiha.data.config.ConfigInstaller
 import com.wajiha.data.db.WajihaDatabase
 import com.wajiha.data.db.createWajihaDatabase
 import com.wajiha.data.prefs.SettingsRepository
+import com.wajiha.data.ra.RaHashLibraryStore
 import com.wajiha.data.scraper.ImageProcessor
 import com.wajiha.data.scraper.LocalMediaFiles
 import com.wajiha.data.scraper.MediaStorage
@@ -48,6 +49,7 @@ import com.wajiha.log.WajihaLogGate
 import com.wajiha.log.WajihaLogKind
 import com.wajiha.platform.AndroidImageProcessor
 import com.wajiha.platform.AndroidMediaStorage
+import com.wajiha.platform.AndroidRaHashLibraryStore
 import com.wajiha.platform.AppActions
 import com.wajiha.platform.ContentRomHasher
 import com.wajiha.platform.EsDeLocalMediaFiles
@@ -242,6 +244,7 @@ class WajihaApplication :
                 single { AndroidLibraryActions(this@WajihaApplication, get(), get()) } binds
                     arrayOf(LibraryActions::class)
                 single<MediaStorage> { AndroidMediaStorage(this@WajihaApplication) }
+                single<RaHashLibraryStore> { AndroidRaHashLibraryStore(this@WajihaApplication) }
                 single<LocalMediaFiles> { EsDeLocalMediaFiles() }
                 single<ImageProcessor> { AndroidImageProcessor() }
                 single { SystemController(this@WajihaApplication) } binds

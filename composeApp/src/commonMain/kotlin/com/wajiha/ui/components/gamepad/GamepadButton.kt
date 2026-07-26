@@ -25,6 +25,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextOverflow
 import com.wajiha.input.FocusClaimSource
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.LocalFocusContinuityController
@@ -51,6 +52,7 @@ fun GamepadButton(
     focusId: Any? = null,
     onFocusedChanged: ((Boolean) -> Unit)? = null,
     sound: UiSound? = UiSound.Open,
+    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
 ) {
     GamepadButtonScaffold(
         onClick = onClick,
@@ -62,7 +64,14 @@ fun GamepadButton(
         focusId = focusId ?: text,
         onFocusedChanged = onFocusedChanged,
         sound = sound,
-        content = { Text(text) },
+        contentPadding = contentPadding,
+        content = {
+            Text(
+                text = text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
     )
 }
 

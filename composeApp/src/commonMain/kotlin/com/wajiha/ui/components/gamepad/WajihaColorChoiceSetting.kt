@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,7 +28,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -35,11 +35,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.wajiha.data.prefs.AppSettings
+import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
+import com.wajiha.ui.theme.WajihaElevation
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
+import org.koin.compose.koinInject
 
 data class WajihaColorChoice(
     val value: String,
@@ -55,13 +59,13 @@ data class WajihaColorChoice(
 @Composable
 fun WajihaColorChoiceSetting(
     label: String,
-    description: String,
     choices: List<WajihaColorChoice>,
     selectedValue: String,
     selectedLabel: String,
     selectedColor: Color,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    description: String? = null,
     defaultValue: String? = null,
     onReset: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
@@ -76,6 +80,10 @@ fun WajihaColorChoiceSetting(
     val resolvedFocusId = focusId ?: label
     val canReset = onReset != null && defaultValue != null && selectedValue != defaultValue
     val headerFocusRequester = focusRequester ?: remember { FocusRequester() }
+    val settingsRepository = koinInject<SettingsRepository>()
+    val settings by settingsRepository.settings.collectAsState(initial = AppSettings())
+    val showDescription =
+        !description.isNullOrBlank() && !settings.settingsHeroHelp && !expanded
     val swatchFocusRequesters =
         remember(choices.size, onCustomChoice != null) {
             List(choices.size + if (onCustomChoice != null) 1 else 0) { FocusRequester() }
@@ -117,6 +125,8 @@ fun WajihaColorChoiceSetting(
         modifier = modifier,
         focusRequester = headerFocusRequester,
         focusId = resolvedFocusId,
+        // Expand under the row — pinning the header to the panel top jumps the ring.
+        scrollHeaderToTop = false,
         onReset = onReset.takeIf { canReset },
         onFocusedChanged = onFocusedChanged,
         onHintCapabilitiesChanged = onHintCapabilitiesChanged,
@@ -150,28 +160,33 @@ fun WajihaColorChoiceSetting(
             )
             SettingExpansionIcon(expanded = isExpanded)
         },
-        supportingContent = {
-            Text(
-                text = description,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier =
-                    Modifier.padding(
-                        start = WajihaSpacing.sm,
-                        end = WajihaSpacing.sm,
-                        top = WajihaSpacing.xs / 2,
-                    ),
-            )
-        },
+        supportingContent =
+            if (showDescription) {
+                {
+                    Text(
+                        text = description.orEmpty(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier =
+                            Modifier.padding(
+                                start = WajihaSpacing.sm,
+                                end = WajihaSpacing.sm,
+                                top = WajihaSpacing.xs / 2,
+                            ),
+                    )
+                }
+            } else {
+                null
+            },
     ) {
         Surface(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .padding(top = WajihaSpacing.xs / 2),
-            shape = RectangleShape,
+            shape = WajihaShapes.card,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 2.dp,
+            tonalElevation = WajihaElevation.low,
         ) {
             Column(
                 modifier = Modifier.padding(WajihaSpacing.sm),

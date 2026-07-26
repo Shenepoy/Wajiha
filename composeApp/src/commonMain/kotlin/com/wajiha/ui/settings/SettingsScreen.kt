@@ -14,12 +14,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,6 +65,8 @@ import com.wajiha.data.prefs.HeroDisplaySlot
 import com.wajiha.data.prefs.HeroLayoutPresets
 import com.wajiha.data.prefs.IconAppearancePreferences
 import com.wajiha.data.prefs.SettingsRepository
+import com.wajiha.input.GamepadHint
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadLayers
 import com.wajiha.input.rememberFocusContext
@@ -89,20 +95,32 @@ import com.wajiha.ui.components.gamepad.SettingSectionFocusRestorer
 import com.wajiha.ui.components.gamepad.SettingType
 import com.wajiha.ui.components.gamepad.WajihaActionSetting
 import com.wajiha.ui.components.gamepad.WajihaChoiceSetting
+import com.wajiha.ui.components.gamepad.WajihaColorChoice
+import com.wajiha.ui.components.gamepad.WajihaColorChoiceSetting
 import com.wajiha.ui.components.gamepad.WajihaMultiChoiceSetting
 import com.wajiha.ui.components.gamepad.WajihaNumberSetting
 import com.wajiha.ui.components.gamepad.WajihaSettingBlurb
 import com.wajiha.ui.components.gamepad.WajihaSettingDivider
+import com.wajiha.ui.components.gamepad.WajihaSettingFullscreenPage
+import com.wajiha.ui.components.gamepad.WajihaSettingGroup
+import com.wajiha.ui.components.gamepad.WajihaSettingOpenSetting
 import com.wajiha.ui.components.gamepad.WajihaToggleSetting
 import com.wajiha.ui.components.gamepad.libraryChromeGamepadHints
 import com.wajiha.ui.components.gamepad.libraryPlatformRowGamepadHints
 import com.wajiha.ui.components.gamepad.scrollHeaderToTop
 import com.wajiha.ui.components.gamepad.settingsGamepadHints
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
+import com.wajiha.ui.components.softOutlineBorder
 import com.wajiha.ui.home.hero.HeroLayoutEditorCanvasFromStore
 import com.wajiha.ui.home.hero.HeroLayoutEditorControlsFromStore
+import com.wajiha.ui.home.hero.HeroPreviewAspect
+import com.wajiha.ui.home.hero.handleHeroLayoutEditorKey
+import com.wajiha.ui.home.hero.heroLayoutEditorCanvasHints
+import com.wajiha.ui.home.hero.heroLayoutEditorControlsHints
 import com.wajiha.ui.navigation.heroOnPrimary
-import com.wajiha.ui.scraper.ScraperPageContent
+import com.wajiha.ui.scraper.ScraperHubContent
+import com.wajiha.ui.scraper.ScraperSubpage
+import com.wajiha.ui.scraper.ScraperSubpageFullscreen
 import com.wajiha.ui.scraper.ScraperViewModel
 import com.wajiha.ui.theme.FocusIndicatorDefaults
 import com.wajiha.ui.theme.WajihaAlphas
@@ -140,10 +158,46 @@ private enum class LibraryFocusKind {
     PlatformRow,
 }
 
+private enum class ScreensSubpage(
+    val title: String,
+) {
+    DualDisplay("Dual display"),
+    NowRunning("Now Running"),
+    HeroLayout("Hero layout"),
+}
+
+private enum class AppearanceSubpage(
+    val title: String,
+) {
+    FocusRing("Focus ring"),
+    Glyphs("Controller glyphs"),
+}
+
+/** Full-screen drill-ins that replace folder chrome (same pattern as Scraper). */
+private sealed interface SettingsDrillIn {
+    data class Scraper(
+        val page: ScraperSubpage,
+    ) : SettingsDrillIn
+
+    data class Screens(
+        val page: ScreensSubpage,
+    ) : SettingsDrillIn
+
+    data class Appearance(
+        val page: AppearanceSubpage,
+    ) : SettingsDrillIn
+
+    data object SystemLibraryScan : SettingsDrillIn
+
+    data object HeroLayoutEditor : SettingsDrillIn
+}
+
 /**
- * Settings with a top section picker and scrollable grouped cards.
- * Cocoon-inspired grouped cards, inline help copy, and handheld gamepad UX.
+ * Settings with folder tabs over short grouped cards. Dense clusters live on
+ * full-screen drill-in pages (Back + title, no folder tabs) — same chrome as
+ * Scraper Batch / Sources. Detailed help publishes to the dual-display hero.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun SettingsScreen(
     settingsViewModel: SettingsViewModel,
@@ -174,6 +228,18 @@ fun SettingsScreen(
     }
     var libraryFocusKind by remember { mutableStateOf(LibraryFocusKind.Chrome) }
     var perms by remember { mutableStateOf(PermissionStates()) }
+    var drillIn by remember { mutableStateOf<SettingsDrillIn?>(null) }
+    var lastScraperSubpage by remember { mutableStateOf<ScraperSubpage?>(null) }
+    var lastScreensSubpage by remember { mutableStateOf<ScreensSubpage?>(null) }
+    var lastAppearanceSubpage by remember { mutableStateOf<AppearanceSubpage?>(null) }
+    var lastSystemLibraryScan by remember { mutableStateOf(false) }
+    val drillInContentFocus = remember { FocusRequester() }
+    val heroLayoutEditing by dualScreenStore.heroLayoutEditing.collectAsState()
+    val editorGamepadOwner by dualScreenStore.gamepadOwner.collectAsState()
+    val scraperHubFocus = remember { FocusRequester() }
+    val screensHubFocus = remember { FocusRequester() }
+    val appearanceHubFocus = remember { FocusRequester() }
+    val systemHubFocus = remember { FocusRequester() }
     val sectionFocus = remember { FocusRequester() }
     val sectionFocusRestorer =
         remember(selectedSectionIndex) {
@@ -190,6 +256,94 @@ fun SettingsScreen(
         feedback.tabSelect(selectedSectionIndex, newIndex)
         selectedSectionIndex = newIndex
         rememberFocusContext("settings:section", newIndex)
+        if (drillIn is SettingsDrillIn.HeroLayoutEditor) {
+            dualScreenStore.heroLayoutEditDraft.value?.let { layout ->
+                settingsViewModel.setHeroLayoutForSlot(
+                    dualScreenStore.heroLayoutEditSlot.value,
+                    layout,
+                )
+            }
+            dualScreenStore.clearHeroLayoutEditDraft()
+            dualScreenStore.setHeroLayoutEditing(false)
+        }
+        drillIn = null
+    }
+
+    fun closeDrillIn() {
+        if (drillIn is SettingsDrillIn.HeroLayoutEditor) {
+            dualScreenStore.heroLayoutEditDraft.value?.let { layout ->
+                settingsViewModel.setHeroLayoutForSlot(
+                    dualScreenStore.heroLayoutEditSlot.value,
+                    layout,
+                )
+            }
+            dualScreenStore.clearHeroLayoutEditDraft()
+            dualScreenStore.setHeroLayoutEditing(false)
+            drillIn = SettingsDrillIn.Screens(ScreensSubpage.HeroLayout)
+            return
+        }
+        drillIn = null
+    }
+
+    BackHandler(enabled = drillIn != null) { closeDrillIn() }
+
+    // Canvas B / owner teardown clears editing without updating drillIn.
+    LaunchedEffect(heroLayoutEditing, drillIn) {
+        if (!heroLayoutEditing && drillIn is SettingsDrillIn.HeroLayoutEditor) {
+            dualScreenStore.heroLayoutEditDraft.value?.let { layout ->
+                settingsViewModel.setHeroLayoutForSlot(
+                    dualScreenStore.heroLayoutEditSlot.value,
+                    layout,
+                )
+            }
+            dualScreenStore.clearHeroLayoutEditDraft()
+            drillIn = SettingsDrillIn.Screens(ScreensSubpage.HeroLayout)
+        }
+    }
+
+    LaunchedEffect(drillIn) {
+        val target =
+            when (val page = drillIn) {
+                null -> {
+                    when (sections[selectedSectionIndex]) {
+                        SettingsSection.Scraper -> {
+                            scraperHubFocus.takeIf { lastScraperSubpage != null }
+                        }
+
+                        SettingsSection.Screens -> {
+                            screensHubFocus.takeIf { lastScreensSubpage != null }
+                        }
+
+                        SettingsSection.Appearance -> {
+                            appearanceHubFocus.takeIf { lastAppearanceSubpage != null }
+                        }
+
+                        SettingsSection.System -> {
+                            systemHubFocus.takeIf { lastSystemLibraryScan }
+                        }
+
+                        else -> {
+                            null
+                        }
+                    }
+                }
+
+                else -> {
+                    drillInContentFocus
+                }
+            }
+        if (target == null) return@LaunchedEffect
+        withFrameNanos { }
+        try {
+            target.requestFocus()
+        } catch (_: Exception) {
+        }
+    }
+
+    LaunchedEffect(settings.singleScreen, drillIn) {
+        if (settings.singleScreen && drillIn == SettingsDrillIn.Screens(ScreensSubpage.DualDisplay)) {
+            drillIn = null
+        }
     }
 
     LaunchedEffect(selectedSectionIndex) {
@@ -221,10 +375,37 @@ fun SettingsScreen(
         WajihaScreen(
             layerId = "settings",
             modifier = modifier,
-            onBack = onBack,
+            onBack = {
+                if (drillIn != null) {
+                    closeDrillIn()
+                } else {
+                    onBack()
+                }
+            },
             showActionBar = true,
             gamepadHints =
                 when {
+                    drillIn is SettingsDrillIn.HeroLayoutEditor -> {
+                        // Single screen never hands keys to the canvas (the controls
+                        // own D-pad), so only dual + hero ownership shows canvas keys.
+                        if (
+                            !settings.singleScreen &&
+                            editorGamepadOwner == dualScreenStore.heroGamepadOwner()
+                        ) {
+                            heroLayoutEditorCanvasHints()
+                        } else {
+                            heroLayoutEditorControlsHints()
+                        }
+                    }
+
+                    drillIn != null -> {
+                        listOf(
+                            GamepadHint(GamepadHintButton.A, "Select/Toggle"),
+                            GamepadHint(GamepadHintButton.B, "Back"),
+                            GamepadHint(GamepadHintButton.Y, "Reset"),
+                        )
+                    }
+
                     sections[selectedSectionIndex] == SettingsSection.Library &&
                         libraryFocusKind == LibraryFocusKind.PlatformRow -> {
                         libraryPlatformRowGamepadHints(isDual = !settings.singleScreen)
@@ -241,13 +422,56 @@ fun SettingsScreen(
             gamepadOwner = gamepadOwner,
             onClaimGamepad = onClaimGamepad,
             onOwnerGainedFocus = {
-                sectionFocusRestorer.restore(
-                    targetId = rememberedFocusTarget("settings"),
-                    fallback = sectionFocus,
-                )
+                if (drillIn is SettingsDrillIn.HeroLayoutEditor) {
+                    // L2 landed on Settings — focus controls (presets). Hero canvas
+                    // is driven only while the hero owns the pad.
+                    try {
+                        drillInContentFocus.requestFocus()
+                    } catch (_: Exception) {
+                    }
+                } else if (drillIn != null) {
+                    try {
+                        drillInContentFocus.requestFocus()
+                    } catch (_: Exception) {
+                    }
+                } else {
+                    sectionFocusRestorer.restore(
+                        targetId = rememberedFocusTarget("settings"),
+                        fallback = sectionFocus,
+                    )
+                }
             },
             onPreviewKey = { event ->
                 if (GamepadLayers.stack.topLayer != "settings") return@WajihaScreen false
+                if (drillIn is SettingsDrillIn.HeroLayoutEditor) {
+                    // Shared GamepadLayers would otherwise steal D-pad while Secondary
+                    // owns keys — L2 focus switch must reach the control chips.
+                    if (dualScreenStore.gamepadOwner.value != dualScreenStore.heroGamepadOwner()) {
+                        return@WajihaScreen false
+                    }
+                    val draft = dualScreenStore.heroLayoutEditDraft.value ?: return@WajihaScreen false
+                    val selected = dualScreenStore.heroLayoutEditSelected.value
+                    return@WajihaScreen handleHeroLayoutEditorKey(
+                        eventType = event.type,
+                        key = event.key,
+                        draft = draft,
+                        selectedId = selected,
+                        onSelect = dualScreenStore::setHeroLayoutEditSelected,
+                        onUpdate = dualScreenStore::updateHeroLayoutEditDraft,
+                        onExit = {
+                            dualScreenStore.heroLayoutEditDraft.value?.let { layout ->
+                                settingsViewModel.setHeroLayoutForSlot(
+                                    dualScreenStore.heroLayoutEditSlot.value,
+                                    layout,
+                                )
+                            }
+                            dualScreenStore.setHeroLayoutEditing(false)
+                            dualScreenStore.clearHeroLayoutEditDraft()
+                            drillIn = SettingsDrillIn.Screens(ScreensSubpage.HeroLayout)
+                        },
+                    )
+                }
+                if (drillIn != null) return@WajihaScreen false
                 when {
                     GamepadKeys.isL1(event.type, event.key) -> {
                         if (selectedSectionIndex > 0) {
@@ -274,6 +498,203 @@ fun SettingsScreen(
             },
         ) {
             val selectedSection = sections[selectedSectionIndex]
+            when (val page = drillIn) {
+                is SettingsDrillIn.Scraper -> {
+                    ScraperSubpageFullscreen(
+                        page = page.page,
+                        viewModel = scraperViewModel,
+                        onBack = { drillIn = null },
+                        contentFocusRequester = drillInContentFocus,
+                    )
+                    return@WajihaScreen
+                }
+
+                is SettingsDrillIn.Screens -> {
+                    WajihaSettingFullscreenPage(
+                        title = page.page.title,
+                        onBack = { drillIn = null },
+                    ) {
+                        WajihaSettingGroup {
+                            when (page.page) {
+                                ScreensSubpage.DualDisplay -> {
+                                    ScreensDualDisplaySettings(
+                                        settings = settings,
+                                        settingsViewModel = settingsViewModel,
+                                        dualScreenStore = dualScreenStore,
+                                        firstFocusRequester = drillInContentFocus,
+                                    )
+                                }
+
+                                ScreensSubpage.NowRunning -> {
+                                    ScreensNowRunningSettings(
+                                        settings = settings,
+                                        settingsViewModel = settingsViewModel,
+                                        firstFocusRequester = drillInContentFocus,
+                                    )
+                                }
+
+                                ScreensSubpage.HeroLayout -> {
+                                    ScreensHeroLayoutSettings(
+                                        settings = settings,
+                                        settingsViewModel = settingsViewModel,
+                                        single = settings.singleScreen,
+                                        firstFocusRequester = drillInContentFocus,
+                                        onCustomizeLayout = {
+                                            val slot =
+                                                if (heroOnPrimary(
+                                                        !settings.singleScreen,
+                                                        settings.swapScreenRoles,
+                                                    )
+                                                ) {
+                                                    HeroDisplaySlot.Primary
+                                                } else if (!settings.singleScreen) {
+                                                    HeroDisplaySlot.Secondary
+                                                } else {
+                                                    HeroDisplaySlot.Primary
+                                                }
+                                            val layout = settings.heroLayoutBundle.slot(slot)
+                                            dualScreenStore.beginHeroLayoutEdit(slot, layout)
+                                            drillIn = SettingsDrillIn.HeroLayoutEditor
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    return@WajihaScreen
+                }
+
+                is SettingsDrillIn.Appearance -> {
+                    WajihaSettingFullscreenPage(
+                        title = page.page.title,
+                        onBack = { drillIn = null },
+                    ) {
+                        WajihaSettingGroup {
+                            when (page.page) {
+                                AppearanceSubpage.FocusRing -> {
+                                    AppearanceFocusRingSettings(
+                                        settings = settings,
+                                        settingsViewModel = settingsViewModel,
+                                        dualScreenStore = dualScreenStore,
+                                        firstFocusRequester = drillInContentFocus,
+                                    )
+                                }
+
+                                AppearanceSubpage.Glyphs -> {
+                                    ControllerGlyphSettings(
+                                        settings = settings,
+                                        settingsViewModel = settingsViewModel,
+                                        dualScreenStore = dualScreenStore,
+                                        firstFocusRequester = drillInContentFocus,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    return@WajihaScreen
+                }
+
+                SettingsDrillIn.SystemLibraryScan -> {
+                    WajihaSettingFullscreenPage(
+                        title = "Library scan",
+                        onBack = { drillIn = null },
+                    ) {
+                        WajihaSettingGroup {
+                            IgnoreFileNamePatternsSection(
+                                settings = settings,
+                                settingsViewModel = settingsViewModel,
+                                firstFocusRequester = drillInContentFocus,
+                            )
+                        }
+                    }
+                    return@WajihaScreen
+                }
+
+                SettingsDrillIn.HeroLayoutEditor -> {
+                    val saveAndExit: (com.wajiha.data.prefs.HeroLayout) -> Unit = { layout ->
+                        val slot = dualScreenStore.heroLayoutEditSlot.value
+                        settingsViewModel.setHeroLayoutForSlot(slot, layout)
+                    }
+                    val finishEditor: () -> Unit = {
+                        dualScreenStore.heroLayoutEditDraft.value?.let(saveAndExit)
+                        dualScreenStore.clearHeroLayoutEditDraft()
+                        dualScreenStore.setHeroLayoutEditing(false)
+                        drillIn = SettingsDrillIn.Screens(ScreensSubpage.HeroLayout)
+                    }
+                    if (settings.singleScreen) {
+                        WajihaSettingFullscreenPage(
+                            title = "Customize hero layout",
+                            description = "Preview above · refine below · drag on the canvas",
+                            onBack = finishEditor,
+                            scrollable = false,
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                // Hero aspect so preview positions match the real hero.
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .weight(0.52f)
+                                            .fillMaxWidth(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    HeroLayoutEditorCanvasFromStore(
+                                        tile = null,
+                                        platformName = null,
+                                        onExit = finishEditor,
+                                        modifier =
+                                            Modifier
+                                                .fillMaxHeight()
+                                                .aspectRatio(HeroPreviewAspect)
+                                                .clip(WajihaShapes.card)
+                                                .border(
+                                                    border = softOutlineBorder(),
+                                                    shape = WajihaShapes.card,
+                                                ),
+                                    )
+                                }
+                                HeroLayoutEditorControlsFromStore(
+                                    onSaveAndExit = {
+                                        saveAndExit(it)
+                                        dualScreenStore.clearHeroLayoutEditDraft()
+                                        dualScreenStore.setHeroLayoutEditing(false)
+                                        drillIn = SettingsDrillIn.Screens(ScreensSubpage.HeroLayout)
+                                    },
+                                    dualDisplay = false,
+                                    firstFocusRequester = drillInContentFocus,
+                                    modifier =
+                                        Modifier
+                                            .weight(0.48f)
+                                            .fillMaxWidth()
+                                            .verticalScroll(rememberScrollState()),
+                                )
+                            }
+                        }
+                    } else {
+                        WajihaSettingFullscreenPage(
+                            title = "Customize hero layout",
+                            description = "Live on the hero · L2 Focus switches the gamepad here",
+                            onBack = finishEditor,
+                        ) {
+                            HeroLayoutEditorControlsFromStore(
+                                onSaveAndExit = {
+                                    saveAndExit(it)
+                                    dualScreenStore.clearHeroLayoutEditDraft()
+                                    dualScreenStore.setHeroLayoutEditing(false)
+                                    drillIn = SettingsDrillIn.Screens(ScreensSubpage.HeroLayout)
+                                },
+                                dualDisplay = true,
+                                firstFocusRequester = drillInContentFocus,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                    return@WajihaScreen
+                }
+
+                null -> {
+                    Unit
+                }
+            }
             WajihaFolderSettingChrome(
                 tabs = sections.map { it.label },
                 selectedIndex = selectedSectionIndex,
@@ -317,9 +738,14 @@ fun SettingsScreen(
                     }
 
                     SettingsSection.Scraper -> {
-                        ScraperSectionContent(
-                            scraperViewModel = scraperViewModel,
+                        ScraperHubContent(
+                            onOpen = { page ->
+                                lastScraperSubpage = page
+                                drillIn = SettingsDrillIn.Scraper(page)
+                            },
                             firstFocusRequester = sectionFocus,
+                            restoreFocusPage = lastScraperSubpage,
+                            hubFocusRequester = scraperHubFocus,
                         )
                     }
 
@@ -330,8 +756,13 @@ fun SettingsScreen(
                             perms = perms,
                             systemControls = systemControls,
                             dualScreenStore = dualScreenStore,
-                            gamepadOwner = gamepadOwner,
                             firstFocusRequester = sectionFocus,
+                            hubFocusRequester = screensHubFocus,
+                            restoreFocusPage = lastScreensSubpage,
+                            onOpenSubpage = { page ->
+                                lastScreensSubpage = page
+                                drillIn = SettingsDrillIn.Screens(page)
+                            },
                         )
                     }
 
@@ -342,6 +773,12 @@ fun SettingsScreen(
                             dualScreenStore = dualScreenStore,
                             secondaryMenuActivity = gamepadOwner == GamepadOwner.Secondary,
                             firstFocusRequester = sectionFocus,
+                            hubFocusRequester = appearanceHubFocus,
+                            restoreFocusPage = lastAppearanceSubpage,
+                            onOpenSubpage = { page ->
+                                lastAppearanceSubpage = page
+                                drillIn = SettingsDrillIn.Appearance(page)
+                            },
                         )
                     }
 
@@ -352,6 +789,12 @@ fun SettingsScreen(
                             perms = perms,
                             systemControls = systemControls,
                             firstFocusRequester = sectionFocus,
+                            hubFocusRequester = systemHubFocus,
+                            restoreLibraryScanFocus = lastSystemLibraryScan,
+                            onOpenLibraryScan = {
+                                lastSystemLibraryScan = true
+                                drillIn = SettingsDrillIn.SystemLibraryScan
+                            },
                         )
                     }
                 }
@@ -377,47 +820,38 @@ private fun LibrarySectionContent(
     onPlatformRowFocused: () -> Unit,
     firstFocusRequester: FocusRequester? = null,
 ) {
-    WajihaSettingBlurb(
-        "Systems with at least one ROM folder. Edit a platform to change " +
-            "folders, emulator, scraper ids, or hide it from the home filter.",
-    )
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-    ) {
-        GamepadButton(
-            text = "Add platform",
+    WajihaSettingGroup(title = "Actions") {
+        WajihaActionSetting(
+            label = "Add platform",
+            actionLabel = "Add",
             onClick = onAddPlatform,
-            modifier = Modifier.weight(1f),
             focusRequester = firstFocusRequester,
             onFocusedChanged = { if (it) onChromeFocused() },
         )
-        GamepadButton(
-            text = "Rescan all",
+        WajihaSettingDivider()
+        WajihaActionSetting(
+            label = "Rescan library",
+            actionLabel = "Rescan",
             onClick = onRescanLibrary,
-            outlined = true,
-            modifier = Modifier.weight(1f),
             onFocusedChanged = { if (it) onChromeFocused() },
         )
     }
-    if (inUsePlatforms.isEmpty()) {
-        WajihaEmptyState(
-            title = "No platforms yet",
-            subtitle = "Add a platform, then pick a ROM folder to start building your library.",
-            action = {
-                GamepadButton(
-                    text = "Add platform",
-                    onClick = onAddPlatform,
-                    focusRequester = firstFocusRequester,
-                    onFocusedChanged = { if (it) onChromeFocused() },
-                )
-            },
-        )
-    } else {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
-        ) {
-            inUsePlatforms.forEach { platform ->
+    WajihaSettingGroup(title = "Platforms") {
+        if (inUsePlatforms.isEmpty()) {
+            WajihaEmptyState(
+                title = "No platforms yet",
+                subtitle = "Add a platform, then pick a ROM folder to start building your library.",
+                action = {
+                    GamepadButton(
+                        text = "Add platform",
+                        onClick = onAddPlatform,
+                        onFocusedChanged = { if (it) onChromeFocused() },
+                    )
+                },
+            )
+        } else {
+            inUsePlatforms.forEachIndexed { index, platform ->
+                if (index > 0) WajihaSettingDivider()
                 val folderCount = folders.count { it.platformId == platform.id }
                 val gameCount = gameCountsByPlatform[platform.id] ?: 0
                 val paths =
@@ -443,334 +877,338 @@ private fun LibrarySectionContent(
 }
 
 @Composable
-private fun ScraperSectionContent(
-    scraperViewModel: ScraperViewModel,
-    firstFocusRequester: FocusRequester? = null,
-) {
-    ScraperPageContent(scraperViewModel, firstFocusRequester)
-}
-
-@Composable
 private fun ScreensSectionContent(
     settings: AppSettings,
     settingsViewModel: SettingsViewModel,
     perms: PermissionStates,
     systemControls: SystemControls,
     dualScreenStore: DualScreenStore,
-    gamepadOwner: GamepadOwner? = null,
     firstFocusRequester: FocusRequester? = null,
+    hubFocusRequester: FocusRequester? = null,
+    restoreFocusPage: ScreensSubpage? = null,
+    onOpenSubpage: (ScreensSubpage) -> Unit,
 ) {
     val single = settings.singleScreen
-    val layoutEditing by dualScreenStore.heroLayoutEditing.collectAsState()
-    if (layoutEditing) {
-        val saveAndExit: (com.wajiha.data.prefs.HeroLayout) -> Unit = { layout ->
-            val slot = dualScreenStore.heroLayoutEditSlot.value
-            settingsViewModel.setHeroLayoutForSlot(slot, layout)
-        }
-        if (single) {
-            // Single-screen: Settings replaces TopScreen, so stack preview + controls here.
-            Column(modifier = Modifier.fillMaxSize()) {
-                Box(
-                    modifier =
-                        Modifier
-                            .weight(0.55f)
-                            .fillMaxWidth(),
-                ) {
-                    HeroLayoutEditorCanvasFromStore(
-                        tile = null,
-                        platformName = null,
-                        onExit = {
-                            dualScreenStore.heroLayoutEditDraft.value?.let(saveAndExit)
-                            dualScreenStore.setHeroLayoutEditing(false)
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-                HeroLayoutEditorControlsFromStore(
-                    onSaveAndExit = saveAndExit,
-                    modifier =
-                        Modifier
-                            .weight(0.45f)
-                            .fillMaxWidth(),
-                )
-            }
-        } else {
-            HeroLayoutEditorControlsFromStore(onSaveAndExit = saveAndExit)
-        }
-        return
+    val openRowFocus: (ScreensSubpage) -> FocusRequester? = { candidate ->
+        hubFocusRequester?.takeIf { restoreFocusPage == candidate }
     }
-    WajihaSettingBlurb(
-        "Choose one screen or both. Single screen runs the combined launcher on the " +
-            "main display only; dual uses top and bottom on clamshell handhelds.",
-    )
+
+    WajihaSettingGroup(title = "Display mode") {
+        WajihaToggleSetting(
+            label = "Single screen",
+            description = "Main display only; stops the bottom Wajiha launcher.",
+            checked = single,
+            onCheckedChange = settingsViewModel::setSingleScreen,
+            defaultChecked = false,
+            onReset = { settingsViewModel.setSingleScreen(false) },
+            focusRequester = firstFocusRequester,
+            onFocusedChanged =
+                settingsToggleHeroFocus(
+                    store = dualScreenStore,
+                    title = "Single screen",
+                    subtitle =
+                        "Use only the main display. Stops the bottom/secondary Wajiha launcher.",
+                    checked = single,
+                    showRoleDiagram = !single,
+                    kind = SettingsHeroKind.ScreensChrome,
+                ),
+        )
+        if (single) {
+            WajihaSettingDivider()
+            WajihaToggleSetting(
+                label = "Show hero banner",
+                description = "Artwork above the game grid. Off fills the screen with the library.",
+                checked = settings.showHeroBanner,
+                onCheckedChange = settingsViewModel::setShowHeroBanner,
+                defaultChecked = true,
+                onReset = { settingsViewModel.setShowHeroBanner(true) },
+            )
+            WajihaSettingDivider()
+            WajihaToggleSetting(
+                label = "Show selected game name",
+                description = "Title above the library when the hero banner is hidden.",
+                checked = settings.showSelectedGameName,
+                onCheckedChange = settingsViewModel::setShowSelectedGameName,
+                defaultChecked = false,
+                onReset = { settingsViewModel.setShowSelectedGameName(false) },
+            )
+        }
+    }
+    WajihaSettingGroup(title = "Sessions") {
+        WajihaToggleSetting(
+            label = "Outside launches → Now Playing",
+            description =
+                "Detect games started outside Wajiha and show Now Playing " +
+                    if (single) "here." else "on the secondary display.",
+            checked = settings.detectManualLaunches,
+            onCheckedChange = settingsViewModel::setDetectManualLaunches,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setDetectManualLaunches(true) },
+        )
+        WajihaSettingDivider()
+        WajihaToggleSetting(
+            label = "Close runaway games on low memory",
+            description = "Force-stop emulators that balloon RAM. May lose unsaved progress.",
+            checked = settings.memoryGuardEnabled,
+            onCheckedChange = settingsViewModel::setMemoryGuardEnabled,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setMemoryGuardEnabled(true) },
+        )
+        if (settings.detectManualLaunches) {
+            WajihaSettingDivider()
+            WajihaToggleSetting(
+                label = "Match from emulator files",
+                description =
+                    if (perms.allFilesAccess) {
+                        "Read emulator config to match outside launches to your library."
+                    } else {
+                        "Needs All files access (System). Reads emulator config only."
+                    },
+                checked = settings.romReconciliationEnabled && perms.allFilesAccess,
+                onCheckedChange = { enabled ->
+                    if (enabled && !perms.allFilesAccess) {
+                        systemControls.requestAllFilesAccess()
+                    } else {
+                        settingsViewModel.setRomReconciliationEnabled(enabled)
+                    }
+                },
+                defaultChecked = false,
+                onReset = { settingsViewModel.setRomReconciliationEnabled(false) },
+            )
+        }
+        WajihaSettingDivider()
+        WajihaMultiChoiceSetting(
+            label = "Show active sessions",
+            description =
+                if (single) {
+                    "How running games appear on the library."
+                } else {
+                    "How running games appear on the bottom screen."
+                },
+            choiceOptions =
+                listOf(
+                    MultiChoiceOption("None", "None", icon = "○"),
+                    MultiChoiceOption("GridTiles", "Grid tiles", icon = "▦"),
+                    MultiChoiceOption("FloatingChip", "Floating chip", icon = "◉"),
+                    MultiChoiceOption("Both", "Both", icon = "⊞"),
+                ),
+            selected = settings.nowPlayingDisplay,
+            onSelect = settingsViewModel::setNowPlayingDisplay,
+            defaultValue = "Both",
+            onReset = { settingsViewModel.setNowPlayingDisplay("Both") },
+        )
+    }
+    WajihaSettingGroup(title = "Layout") {
+        if (!single) {
+            WajihaSettingOpenSetting(
+                label = ScreensSubpage.DualDisplay.title,
+                onOpen = { onOpenSubpage(ScreensSubpage.DualDisplay) },
+                focusRequester = openRowFocus(ScreensSubpage.DualDisplay),
+            )
+            WajihaSettingDivider()
+        }
+        WajihaSettingOpenSetting(
+            label = ScreensSubpage.NowRunning.title,
+            onOpen = { onOpenSubpage(ScreensSubpage.NowRunning) },
+            focusRequester = openRowFocus(ScreensSubpage.NowRunning),
+        )
+        WajihaSettingDivider()
+        WajihaSettingOpenSetting(
+            label = ScreensSubpage.HeroLayout.title,
+            onOpen = { onOpenSubpage(ScreensSubpage.HeroLayout) },
+            focusRequester = openRowFocus(ScreensSubpage.HeroLayout),
+        )
+    }
+}
+
+@Composable
+private fun ScreensDualDisplaySettings(
+    settings: AppSettings,
+    settingsViewModel: SettingsViewModel,
+    dualScreenStore: DualScreenStore,
+    firstFocusRequester: FocusRequester? = null,
+) {
     WajihaToggleSetting(
-        label = "Single screen",
-        description =
-            "Use only the main display. Stops the bottom/secondary Wajiha launcher; " +
-                "the other panel (if any) is left to the system. Change anytime here.",
-        checked = single,
-        onCheckedChange = settingsViewModel::setSingleScreen,
+        label = "Black out unused display",
+        description = "Turn off the idle screen while a game runs.",
+        checked = settings.blackoutOnLaunch,
+        onCheckedChange = settingsViewModel::setBlackoutOnLaunch,
         defaultChecked = false,
-        onReset = { settingsViewModel.setSingleScreen(false) },
+        onReset = { settingsViewModel.setBlackoutOnLaunch(false) },
         focusRequester = firstFocusRequester,
+    )
+    WajihaSettingDivider()
+    WajihaToggleSetting(
+        label = "Swap screen roles",
+        description = "Grid on top, hero on bottom (or the reverse).",
+        checked = settings.swapScreenRoles,
+        onCheckedChange = { swapped ->
+            // Adopt destination before the swap pref notifies Compose.
+            dualScreenStore.onScreenRolesSwapped(menuOnPrimary = swapped)
+            settingsViewModel.setSwapScreenRoles(swapped)
+        },
+        defaultChecked = false,
+        onReset = {
+            dualScreenStore.onScreenRolesSwapped(menuOnPrimary = false)
+            settingsViewModel.setSwapScreenRoles(false)
+        },
         onFocusedChanged =
             settingsToggleHeroFocus(
                 store = dualScreenStore,
-                title = "Single screen",
-                subtitle =
-                    "Use only the main display. Stops the bottom/secondary Wajiha launcher.",
-                checked = single,
-                showRoleDiagram = !single,
+                title = "Swap screen roles",
+                subtitle = "Flip which display shows the game grid versus hero artwork.",
+                checked = settings.swapScreenRoles,
+                showRoleDiagram = true,
                 kind = SettingsHeroKind.ScreensChrome,
             ),
     )
-    if (single) {
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Show hero banner",
-            description =
-                "Preview artwork above the game grid. When off, the library fills the " +
-                    "screen and filter / settings return to the top bar.",
-            checked = settings.showHeroBanner,
-            onCheckedChange = settingsViewModel::setShowHeroBanner,
-            defaultChecked = true,
-            onReset = { settingsViewModel.setShowHeroBanner(true) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Show selected game name",
-            description =
-                "Display the focused game's title above the library. Useful when the " +
-                    "hero banner is hidden.",
-            checked = settings.showSelectedGameName,
-            onCheckedChange = settingsViewModel::setShowSelectedGameName,
-            defaultChecked = false,
-            onReset = { settingsViewModel.setShowSelectedGameName(false) },
-        )
-    }
     WajihaSettingDivider()
     WajihaToggleSetting(
-        label = "Show Now Playing for games launched outside Wajiha",
-        description =
-            "Detect when another app launches a game and show Now Playing " +
-                if (single) {
-                    "on this display."
-                } else {
-                    "on the secondary display."
-                },
-        checked = settings.detectManualLaunches,
-        onCheckedChange = settingsViewModel::setDetectManualLaunches,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setDetectManualLaunches(true) },
+        label = "Swap gamepad hints",
+        description = "Show the hint bar on the hero display instead of under the grid.",
+        checked = settings.swapGamepadHints,
+        onCheckedChange = settingsViewModel::setSwapGamepadHints,
+        defaultChecked = false,
+        onReset = { settingsViewModel.setSwapGamepadHints(false) },
+        onFocusedChanged =
+            settingsToggleHeroFocus(
+                store = dualScreenStore,
+                title = "Swap gamepad hints",
+                subtitle =
+                    "Show the controller hint bar on the hero display instead of under " +
+                        "the game grid and menus.",
+                checked = settings.swapGamepadHints,
+                kind = SettingsHeroKind.ScreensChrome,
+            ),
     )
     WajihaSettingDivider()
     WajihaToggleSetting(
-        label = "Close runaway games when memory is low",
-        description =
-            "Force-stop emulator sessions that balloon RAM so the " +
-                "device stays responsive. May lose unsaved progress.",
-        checked = settings.memoryGuardEnabled,
-        onCheckedChange = settingsViewModel::setMemoryGuardEnabled,
+        label = "Focused setting on other display",
+        description = "Hero explains the focused Settings row while you browse.",
+        checked = settings.settingsHeroHelp,
+        onCheckedChange = { enabled ->
+            settingsViewModel.setSettingsHeroHelp(enabled)
+            if (!enabled) settingsViewModel.setSettingsHeroActions(false)
+        },
         defaultChecked = true,
-        onReset = { settingsViewModel.setMemoryGuardEnabled(true) },
+        onReset = {
+            settingsViewModel.setSettingsHeroHelp(true)
+        },
+        onFocusedChanged =
+            settingsToggleHeroFocus(
+                store = dualScreenStore,
+                title = "Show focused setting on other display",
+                subtitle =
+                    "While Settings is open, the hero display explains the focused row.",
+                checked = settings.settingsHeroHelp,
+                showRoleDiagram = true,
+                kind = SettingsHeroKind.ScreensChrome,
+            ),
     )
-    if (settings.detectManualLaunches) {
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Identify game from emulator files",
-            description =
-                if (perms.allFilesAccess) {
-                    "Read emulator config to match externally launched games to your library. " +
-                        "Does not access your ROM folders."
-                } else {
-                    "Requires All files access (System section). Reads emulator config only."
-                },
-            checked = settings.romReconciliationEnabled && perms.allFilesAccess,
-            onCheckedChange = { enabled ->
-                if (enabled && !perms.allFilesAccess) {
-                    systemControls.requestAllFilesAccess()
-                } else {
-                    settingsViewModel.setRomReconciliationEnabled(enabled)
-                }
-            },
-            defaultChecked = false,
-            onReset = { settingsViewModel.setRomReconciliationEnabled(false) },
-        )
-    }
-    if (!single) {
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Black out unused display when a game starts",
-            description =
-                "Turn off the idle screen while a game runs for a cleaner play experience.",
-            checked = settings.blackoutOnLaunch,
-            onCheckedChange = settingsViewModel::setBlackoutOnLaunch,
-            defaultChecked = false,
-            onReset = { settingsViewModel.setBlackoutOnLaunch(false) },
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Swap screen roles (grid on top, hero on bottom)",
-            description = "Flip which display shows the game grid versus hero artwork.",
-            checked = settings.swapScreenRoles,
-            onCheckedChange = { swapped ->
-                // Adopt destination before the swap pref notifies Compose.
-                dualScreenStore.onScreenRolesSwapped(menuOnPrimary = swapped)
-                settingsViewModel.setSwapScreenRoles(swapped)
-            },
-            defaultChecked = false,
-            onReset = {
-                dualScreenStore.onScreenRolesSwapped(menuOnPrimary = false)
-                settingsViewModel.setSwapScreenRoles(false)
-            },
-            onFocusedChanged =
-                settingsToggleHeroFocus(
-                    store = dualScreenStore,
-                    title = "Swap screen roles",
-                    subtitle = "Flip which display shows the game grid versus hero artwork.",
-                    checked = settings.swapScreenRoles,
-                    showRoleDiagram = true,
-                    kind = SettingsHeroKind.ScreensChrome,
-                ),
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Swap gamepad hints",
-            description =
-                "Show the controller hint bar on the hero display instead of under " +
-                    "the game grid and menus.",
-            checked = settings.swapGamepadHints,
-            onCheckedChange = settingsViewModel::setSwapGamepadHints,
-            defaultChecked = false,
-            onReset = { settingsViewModel.setSwapGamepadHints(false) },
-            onFocusedChanged =
-                settingsToggleHeroFocus(
-                    store = dualScreenStore,
-                    title = "Swap gamepad hints",
-                    subtitle =
-                        "Show the controller hint bar on the hero display instead of under " +
-                            "the game grid and menus.",
-                    checked = settings.swapGamepadHints,
-                    kind = SettingsHeroKind.ScreensChrome,
-                ),
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Show focused setting on other display",
-            description =
-                "While Settings is open, the hero display explains the focused row — " +
-                    "value, hints, and platform details.",
-            checked = settings.settingsHeroHelp,
-            onCheckedChange = { enabled ->
-                settingsViewModel.setSettingsHeroHelp(enabled)
-                if (!enabled) settingsViewModel.setSettingsHeroActions(false)
-            },
-            defaultChecked = true,
-            onReset = {
-                settingsViewModel.setSettingsHeroHelp(true)
-            },
-            onFocusedChanged =
-                settingsToggleHeroFocus(
-                    store = dualScreenStore,
-                    title = "Show focused setting on other display",
-                    subtitle =
-                        "While Settings is open, the hero display explains the focused row.",
-                    checked = settings.settingsHeroHelp,
-                    showRoleDiagram = true,
-                    kind = SettingsHeroKind.ScreensChrome,
-                ),
-        )
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Show actions on other display",
-            description =
-                "Allow changing the focused setting from the hero display " +
-                    "(options, Edit / Rescan). Requires focused-setting help.",
-            checked = settings.settingsHeroActions,
-            onCheckedChange = settingsViewModel::setSettingsHeroActions,
-            defaultChecked = false,
-            onReset = { settingsViewModel.setSettingsHeroActions(false) },
-            enabled = settings.settingsHeroHelp,
-            onFocusedChanged =
-                settingsToggleHeroFocus(
-                    store = dualScreenStore,
-                    title = "Show actions on other display",
-                    subtitle =
-                        "Allow changing the focused setting from the hero display.",
-                    checked = settings.settingsHeroActions,
-                    valueText =
-                        when {
-                            !settings.settingsHeroHelp -> "Requires help on"
-                            settings.settingsHeroActions -> "On"
-                            else -> "Off"
-                        },
-                    kind = SettingsHeroKind.ScreensChrome,
-                ),
-        )
-        WajihaSettingDivider()
-        WajihaMultiChoiceSetting(
-            label = "Bottom screen while a game runs",
-            description =
-                "Choose what the secondary display shows after you launch a game. " +
-                    "Blackout turns the bottom screen off until you tap it.",
-            choiceOptions =
-                listOf(
-                    MultiChoiceOption("NowPlaying", "Now Running", icon = "▶"),
-                    MultiChoiceOption("QuickSettings", "Quick Settings", icon = "⚙"),
-                    MultiChoiceOption("RunningApps", "Running Apps", icon = "▣"),
-                    MultiChoiceOption("Clock", "Clock", icon = "◷"),
-                    MultiChoiceOption(
-                        value = "Off",
-                        label = "Blackout",
-                        description = "Screen off until you tap it.",
-                        icon = "◼",
-                    ),
-                ),
-            selected = settings.gameSecondaryMode,
-            onSelect = settingsViewModel::setGameSecondaryMode,
-            defaultValue = "NowPlaying",
-            onReset = { settingsViewModel.setGameSecondaryMode("NowPlaying") },
-        )
-    }
+    WajihaSettingDivider()
+    WajihaToggleSetting(
+        label = "Actions on other display",
+        description = "Change the focused setting from the hero. Needs help above.",
+        checked = settings.settingsHeroActions,
+        onCheckedChange = settingsViewModel::setSettingsHeroActions,
+        defaultChecked = false,
+        onReset = { settingsViewModel.setSettingsHeroActions(false) },
+        enabled = settings.settingsHeroHelp,
+        onFocusedChanged =
+            settingsToggleHeroFocus(
+                store = dualScreenStore,
+                title = "Show actions on other display",
+                subtitle =
+                    "Allow changing the focused setting from the hero display.",
+                checked = settings.settingsHeroActions,
+                valueText =
+                    when {
+                        !settings.settingsHeroHelp -> "Requires help on"
+                        settings.settingsHeroActions -> "On"
+                        else -> "Off"
+                    },
+                kind = SettingsHeroKind.ScreensChrome,
+            ),
+    )
     WajihaSettingDivider()
     WajihaMultiChoiceSetting(
-        label = "Show active sessions",
-        description =
-            if (single) {
-                "How running games appear on the library while you play. " +
-                    "None hides session indicators; grid tiles sit in the game strip; " +
-                    "the floating chip stays above the action bar."
-            } else {
-                "Choose how running games appear on the bottom screen while you play. " +
-                    "None hides session indicators; grid tiles sit in the game strip; " +
-                    "the floating chip stays above the action bar."
-            },
+        label = "Bottom screen while a game runs",
+        description = "What the secondary display shows after launch. Blackout until tap.",
         choiceOptions =
             listOf(
-                MultiChoiceOption("None", "None", icon = "○"),
-                MultiChoiceOption("GridTiles", "Grid tiles", icon = "▦"),
-                MultiChoiceOption("FloatingChip", "Floating chip", icon = "◉"),
-                MultiChoiceOption("Both", "Both", icon = "⊞"),
+                MultiChoiceOption("NowPlaying", "Now Running", icon = "▶"),
+                MultiChoiceOption("QuickSettings", "Quick Settings", icon = "⚙"),
+                MultiChoiceOption("RunningApps", "Running Apps", icon = "▣"),
+                MultiChoiceOption("Clock", "Clock", icon = "◷"),
+                MultiChoiceOption(
+                    value = "Off",
+                    label = "Blackout",
+                    description = "Screen off until you tap it.",
+                    icon = "◼",
+                ),
             ),
-        selected = settings.nowPlayingDisplay,
-        onSelect = settingsViewModel::setNowPlayingDisplay,
-        defaultValue = "Both",
-        onReset = { settingsViewModel.setNowPlayingDisplay("Both") },
+        selected = settings.gameSecondaryMode,
+        onSelect = settingsViewModel::setGameSecondaryMode,
+        defaultValue = "NowPlaying",
+        onReset = { settingsViewModel.setGameSecondaryMode("NowPlaying") },
     )
     WajihaSettingDivider()
     WajihaToggleSetting(
-        label = "Focused game hero background",
-        description =
-            "Use the focused game's hero art as a full-screen background behind the game grid.",
-        checked = settings.gameGridHeroBackground,
-        onCheckedChange = settingsViewModel::setGameGridHeroBackground,
+        label = "Dim bottom screen in game",
+        description = "Darken the secondary display. Blackout still turns it fully off.",
+        checked = settings.gameDimEnabled,
+        onCheckedChange = settingsViewModel::setGameDimEnabled,
         defaultChecked = false,
-        onReset = { settingsViewModel.setGameGridHeroBackground(false) },
+        onReset = { settingsViewModel.setGameDimEnabled(false) },
     )
-    WajihaSettingDivider()
-    WajihaSettingBlurb(
-        "Now Running page layout: hero backdrop and logo in place of the game title.",
-    )
+    if (settings.gameDimEnabled) {
+        WajihaSettingDivider()
+        WajihaToggleSetting(
+            label = "Dim only on Now Playing page",
+            description =
+                "When on, the dim scrim applies only while the bottom screen shows Now Playing. " +
+                    "When off, dim applies on any secondary screen except Blackout.",
+            checked = settings.gameDimOnlyOnNowPlaying,
+            onCheckedChange = settingsViewModel::setGameDimOnlyOnNowPlaying,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setGameDimOnlyOnNowPlaying(true) },
+        )
+        WajihaSettingDivider()
+        WajihaNumberSetting(
+            label = "Dim strength",
+            description =
+                "How dark the overlay is. 100% is near-black but still restores on tap.",
+            value = settings.gameDimPercent,
+            onValueChange = settingsViewModel::setGameDimPercent,
+            range = 0..100,
+            step = 10,
+            valueLabel = { "$it%" },
+            defaultValue = 90,
+            onReset = { settingsViewModel.setGameDimPercent(90) },
+        )
+        WajihaSettingDivider()
+        WajihaNumberSetting(
+            label = "Dim after (seconds)",
+            description =
+                "Wait before dimming after gameplay starts. Lifts while you use the bottom screen; " +
+                    "fades back after the same idle time. 0 = immediate dim, stay lifted on interaction.",
+            value = settings.gameplayDimTimeoutSeconds,
+            onValueChange = settingsViewModel::setGameplayDimTimeoutSeconds,
+            range = 0..120,
+            step = 1,
+            valueLabel = { if (it == 0) "0 (immediate)" else "$it s" },
+            defaultValue = 10,
+            onReset = { settingsViewModel.setGameplayDimTimeoutSeconds(10) },
+        )
+    }
+}
+
+@Composable
+private fun ScreensNowRunningSettings(
+    settings: AppSettings,
+    settingsViewModel: SettingsViewModel,
+    firstFocusRequester: FocusRequester? = null,
+) {
     WajihaToggleSetting(
         label = "Hero as background",
         description =
@@ -780,6 +1218,7 @@ private fun ScreensSectionContent(
         onCheckedChange = settingsViewModel::setNowPlayingHeroBackground,
         defaultChecked = true,
         onReset = { settingsViewModel.setNowPlayingHeroBackground(true) },
+        focusRequester = firstFocusRequester,
     )
     WajihaSettingDivider()
     WajihaToggleSetting(
@@ -792,65 +1231,16 @@ private fun ScreensSectionContent(
         defaultChecked = true,
         onReset = { settingsViewModel.setNowPlayingLogo(true) },
     )
-    if (!single) {
-        WajihaSettingDivider()
-        WajihaToggleSetting(
-            label = "Dim bottom screen while a game runs",
-            description =
-                "Darken the secondary display during gameplay. " +
-                    "Blackout (Off) still turns the screen fully off.",
-            checked = settings.gameDimEnabled,
-            onCheckedChange = settingsViewModel::setGameDimEnabled,
-            defaultChecked = false,
-            onReset = { settingsViewModel.setGameDimEnabled(false) },
-        )
-        if (settings.gameDimEnabled) {
-            WajihaSettingDivider()
-            WajihaToggleSetting(
-                label = "Dim only on Now Playing page",
-                description =
-                    "When on, the dim scrim applies only while the bottom screen shows Now Playing. " +
-                        "When off, dim applies on any secondary screen except Blackout.",
-                checked = settings.gameDimOnlyOnNowPlaying,
-                onCheckedChange = settingsViewModel::setGameDimOnlyOnNowPlaying,
-                defaultChecked = true,
-                onReset = { settingsViewModel.setGameDimOnlyOnNowPlaying(true) },
-            )
-            WajihaSettingDivider()
-            WajihaNumberSetting(
-                label = "Dim strength",
-                description =
-                    "How dark the overlay is. 100% is near-black but still restores on tap.",
-                value = settings.gameDimPercent,
-                onValueChange = settingsViewModel::setGameDimPercent,
-                range = 0..100,
-                step = 10,
-                valueLabel = { "$it%" },
-                defaultValue = 90,
-                onReset = { settingsViewModel.setGameDimPercent(90) },
-            )
-            WajihaSettingDivider()
-            WajihaNumberSetting(
-                label = "Dim after (seconds)",
-                description =
-                    "Wait before dimming after gameplay starts. Lifts while you use the bottom screen; " +
-                        "fades back after the same idle time. 0 = immediate dim, stay lifted on interaction.",
-                value = settings.gameplayDimTimeoutSeconds,
-                onValueChange = settingsViewModel::setGameplayDimTimeoutSeconds,
-                range = 0..120,
-                step = 1,
-                valueLabel = { if (it == 0) "0 (immediate)" else "$it s" },
-                defaultValue = 10,
-                onReset = { settingsViewModel.setGameplayDimTimeoutSeconds(10) },
-            )
-        }
-    }
-    WajihaSettingDivider()
-    WajihaSettingBlurb(
-        "Each physical screen can keep its own hero layout. Unconfigured screens " +
-            "auto-fit from the other screen or a preset. Empty hero does not turn off " +
-            "the focused-game backdrop behind the grid.",
-    )
+}
+
+@Composable
+private fun ScreensHeroLayoutSettings(
+    settings: AppSettings,
+    settingsViewModel: SettingsViewModel,
+    single: Boolean,
+    firstFocusRequester: FocusRequester? = null,
+    onCustomizeLayout: () -> Unit,
+) {
     val isDual = !single
     val heroSlot =
         if (heroOnPrimary(isDual, settings.swapScreenRoles)) {
@@ -868,6 +1258,17 @@ private fun ScreensSectionContent(
                     HeroLayoutPresets.CUSTOM.takeIf { heroLayout.presetId == HeroLayoutPresets.CUSTOM },
                 )
         ).distinct()
+    WajihaToggleSetting(
+        label = "Focused game hero background",
+        description =
+            "Use the focused game's hero art as a full-screen background behind the game grid.",
+        checked = settings.gameGridHeroBackground,
+        onCheckedChange = settingsViewModel::setGameGridHeroBackground,
+        defaultChecked = false,
+        onReset = { settingsViewModel.setGameGridHeroBackground(false) },
+        focusRequester = firstFocusRequester,
+    )
+    WajihaSettingDivider()
     WajihaMultiChoiceSetting(
         label = "Hero layout preset",
         description = "Applies to the screen currently showing the hero.",
@@ -889,9 +1290,7 @@ private fun ScreensSectionContent(
         label = "Customize layout",
         actionLabel = "Edit",
         description = "Move, show, or hide hero elements with gamepad and touch.",
-        onClick = {
-            dualScreenStore.beginHeroLayoutEdit(heroSlot, heroLayout)
-        },
+        onClick = onCustomizeLayout,
     )
 }
 
@@ -902,49 +1301,75 @@ private fun AppearanceSectionContent(
     dualScreenStore: DualScreenStore,
     secondaryMenuActivity: Boolean = false,
     firstFocusRequester: FocusRequester? = null,
+    hubFocusRequester: FocusRequester? = null,
+    restoreFocusPage: AppearanceSubpage? = null,
+    onOpenSubpage: (AppearanceSubpage) -> Unit,
 ) {
-    val iconPacks by settingsViewModel.iconPacks.collectAsState()
-    LaunchedEffect(Unit) { settingsViewModel.refreshIconPacks() }
-    val packOptions =
-        remember(iconPacks) {
-            iconPacks
-                .map { pack ->
-                    pack.packageName to pack.label
-                }.ifEmpty {
-                    listOf(IconAppearancePreferences.SYSTEM_PACK to "System icons")
-                }
-        }
-    val selectedPackLabel =
-        packOptions.firstOrNull { it.first == settings.iconPackPackage }?.second
-            ?: if (settings.iconPackPackage.isEmpty()) {
-                "System icons"
-            } else {
-                settings.iconPackPackage
-            }
+    val openRowFocus: (AppearanceSubpage) -> FocusRequester? = { candidate ->
+        hubFocusRequester?.takeIf { restoreFocusPage == candidate }
+    }
 
-    WajihaSettingBlurb(
-        "Tune the home dock, grid look, color theme, gamepad focus ring, and controller glyphs.",
-    )
-    WajihaToggleSetting(
-        label = "Show home dock",
-        description =
-            "Pin strip above the gamepad hints on the games grid. Pins match Apps " +
-                "favorites — add or reorder them from the Apps drawer.",
-        checked = settings.showHomeDock,
-        onCheckedChange = settingsViewModel::setShowHomeDock,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setShowHomeDock(true) },
-        focusRequester = firstFocusRequester,
-        onFocusedChanged =
-            settingsToggleHeroFocus(
-                store = dualScreenStore,
-                title = "Show home dock",
-                subtitle =
-                    "Pin strip above the gamepad hints. Pins match Apps favorites.",
-                checked = settings.showHomeDock,
-            ),
-    )
-    WajihaSettingDivider()
+    WajihaSettingGroup(title = "Home & theme") {
+        WajihaToggleSetting(
+            label = "Show home dock",
+            description = "Pin strip above gamepad hints. Pins match Apps favorites.",
+            checked = settings.showHomeDock,
+            onCheckedChange = settingsViewModel::setShowHomeDock,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setShowHomeDock(true) },
+            focusRequester = firstFocusRequester,
+            onFocusedChanged =
+                settingsToggleHeroFocus(
+                    store = dualScreenStore,
+                    title = "Show home dock",
+                    subtitle =
+                        "Pin strip above the gamepad hints. Pins match Apps favorites.",
+                    checked = settings.showHomeDock,
+                ),
+        )
+        WajihaSettingDivider()
+        AppearanceThemeSetting(
+            settings = settings,
+            settingsViewModel = settingsViewModel,
+            dualScreenStore = dualScreenStore,
+        )
+    }
+    WajihaSettingGroup(title = "Icons") {
+        AppearanceIconSettings(
+            settings = settings,
+            settingsViewModel = settingsViewModel,
+            dualScreenStore = dualScreenStore,
+        )
+    }
+    WajihaSettingGroup(title = "Game grid") {
+        AppearanceGameGridSettings(
+            settings = settings,
+            settingsViewModel = settingsViewModel,
+            dualScreenStore = dualScreenStore,
+            secondaryMenuActivity = secondaryMenuActivity,
+        )
+    }
+    WajihaSettingGroup(title = "Focus & glyphs") {
+        WajihaSettingOpenSetting(
+            label = AppearanceSubpage.FocusRing.title,
+            onOpen = { onOpenSubpage(AppearanceSubpage.FocusRing) },
+            focusRequester = openRowFocus(AppearanceSubpage.FocusRing),
+        )
+        WajihaSettingDivider()
+        WajihaSettingOpenSetting(
+            label = AppearanceSubpage.Glyphs.title,
+            onOpen = { onOpenSubpage(AppearanceSubpage.Glyphs) },
+            focusRequester = openRowFocus(AppearanceSubpage.Glyphs),
+        )
+    }
+}
+
+@Composable
+private fun AppearanceThemeSetting(
+    settings: AppSettings,
+    settingsViewModel: SettingsViewModel,
+    dualScreenStore: DualScreenStore,
+) {
     WajihaChoiceSetting(
         label = "Theme",
         description = "Follow the system setting or lock dark or light mode.",
@@ -997,7 +1422,33 @@ private fun AppearanceSectionContent(
             }
         },
     )
-    WajihaSettingDivider()
+}
+
+@Composable
+private fun AppearanceIconSettings(
+    settings: AppSettings,
+    settingsViewModel: SettingsViewModel,
+    dualScreenStore: DualScreenStore,
+) {
+    val iconPacks by settingsViewModel.iconPacks.collectAsState()
+    LaunchedEffect(Unit) { settingsViewModel.refreshIconPacks() }
+    val packOptions =
+        remember(iconPacks) {
+            iconPacks
+                .map { pack ->
+                    pack.packageName to pack.label
+                }.ifEmpty {
+                    listOf(IconAppearancePreferences.SYSTEM_PACK to "System icons")
+                }
+        }
+    val selectedPackLabel =
+        packOptions.firstOrNull { it.first == settings.iconPackPackage }?.second
+            ?: if (settings.iconPackPackage.isEmpty()) {
+                "System icons"
+            } else {
+                settings.iconPackPackage
+            }
+
     WajihaChoiceSetting(
         label = "Icon pack",
         description = "Apply an installed Android icon pack to the Apps drawer and home dock.",
@@ -1036,12 +1487,12 @@ private fun AppearanceSectionContent(
         },
     )
     WajihaSettingDivider()
-    WajihaChoiceSetting(
+    WajihaMultiChoiceSetting(
         label = "Icon shape",
         description = "Clip shape for app icons in the Apps drawer and home dock.",
-        options =
+        choiceOptions =
             IconAppearancePreferences.shapes.map { id ->
-                id to IconAppearancePreferences.shapeLabel(id)
+                MultiChoiceOption(id, IconAppearancePreferences.shapeLabel(id))
             },
         selected = settings.iconShape,
         onSelect = settingsViewModel::setIconShape,
@@ -1080,10 +1531,15 @@ private fun AppearanceSectionContent(
             }
         },
     )
-    WajihaSettingDivider()
-    WajihaSettingBlurb(
-        "Game grid look for this screen. The other screen keeps its own setup.",
-    )
+}
+
+@Composable
+private fun AppearanceGameGridSettings(
+    settings: AppSettings,
+    settingsViewModel: SettingsViewModel,
+    dualScreenStore: DualScreenStore,
+    secondaryMenuActivity: Boolean,
+) {
     val gridArt =
         if (secondaryMenuActivity) settings.gameGridSecondaryArt else settings.gameGridArt
     val gridRows =
@@ -1174,6 +1630,70 @@ private fun AppearanceSectionContent(
         },
     )
     WajihaSettingDivider()
+    val gridShowTitles =
+        if (secondaryMenuActivity) {
+            settings.gameGridSecondaryShowTitles
+        } else {
+            settings.gameGridShowTitles
+        }
+    WajihaToggleSetting(
+        label = "Show game titles on tiles",
+        description = "Overlay each game's name on library tiles. Off for a cleaner art-only grid.",
+        checked = gridShowTitles,
+        onCheckedChange = {
+            if (secondaryMenuActivity) {
+                settingsViewModel.setGameGridSecondaryShowTitles(it)
+            } else {
+                settingsViewModel.setGameGridShowTitles(it)
+            }
+        },
+        defaultChecked = true,
+        onReset = {
+            if (secondaryMenuActivity) {
+                settingsViewModel.setGameGridSecondaryShowTitles(true)
+            } else {
+                settingsViewModel.setGameGridShowTitles(true)
+            }
+        },
+    )
+    WajihaSettingDivider()
+    val gridShowChrome =
+        if (secondaryMenuActivity) {
+            settings.gameGridSecondaryShowTileChrome
+        } else {
+            settings.gameGridShowTileChrome
+        }
+    WajihaToggleSetting(
+        label = "Show tile border and gradient",
+        description =
+            "Inset frame around Fit art and the black bottom gradient under titles. " +
+                "Off for edge-to-edge covers.",
+        checked = gridShowChrome,
+        onCheckedChange = {
+            if (secondaryMenuActivity) {
+                settingsViewModel.setGameGridSecondaryShowTileChrome(it)
+            } else {
+                settingsViewModel.setGameGridShowTileChrome(it)
+            }
+        },
+        defaultChecked = true,
+        onReset = {
+            if (secondaryMenuActivity) {
+                settingsViewModel.setGameGridSecondaryShowTileChrome(true)
+            } else {
+                settingsViewModel.setGameGridShowTileChrome(true)
+            }
+        },
+    )
+}
+
+@Composable
+private fun AppearanceFocusRingSettings(
+    settings: AppSettings,
+    settingsViewModel: SettingsViewModel,
+    dualScreenStore: DualScreenStore,
+    firstFocusRequester: FocusRequester? = null,
+) {
     WajihaMultiChoiceSetting(
         label = "Focus ring style",
         description = "How the gamepad focus outline is drawn around tiles and settings rows.",
@@ -1196,6 +1716,7 @@ private fun AppearanceSectionContent(
         onSelect = settingsViewModel::setFocusBorderStyle,
         defaultValue = FocusIndicatorDefaults.BORDER_STYLE,
         onReset = { settingsViewModel.setFocusBorderStyle(FocusIndicatorDefaults.BORDER_STYLE) },
+        focusRequester = firstFocusRequester,
         onFocusedChanged = { focused ->
             if (focused) {
                 publishSettingsHero(
@@ -1239,11 +1760,9 @@ private fun AppearanceSectionContent(
         },
     )
     WajihaSettingDivider()
-    SettingsFocusColorRow(
+    SettingsFocusColorSetting(
         selected = settings.focusColor,
         onSelect = settingsViewModel::setFocusColor,
-        defaultValue = FocusIndicatorDefaults.COLOR,
-        onReset = { settingsViewModel.setFocusColor(FocusIndicatorDefaults.COLOR) },
         dualScreenStore = dualScreenStore,
         actionsEnabled = settings.settingsHeroActions,
     )
@@ -1314,12 +1833,6 @@ private fun AppearanceSectionContent(
             }
         },
     )
-    WajihaSettingDivider()
-    ControllerGlyphSettings(
-        settings = settings,
-        settingsViewModel = settingsViewModel,
-        dualScreenStore = dualScreenStore,
-    )
 }
 
 @Composable
@@ -1327,6 +1840,7 @@ private fun ControllerGlyphSettings(
     settings: AppSettings,
     settingsViewModel: SettingsViewModel,
     dualScreenStore: DualScreenStore,
+    firstFocusRequester: FocusRequester? = null,
 ) {
     WajihaToggleSetting(
         label = "Controller glyphs",
@@ -1337,6 +1851,7 @@ private fun ControllerGlyphSettings(
         onCheckedChange = settingsViewModel::setControllerGlyphsEnabled,
         defaultChecked = true,
         onReset = { settingsViewModel.setControllerGlyphsEnabled(true) },
+        focusRequester = firstFocusRequester,
         onFocusedChanged =
             settingsToggleHeroFocus(
                 store = dualScreenStore,
@@ -1536,58 +2051,64 @@ private fun SystemSectionContent(
     perms: PermissionStates,
     systemControls: SystemControls,
     firstFocusRequester: FocusRequester? = null,
+    hubFocusRequester: FocusRequester? = null,
+    restoreLibraryScanFocus: Boolean = false,
+    onOpenLibraryScan: () -> Unit,
 ) {
-    WajihaSettingBlurb(
-        "Permissions, launcher role, navigation feedback, and build info.",
-    )
-    SettingsVersionRow(versionLabel = systemControls.appVersionLabel())
-    WajihaSettingDivider()
-    WajihaToggleSetting(
-        label = "Navigation sounds",
-        description = "Play sounds when moving focus and confirming actions.",
-        checked = settings.soundsEnabled,
-        onCheckedChange = settingsViewModel::setSoundsEnabled,
-        defaultChecked = true,
-        onReset = { settingsViewModel.setSoundsEnabled(true) },
-        focusRequester = firstFocusRequester,
-    )
-    WajihaSettingDivider()
-    SettingsPermissionRow(
-        label = "Usage access",
-        description = "Follow games launched outside Wajiha on the bottom screen.",
-        granted = perms.usageAccess,
-        onRequest = systemControls::requestUsageAccess,
-    )
-    WajihaSettingDivider()
-    SettingsPermissionRow(
-        label = "All files access",
-        description = "Read emulator data to identify games launched outside Wajiha.",
-        granted = perms.allFilesAccess,
-        onRequest = systemControls::requestAllFilesAccess,
-    )
-    WajihaSettingDivider()
-    SettingsPermissionRow(
-        label = "Notifications",
-        description = "Progress while scanning and scraping your library.",
-        granted = perms.notifications,
-        onRequest = systemControls::requestNotifications,
-    )
-    WajihaSettingDivider()
-    SettingsLauncherRow(
-        isDefaultLauncher = perms.isDefaultLauncher,
-        onSetDefault = systemControls::openHomeSettings,
-    )
-    WajihaSettingDivider()
-    IgnoreFileNamePatternsSection(
-        settings = settings,
-        settingsViewModel = settingsViewModel,
-    )
+    WajihaSettingGroup(title = "About & feedback") {
+        SettingsVersionRow(versionLabel = systemControls.appVersionLabel())
+        WajihaSettingDivider()
+        WajihaToggleSetting(
+            label = "Navigation sounds",
+            description = "Play sounds when moving focus and confirming actions.",
+            checked = settings.soundsEnabled,
+            onCheckedChange = settingsViewModel::setSoundsEnabled,
+            defaultChecked = true,
+            onReset = { settingsViewModel.setSoundsEnabled(true) },
+            focusRequester = firstFocusRequester,
+        )
+    }
+    WajihaSettingGroup(title = "Permissions & launcher") {
+        SettingsPermissionRow(
+            label = "Usage access",
+            description = "Follow games launched outside Wajiha on the bottom screen.",
+            granted = perms.usageAccess,
+            onRequest = systemControls::requestUsageAccess,
+        )
+        WajihaSettingDivider()
+        SettingsPermissionRow(
+            label = "All files access",
+            description = "Read emulator data to identify games launched outside Wajiha.",
+            granted = perms.allFilesAccess,
+            onRequest = systemControls::requestAllFilesAccess,
+        )
+        WajihaSettingDivider()
+        SettingsPermissionRow(
+            label = "Notifications",
+            description = "Progress while scanning and scraping your library.",
+            granted = perms.notifications,
+            onRequest = systemControls::requestNotifications,
+        )
+        WajihaSettingDivider()
+        SettingsLauncherRow(
+            isDefaultLauncher = perms.isDefaultLauncher,
+            onSetDefault = systemControls::openHomeSettings,
+        )
+    }
+    WajihaSettingGroup(title = "Scan") {
+        WajihaSettingOpenSetting(
+            label = "Ignore by filename",
+            onOpen = onOpenLibraryScan,
+            focusRequester = hubFocusRequester?.takeIf { restoreLibraryScanFocus },
+        )
+    }
 }
 
 @Composable
 private fun IgnoreFileNamePatternsSection(
     settings: AppSettings,
     settingsViewModel: SettingsViewModel,
+    firstFocusRequester: FocusRequester? = null,
 ) {
     val patterns = settings.ignoreFileNamePatterns
     val patternsAtDefault = SettingsRepository.ignoreFileNamePatternsAtDefault(patterns)
@@ -1598,6 +2119,7 @@ private fun IgnoreFileNamePatternsSection(
         label = "Ignore files by name pattern",
         description = "Skip ROMs whose filename or folder path contains listed keywords during library scan.",
         checked = settings.ignorePatternFilesEnabled,
+        focusRequester = firstFocusRequester,
         onCheckedChange = settingsViewModel::setIgnorePatternFilesEnabled,
         defaultChecked = false,
         onReset = { settingsViewModel.setIgnorePatternFilesEnabled(false) },
@@ -1680,406 +2202,109 @@ private fun IgnoreFileNamePatternsSection(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalLayoutApi::class)
 @Composable
-private fun SettingsFocusColorRow(
+private fun SettingsFocusColorSetting(
     selected: String,
     onSelect: (String) -> Unit,
-    defaultValue: String,
-    onReset: () -> Unit,
     dualScreenStore: DualScreenStore,
     actionsEnabled: Boolean,
     focusRequester: FocusRequester? = null,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    var headerFocused by remember { mutableStateOf(false) }
-    val useCustomNav = com.wajiha.input.LocalGamepadNavController.current != null
-    val headerHighlight = !useCustomNav && headerFocused && !expanded
     val isCustomSelected = FocusIndicatorPreferenceValues.isCustomHex(selected)
-    val isAtDefault = FocusIndicatorPreferenceValues.normalizeColor(selected) == defaultValue
-    val canReset = !isAtDefault
     val selectedLabel = focusColorDisplayLabel(selected)
     val previewColor = focusColorPreview(selected)
-
-    val headerFocusRequester = focusRequester ?: remember { FocusRequester() }
-    val sectionScroll = LocalSettingSectionScroll.current
-    var headerCoordinates by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
-
-    val presetIds = FocusIndicatorPreferenceValues.colors
-    val swatchCount = presetIds.size + 1
-    val swatchFocusRequesters = remember(swatchCount) { List(swatchCount) { FocusRequester() } }
-
+    val normalized = FocusIndicatorPreferenceValues.normalizeColor(selected)
+    var showCustomField by remember { mutableStateOf(isCustomSelected) }
     var customHexDraft by remember(selected) {
         mutableStateOf(
             if (isCustomSelected) selected.removePrefix("#") else "FF5722",
         )
     }
-    var showCustomField by remember { mutableStateOf(isCustomSelected) }
-
-    fun collapse() {
-        expanded = false
-        try {
-            headerFocusRequester.requestFocus()
-        } catch (_: Exception) {
+    val choices =
+        FocusIndicatorPreferenceValues.colors.map { id ->
+            WajihaColorChoice(
+                value = id,
+                label = FocusIndicatorPreferenceValues.displayColorLabel(id),
+                color = focusColorPreview(id),
+            )
         }
-    }
 
-    fun expand() {
-        expanded = true
-    }
-
-    fun selectPreset(presetId: String) {
-        showCustomField = false
-        onSelect(presetId)
-        collapse()
-    }
-
-    fun applyCustomHex() {
-        val normalized = customHexDraft.trim().removePrefix("#").uppercase()
-        if (normalized.length == 6 && FocusIndicatorPreferenceValues.parseHexColor("#$normalized") != null) {
-            onSelect("#$normalized")
+    fun applyCustomHex(collapse: () -> Unit) {
+        val hex = customHexDraft.trim().removePrefix("#").uppercase()
+        if (hex.length == 6 && FocusIndicatorPreferenceValues.parseHexColor("#$hex") != null) {
+            onSelect("#$hex")
             collapse()
         }
     }
 
-    LaunchedEffect(expanded) {
-        if (!expanded) return@LaunchedEffect
-        val header = headerCoordinates
-        if (sectionScroll != null && header != null) {
-            sectionScroll.scrollHeaderToTop(header)
-        }
-        withFrameNanos { }
-        val focusIndex =
-            when {
-                isCustomSelected -> {
-                    presetIds.size
-                }
-
-                else -> {
-                    presetIds
-                        .indexOfFirst {
-                            it.equals(FocusIndicatorPreferenceValues.normalizeColor(selected), ignoreCase = true)
-                        }.coerceAtLeast(0)
-                }
-            }
-        try {
-            swatchFocusRequesters[focusIndex].requestFocus()
-        } catch (_: Exception) {
-        }
-    }
-
-    BackHandler(enabled = expanded) {
-        collapse()
-    }
-
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = LocalSettingRowMinHeight.current),
-    ) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .onGloballyPositioned { headerCoordinates = it }
-                    .wajihaFocusIndicator(highlighted = headerHighlight)
-                    .clip(WajihaShapes.focus)
-                    .focusRequester(headerFocusRequester)
-                    .then(
-                        if (!useCustomNav) {
-                            Modifier
-                                .onFocusChanged { state ->
-                                    headerFocused = state.isFocused
-                                    if (state.isFocused) {
-                                        publishSettingsHero(
-                                            dualScreenStore,
-                                            genericSettingHeroDetail(
-                                                title = "Focus color",
-                                                subtitle = "Color of the gamepad focus ring.",
-                                                valueText = selectedLabel,
-                                                previewKind = "focusColor",
-                                                previewPayload = selected,
-                                                options =
-                                                    if (actionsEnabled) {
-                                                        FocusIndicatorPreferenceValues.colors.map { id ->
-                                                            SettingsHeroOption(
-                                                                id,
-                                                                FocusIndicatorPreferenceValues.displayColorLabel(id),
-                                                                FocusIndicatorPreferenceValues.normalizeColor(selected) == id,
-                                                            )
-                                                        }
-                                                    } else {
-                                                        emptyList()
-                                                    },
-                                            ),
-                                            onSelectOption = if (actionsEnabled) onSelect else null,
-                                        )
-                                    } else {
-                                        clearSettingsHero(dualScreenStore)
-                                    }
-                                }.wajihaGamepadFocus()
-                                .onPreviewKeyEvent { event ->
-                                    when {
-                                        GamepadKeys.isConfirm(event.type, event.key) -> {
-                                            if (expanded) collapse() else expand()
-                                            true
-                                        }
-
-                                        GamepadKeys.isY(event.type, event.key) && canReset -> {
-                                            onReset()
-                                            true
-                                        }
-
-                                        else -> {
-                                            false
-                                        }
-                                    }
-                                }
-                        } else {
-                            Modifier
-                        },
-                    ).pointerInput(expanded) {
-                        detectTapGestures {
-                            if (expanded) collapse() else expand()
-                        }
-                    }.padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
-            ) {
-                Text(
-                    text = "Focus ring color",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                )
-                if (canReset) {
-                    Text(
-                        text = "↺",
-                        style = MaterialTheme.typography.titleMedium,
-                        color =
-                            WajihaColors.OverrideAmber.copy(
-                                alpha = WajihaAlphas.overrideAmberStrong,
-                            ),
-                        fontWeight = FontWeight.Bold,
-                        modifier =
-                            Modifier.pointerInput(onReset) {
-                                detectTapGestures { onReset() }
-                            },
-                    )
-                }
-            }
-            Box(
-                modifier =
-                    Modifier
-                        .size(WajihaIconSize.sm)
-                        .clip(CircleShape)
-                        .background(previewColor)
-                        .border(
-                            WajihaSpacing.folderEdge,
-                            MaterialTheme.colorScheme.outline.copy(
-                                alpha = WajihaAlphas.outlineSubtle,
-                            ),
-                            CircleShape,
-                        ),
-            )
-            Text(
-                text = selectedLabel,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.End,
-                maxLines = 1,
-            )
-            Text(
-                text = if (expanded) "˅" else "›",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Text(
-            text = "Theme accent follows light or dark mode. Pick a swatch or enter a custom #RRGGBB hex.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier =
-                Modifier.padding(
-                    start = WajihaSpacing.sm,
-                    end = WajihaSpacing.sm,
-                    top = WajihaSpacing.xs / 2,
-                ),
-        )
-
-        AnimatedVisibility(
-            visible = expanded,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut(),
-        ) {
-            Surface(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = WajihaSpacing.xs / 2),
-                shape = androidx.compose.ui.graphics.RectangleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = WajihaElevation.low,
-            ) {
-                Column(
-                    modifier = Modifier.padding(WajihaSpacing.sm),
-                    verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-                ) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-                        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-                    ) {
-                        presetIds.forEachIndexed { index, presetId ->
-                            val isSelected =
-                                !isCustomSelected &&
-                                    presetId.equals(
-                                        FocusIndicatorPreferenceValues.normalizeColor(selected),
-                                        ignoreCase = true,
+    WajihaColorChoiceSetting(
+        label = "Focus ring color",
+        description =
+            "Theme accent follows light or dark mode. Pick a swatch or enter a custom #RRGGBB hex.",
+        choices = choices,
+        selectedValue = normalized,
+        selectedLabel = selectedLabel,
+        selectedColor = previewColor,
+        onSelect = { value ->
+            showCustomField = false
+            onSelect(value)
+        },
+        defaultValue = FocusIndicatorDefaults.COLOR,
+        onReset = { onSelect(FocusIndicatorDefaults.COLOR) },
+        focusRequester = focusRequester,
+        customSelected = isCustomSelected || showCustomField,
+        onCustomChoice = { showCustomField = true },
+        onFocusedChanged = { focused ->
+            if (focused) {
+                publishSettingsHero(
+                    dualScreenStore,
+                    genericSettingHeroDetail(
+                        title = "Focus color",
+                        subtitle = "Color of the gamepad focus ring.",
+                        valueText = selectedLabel,
+                        previewKind = "focusColor",
+                        previewPayload = selected,
+                        options =
+                            if (actionsEnabled) {
+                                FocusIndicatorPreferenceValues.colors.map { id ->
+                                    SettingsHeroOption(
+                                        id,
+                                        FocusIndicatorPreferenceValues.displayColorLabel(id),
+                                        normalized == id,
                                     )
-                            FocusColorSwatch(
-                                label = FocusIndicatorPreferenceValues.displayColorLabel(presetId),
-                                color = focusColorPreview(presetId),
-                                selected = isSelected,
-                                focusRequester = swatchFocusRequesters[index],
-                                useCustomNav = useCustomNav,
-                                onSelect = { selectPreset(presetId) },
-                            )
-                        }
-                        FocusColorSwatch(
-                            label = "Custom",
-                            color =
-                                if (isCustomSelected) {
-                                    focusColorPreview(selected)
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                },
-                            selected = isCustomSelected || showCustomField,
-                            focusRequester = swatchFocusRequesters[presetIds.size],
-                            useCustomNav = useCustomNav,
-                            showPlusGlyph = !isCustomSelected,
-                            onSelect = {
-                                showCustomField = true
-                            },
-                        )
-                    }
-
-                    if (showCustomField || isCustomSelected) {
-                        GamepadSafeTextField(
-                            value = customHexDraft,
-                            onValueChange = { raw ->
-                                customHexDraft =
-                                    raw
-                                        .filter { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }
-                                        .take(6)
-                                        .uppercase()
-                            },
-                            label = "Hex color (#RRGGBB)",
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        GamepadSettingRow(
-                            label = "Apply custom color",
-                            type = SettingType.Action,
-                            onActivate = ::applyCustomHex,
-                            isAtDefault = true,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FocusColorSwatch(
-    label: String,
-    color: Color,
-    selected: Boolean,
-    focusRequester: FocusRequester,
-    useCustomNav: Boolean,
-    showPlusGlyph: Boolean = false,
-    onSelect: () -> Unit,
-) {
-    var focused by remember { mutableStateOf(false) }
-    val highlight = !useCustomNav && focused
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.micro),
-        modifier =
-            Modifier
-                .wajihaFocusIndicator(highlighted = highlight, shape = CircleShape)
-                .clip(CircleShape)
-                .focusRequester(focusRequester)
-                .then(
-                    if (!useCustomNav) {
-                        Modifier
-                            .onFocusChanged { focused = it.isFocused }
-                            .wajihaGamepadFocus()
-                            .onPreviewKeyEvent { event ->
-                                if (GamepadKeys.isConfirm(event.type, event.key)) {
-                                    onSelect()
-                                    true
-                                } else {
-                                    false
                                 }
-                            }
-                    } else {
-                        Modifier
-                    },
-                ).pointerInput(label) {
-                    detectTapGestures { onSelect() }
-                }.padding(WajihaSpacing.xs / 2),
-    ) {
-        Box(
-            modifier =
-                Modifier
-                    .size(WajihaIconSize.xxl)
-                    .clip(CircleShape)
-                    .background(color)
-                    .border(
-                        width = if (selected) WajihaSpacing.micro else WajihaSpacing.folderEdge,
-                        color =
-                            if (selected) {
-                                MaterialTheme.colorScheme.primary
                             } else {
-                                MaterialTheme.colorScheme.outline.copy(
-                                    alpha = WajihaAlphas.outlineMuted,
-                                )
+                                emptyList()
                             },
-                        shape = CircleShape,
                     ),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (showPlusGlyph) {
-                Text(
-                    text = "+",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Bold,
+                    onSelectOption = if (actionsEnabled) onSelect else null,
+                )
+            } else {
+                clearSettingsHero(dualScreenStore)
+            }
+        },
+        customContent = { collapse ->
+            if (showCustomField || isCustomSelected) {
+                GamepadSafeTextField(
+                    value = customHexDraft,
+                    onValueChange = { raw ->
+                        customHexDraft =
+                            raw
+                                .filter { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }
+                                .take(6)
+                                .uppercase()
+                    },
+                    label = "Hex color (#RRGGBB)",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                WajihaActionSetting(
+                    label = "Apply custom color",
+                    actionLabel = "Apply",
+                    onClick = { applyCustomHex(collapse) },
                 )
             }
-        }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color =
-                if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            maxLines = 1,
-            textAlign = TextAlign.Center,
-        )
-    }
+        },
+    )
 }
 
 @Composable
@@ -2099,11 +2324,6 @@ private fun PlatformLibraryRow(
     var rowFocused by remember { mutableStateOf(false) }
     val boxarts by settingsViewModel.boxartSampleFor(platform.id, 6).collectAsState(initial = emptyList())
     val emulators by settingsViewModel.observeEmulators(platform.id).collectAsState(initial = emptyList())
-    val stats =
-        buildString {
-            append("$folderCount folder(s) · $gameCount game(s)")
-            if (!platform.enabled) append(" · disabled")
-        }
     val emulatorOptions =
         remember(emulators, platform.defaultEmulatorId) {
             emulators.map { emu ->
@@ -2116,7 +2336,6 @@ private fun PlatformLibraryRow(
         }
     GamepadSettingRow(
         label = platform.name,
-        labelMeta = stats,
         type = SettingType.Action,
         onActivate = onRescan,
         onSecondaryActivate = onOpen,

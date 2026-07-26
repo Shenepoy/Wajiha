@@ -143,6 +143,7 @@ class RomPathMatcher(
             heroPath = media.firstOrNull { it.type == "hero" }?.localPath,
             logoPath = media.firstOrNull { it.type == "logo" }?.localPath,
             iconPath = media.firstOrNull { it.type == "icon" }?.localPath,
+            squarePath = media.firstOrNull { it.type == "square" }?.localPath,
             confidence = confidence,
             source = source,
         )

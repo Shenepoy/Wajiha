@@ -49,12 +49,20 @@ data class AppSettings(
     val gameGridArt: String = GameGridPreferences.DEFAULT_ART,
     /** Primary game grid tile size tier. */
     val gameGridTileSize: String = GameGridPreferences.DEFAULT_TILE_SIZE,
+    /** Primary: show game title overlay on library tiles. */
+    val gameGridShowTitles: Boolean = true,
+    /** Primary: show Fit inset (border frame) and bottom title scrim gradient. */
+    val gameGridShowTileChrome: Boolean = true,
     /** True once the user customized primary game-grid prefs. */
     val gameGridConfigured: Boolean = false,
     /** Secondary game grid art (falls back to primary when unset). */
     val gameGridSecondaryArt: String = GameGridPreferences.DEFAULT_ART,
     val gameGridSecondaryRows: Int = GameGridPreferences.DEFAULT_ROWS,
     val gameGridSecondaryTileSize: String = GameGridPreferences.DEFAULT_TILE_SIZE,
+    /** Secondary: show game title overlay (falls back to primary when unset). */
+    val gameGridSecondaryShowTitles: Boolean = true,
+    /** Secondary: show border frame + scrim (falls back to primary when unset). */
+    val gameGridSecondaryShowTileChrome: Boolean = true,
     val gameGridSecondaryConfigured: Boolean = false,
     /** Per-display free-form hero layouts. */
     val heroLayoutBundle: HeroLayoutBundle = HeroLayoutBundle(),
@@ -188,6 +196,8 @@ class SettingsRepository(
                 gridRows = GameGridPreferences.normalizeRows(prefs[GRID_ROWS]),
                 gameGridArt = GameGridPreferences.normalizeArt(prefs[GAME_GRID_ART]),
                 gameGridTileSize = GameGridPreferences.normalizeTileSize(prefs[GAME_GRID_TILE_SIZE]),
+                gameGridShowTitles = prefs[GAME_GRID_SHOW_TITLES] ?: true,
+                gameGridShowTileChrome = prefs[GAME_GRID_SHOW_TILE_CHROME] ?: true,
                 gameGridConfigured = prefs[GAME_GRID_CONFIGURED] ?: false,
                 gameGridSecondaryArt =
                     GameGridPreferences.normalizeArt(
@@ -201,6 +211,12 @@ class SettingsRepository(
                     GameGridPreferences.normalizeTileSize(
                         prefs[GAME_GRID_SECONDARY_TILE_SIZE] ?: prefs[GAME_GRID_TILE_SIZE],
                     ),
+                gameGridSecondaryShowTitles =
+                    prefs[GAME_GRID_SECONDARY_SHOW_TITLES] ?: prefs[GAME_GRID_SHOW_TITLES] ?: true,
+                gameGridSecondaryShowTileChrome =
+                    prefs[GAME_GRID_SECONDARY_SHOW_TILE_CHROME]
+                        ?: prefs[GAME_GRID_SHOW_TILE_CHROME]
+                        ?: true,
                 gameGridSecondaryConfigured = prefs[GAME_GRID_SECONDARY_CONFIGURED] ?: false,
                 heroLayoutBundle = decodeHeroLayoutBundle(prefs),
                 soundsEnabled = prefs[SOUNDS_ENABLED] ?: true,
@@ -333,6 +349,22 @@ class SettingsRepository(
         WajihaLog.setting("gameGridTileSize", GameGridPreferences.normalizeTileSize(value))
     }
 
+    suspend fun setGameGridShowTitles(value: Boolean) {
+        dataStore.edit {
+            it[GAME_GRID_SHOW_TITLES] = value
+            it[GAME_GRID_CONFIGURED] = true
+        }
+        WajihaLog.setting("gameGridShowTitles", value)
+    }
+
+    suspend fun setGameGridShowTileChrome(value: Boolean) {
+        dataStore.edit {
+            it[GAME_GRID_SHOW_TILE_CHROME] = value
+            it[GAME_GRID_CONFIGURED] = true
+        }
+        WajihaLog.setting("gameGridShowTileChrome", value)
+    }
+
     suspend fun setGameGridSecondaryRows(value: Int) {
         dataStore.edit {
             it[GAME_GRID_SECONDARY_ROWS] = GameGridPreferences.normalizeRows(value)
@@ -355,6 +387,22 @@ class SettingsRepository(
             it[GAME_GRID_SECONDARY_CONFIGURED] = true
         }
         WajihaLog.setting("gameGridSecondaryTileSize", GameGridPreferences.normalizeTileSize(value))
+    }
+
+    suspend fun setGameGridSecondaryShowTitles(value: Boolean) {
+        dataStore.edit {
+            it[GAME_GRID_SECONDARY_SHOW_TITLES] = value
+            it[GAME_GRID_SECONDARY_CONFIGURED] = true
+        }
+        WajihaLog.setting("gameGridSecondaryShowTitles", value)
+    }
+
+    suspend fun setGameGridSecondaryShowTileChrome(value: Boolean) {
+        dataStore.edit {
+            it[GAME_GRID_SECONDARY_SHOW_TILE_CHROME] = value
+            it[GAME_GRID_SECONDARY_CONFIGURED] = true
+        }
+        WajihaLog.setting("gameGridSecondaryShowTileChrome", value)
     }
 
     suspend fun setHeroLayoutBundle(bundle: HeroLayoutBundle) {
@@ -733,10 +781,16 @@ class SettingsRepository(
         val GRID_ROWS = intPreferencesKey("grid_rows")
         private val GAME_GRID_ART = stringPreferencesKey("game_grid_art")
         private val GAME_GRID_TILE_SIZE = stringPreferencesKey("game_grid_tile_size")
+        private val GAME_GRID_SHOW_TITLES = booleanPreferencesKey("game_grid_show_titles")
+        private val GAME_GRID_SHOW_TILE_CHROME = booleanPreferencesKey("game_grid_show_tile_chrome")
         private val GAME_GRID_CONFIGURED = booleanPreferencesKey("game_grid_configured")
         private val GAME_GRID_SECONDARY_ART = stringPreferencesKey("game_grid_secondary_art")
         private val GAME_GRID_SECONDARY_ROWS = intPreferencesKey("game_grid_secondary_rows")
         private val GAME_GRID_SECONDARY_TILE_SIZE = stringPreferencesKey("game_grid_secondary_tile_size")
+        private val GAME_GRID_SECONDARY_SHOW_TITLES =
+            booleanPreferencesKey("game_grid_secondary_show_titles")
+        private val GAME_GRID_SECONDARY_SHOW_TILE_CHROME =
+            booleanPreferencesKey("game_grid_secondary_show_tile_chrome")
         private val GAME_GRID_SECONDARY_CONFIGURED = booleanPreferencesKey("game_grid_secondary_configured")
         private val HERO_LAYOUT_BUNDLE = stringPreferencesKey("hero_layout_bundle")
         val SOUNDS_ENABLED = booleanPreferencesKey("sounds_enabled")

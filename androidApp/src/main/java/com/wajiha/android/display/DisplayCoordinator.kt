@@ -272,7 +272,10 @@ class DisplayCoordinator(
             }
         }
         // Never pull the hero over a normal app that owns the top display.
-        val topPkg = store.topDisplayForegroundPackage.value
+        // Prefer ATM top-task when visible; store can lag on Thor (resolver→wajiha).
+        val topPkg =
+            TopDisplayTaskResolver.topPackageOnDisplay(context, Display.DEFAULT_DISPLAY)
+                ?: store.topDisplayForegroundPackage.value
         if (topPkg != null && topPkg != context.packageName) {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
@@ -281,6 +284,17 @@ class DisplayCoordinator(
             return
         }
         mainHandler.postDelayed({
+            // Re-check after the settle delay — a game may have taken focus.
+            val liveTop =
+                TopDisplayTaskResolver.topPackageOnDisplay(context, Display.DEFAULT_DISPLAY)
+                    ?: store.topDisplayForegroundPackage.value
+            if (liveTop != null && liveTop != context.packageName) {
+                WajihaLog.d(
+                    WajihaTags.DISPLAY,
+                    "restorePrimaryHero: skip delayed — foreign top pkg=$liveTop",
+                )
+                return@postDelayed
+            }
             val taskId =
                 main?.taskId
                     ?: TopDisplayTaskResolver.taskIdForActivityClass(context, MainActivity::class.java)
@@ -1083,8 +1097,14 @@ class DisplayCoordinator(
                 // Do not restorePrimaryHero here — a non-session app may own display 0.
             }
         } else if (!store.hasActiveSessions()) {
-            if (actualTop == context.packageName) return
-            restorePrimaryHero()
+            // Foreign app on top with no tracked session — leave focus alone.
+            // (Previously this called restorePrimaryHero and stole from Turnip/Chrome.)
+            if (actualTop != context.packageName) {
+                WajihaLog.d(
+                    WajihaTags.DISPLAY,
+                    "reconcilePrimaryAfterSecondaryRecovery: skip — foreign top pkg=$actualTop",
+                )
+            }
         }
     }
 

@@ -224,6 +224,7 @@ data class GameScrapeResult(
             gameId: Long,
             summaries: List<SourceResultSummary>,
             preferredFailure: ScrapeFailure? = null,
+            message: String = "No match",
         ): GameScrapeResult {
             val actionable =
                 preferredFailure
@@ -245,7 +246,7 @@ data class GameScrapeResult(
                     gameId = gameId,
                     outcome = GameScrapeOutcome.NoMatch,
                     failureKind = ScrapeFailureKind.NoMatch,
-                    message = "No match",
+                    message = message,
                     sourceSummaries = summaries,
                 )
             }

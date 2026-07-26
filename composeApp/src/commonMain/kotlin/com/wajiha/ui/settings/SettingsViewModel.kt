@@ -188,6 +188,14 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.setGameGridTileSize(value) }
     }
 
+    fun setGameGridShowTitles(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setGameGridShowTitles(value) }
+    }
+
+    fun setGameGridShowTileChrome(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setGameGridShowTileChrome(value) }
+    }
+
     fun setGameGridSecondaryRows(rows: Int) {
         viewModelScope.launch { settingsRepository.setGameGridSecondaryRows(rows) }
     }
@@ -198,6 +206,14 @@ class SettingsViewModel(
 
     fun setGameGridSecondaryTileSize(value: String) {
         viewModelScope.launch { settingsRepository.setGameGridSecondaryTileSize(value) }
+    }
+
+    fun setGameGridSecondaryShowTitles(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setGameGridSecondaryShowTitles(value) }
+    }
+
+    fun setGameGridSecondaryShowTileChrome(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setGameGridSecondaryShowTileChrome(value) }
     }
 
     fun applyHeroLayoutPreset(

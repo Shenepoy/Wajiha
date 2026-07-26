@@ -128,8 +128,28 @@ class ScrapeEngine(
             bundle.mediaByType.isEmpty() &&
             bundle.gameMatches.isEmpty()
         ) {
-            WajihaLog.i(WajihaTags.SCRAPE, "gameId=${game.id} name=${game.displayName}: no match")
-            return GameScrapeResult.noMatch(game.id, bundle.sourceSummaries)
+            val lowConfMsg =
+                if (bundle.rejectedLowConfidenceCount > 0) {
+                    val best = bundle.bestRejectedNameScore ?: 0f
+                    "No confident match: score ${"%.2f".format(best)} below " +
+                        "${"%.2f".format(NameMatchScorer.AutoConfidenceThreshold)}"
+                } else {
+                    null
+                }
+            WajihaLog.i(
+                WajihaTags.SCRAPE,
+                "gameId=${game.id} name=${game.displayName}: ${lowConfMsg ?: "no match"}" +
+                    if (bundle.rejectedLowConfidenceCount > 0) {
+                        " (rejected=${bundle.rejectedLowConfidenceCount})"
+                    } else {
+                        ""
+                    },
+            )
+            return GameScrapeResult.noMatch(
+                game.id,
+                bundle.sourceSummaries,
+                message = lowConfMsg ?: "No match",
+            )
         }
 
         val selection = matchTool.pickBest(bundle, effective, neededTypes)

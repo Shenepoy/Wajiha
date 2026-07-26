@@ -134,6 +134,8 @@ fun BottomScreen(
     gridRows: Int = GameGridPreferences.DEFAULT_ROWS,
     gameGridArt: String = GameGridPreferences.DEFAULT_ART,
     gameGridTileSize: String = GameGridPreferences.DEFAULT_TILE_SIZE,
+    gameGridShowTitles: Boolean = true,
+    gameGridShowTileChrome: Boolean = true,
     onSelectPlatform: (String?) -> Unit,
     onFocusGame: (Long?) -> Unit,
     onLaunchGame: (Long) -> Unit,
@@ -1343,6 +1345,8 @@ fun BottomScreen(
                                         selected = isSelected && !dockFocused,
                                         artStyle = tileArt,
                                         contentScale = tileScale,
+                                        showTitle = gameGridShowTitles,
+                                        showTileChrome = gameGridShowTileChrome,
                                         onSelect = {
                                             if (selectionLocked) return@GameTileCard
                                             if (gamepadOwner != null) {
@@ -2081,6 +2085,8 @@ private fun GameTileCard(
     navHighlighted: Boolean = false,
     artStyle: String = GameGridPreferences.DEFAULT_ART,
     contentScale: ContentScale = ContentScale.Crop,
+    showTitle: Boolean = true,
+    showTileChrome: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val artPath =
@@ -2089,7 +2095,10 @@ private fun GameTileCard(
             boxartPath = tile.boxartPath,
             iconPath = tile.iconPath,
             logoPath = tile.logoPath,
+            squarePath = tile.squarePath,
         )
+    val insetArt =
+        showTileChrome && contentScale == ContentScale.Fit
     GamepadTile(
         selected = selected,
         onSelect = onSelect,
@@ -2118,37 +2127,45 @@ private fun GameTileCard(
                         modifier =
                             Modifier
                                 .fillMaxSize()
-                                .padding(
-                                    if (contentScale == ContentScale.Fit) {
-                                        WajihaSpacing.sm
-                                    } else {
-                                        0.dp
-                                    },
-                                ),
+                                .padding(if (insetArt) WajihaSpacing.sm else 0.dp),
                     )
-                    Box(
-                        modifier =
-                            Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(Color.Transparent, WajihaColors.TileScrim),
-                                    ),
-                                ),
-                    ) {
-                        Text(
-                            text = tile.game.displayName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = WajihaColors.OnDark,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                    if (showTileChrome || showTitle) {
+                        Box(
                             modifier =
-                                Modifier.padding(
-                                    horizontal = WajihaSpacing.sm,
-                                    vertical = WajihaSpacing.sm,
-                                ),
-                        )
+                                Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .then(
+                                        if (showTileChrome) {
+                                            Modifier.background(
+                                                Brush.verticalGradient(
+                                                    colors =
+                                                        listOf(
+                                                            Color.Transparent,
+                                                            WajihaColors.TileScrim,
+                                                        ),
+                                                ),
+                                            )
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
+                        ) {
+                            if (showTitle) {
+                                Text(
+                                    text = tile.game.displayName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = WajihaColors.OnDark,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = WajihaSpacing.sm,
+                                            vertical = WajihaSpacing.sm,
+                                        ),
+                                )
+                            }
+                        }
                     }
                 } else {
                     Column(

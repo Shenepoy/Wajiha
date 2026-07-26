@@ -3,7 +3,6 @@ package com.wajiha.ui.scraper
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wajiha.data.db.GameEntity
-import com.wajiha.data.db.GameMediaEntity
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.ra.RaRepository
 import com.wajiha.data.scraper.BatchScrapeProgress
@@ -12,7 +11,6 @@ import com.wajiha.data.scraper.CredentialTestResult
 import com.wajiha.data.scraper.PlatformScraperOverride
 import com.wajiha.data.scraper.ScrapeApiLog
 import com.wajiha.data.scraper.ScrapeApiLogEntry
-import com.wajiha.data.scraper.ScrapeCandidate
 import com.wajiha.data.scraper.ScrapeEngine
 import com.wajiha.data.scraper.ScrapeRunPolicy
 import com.wajiha.data.scraper.ScraperCredentialValidator
@@ -29,18 +27,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-
-/** State for the manual-match flow of one selected game. */
-data class ManualMatchState(
-    val game: GameEntity? = null,
-    val media: List<GameMediaEntity> = emptyList(),
-    val searching: Boolean = false,
-    val candidates: List<ScrapeCandidate> = emptyList(),
-    val applying: Boolean = false,
-    val message: String? = null,
-    /** null = neutral, true = success, false = error */
-    val messageSuccess: Boolean? = null,
-)
 
 /** Result of a credential test probe for one scraper source. */
 data class SourceTestState(
@@ -88,12 +74,6 @@ class ScraperViewModel(
             val folderPlatformIds = folderList.map { it.platformId }.toSet()
             platformList.filter { it.id in folderPlatformIds }.sortedBy { it.name }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val _gameResults = MutableStateFlow<List<GameEntity>>(emptyList())
-    val gameResults: StateFlow<List<GameEntity>> = _gameResults
-
-    private val _manual = MutableStateFlow(ManualMatchState())
-    val manual: StateFlow<ManualMatchState> = _manual
 
     private val _sourceTests = MutableStateFlow<Map<String, SourceTestState>>(emptyMap())
     val sourceTests: StateFlow<Map<String, SourceTestState>> = _sourceTests
@@ -402,121 +382,5 @@ class ScraperViewModel(
             sourceId?.let { platformSettings.copy(enabledSources = listOf(it)) }
                 ?: platformSettings
         return engine.hasConfiguredSources(effective)
-    }
-
-    // ---- manual match ----
-
-    fun searchLibrary(query: String) {
-        if (query.isBlank()) {
-            _gameResults.value = emptyList()
-            return
-        }
-        viewModelScope.launch {
-            _gameResults.value = gameRepository.search(query).first()
-        }
-    }
-
-    fun selectGame(game: GameEntity) {
-        _manual.value = ManualMatchState(game = game)
-        viewModelScope.launch {
-            _manual.value = _manual.value.copy(media = gameRepository.media(game.id))
-        }
-    }
-
-    fun clearSelection() {
-        _manual.value = ManualMatchState()
-    }
-
-    fun searchSources(name: String) {
-        val game = _manual.value.game ?: return
-        _manual.value =
-            _manual.value.copy(
-                searching = true,
-                candidates = emptyList(),
-                message = null,
-                messageSuccess = null,
-            )
-        viewModelScope.launch {
-            try {
-                val candidates = engine.searchAll(name, game, settingsRepository.current())
-                _manual.value =
-                    _manual.value.copy(
-                        searching = false,
-                        candidates = candidates,
-                        message = if (candidates.isEmpty()) "No matches found" else null,
-                        messageSuccess = if (candidates.isEmpty()) false else null,
-                    )
-            } catch (e: Exception) {
-                _manual.value =
-                    _manual.value.copy(
-                        searching = false,
-                        candidates = emptyList(),
-                        message = e.message ?: "Search failed",
-                        messageSuccess = false,
-                    )
-            }
-        }
-    }
-
-    fun applyCandidate(candidate: ScrapeCandidate) {
-        val game = _manual.value.game ?: return
-        _manual.value = _manual.value.copy(applying = true, message = null, messageSuccess = null)
-        viewModelScope.launch {
-            try {
-                val result = engine.applyManualMatch(game, candidate, settingsRepository.current())
-                val refreshedGame = gameRepository.byId(game.id)
-                val (msg, ok) = result.userMessage(verb = "Applied")
-                _manual.value =
-                    _manual.value.copy(
-                        game = refreshedGame ?: game,
-                        media = gameRepository.media(game.id),
-                        applying = false,
-                        message = msg,
-                        messageSuccess = ok,
-                    )
-            } catch (e: Exception) {
-                _manual.value =
-                    _manual.value.copy(
-                        applying = false,
-                        message = e.message ?: "Apply failed",
-                        messageSuccess = false,
-                    )
-            }
-        }
-    }
-
-    fun deleteMedia(media: GameMediaEntity) {
-        viewModelScope.launch {
-            gameRepository.deleteMedia(media.id)
-            _manual.value.game?.let {
-                _manual.value = _manual.value.copy(media = gameRepository.media(it.id))
-            }
-        }
-    }
-
-    fun rescrapeSelected() {
-        val game = _manual.value.game ?: return
-        _manual.value = _manual.value.copy(applying = true, message = null, messageSuccess = null)
-        viewModelScope.launch {
-            try {
-                val result = engine.scrapeGame(game, settingsRepository.current())
-                val (msg, ok) = result.userMessage(verb = "Scraped")
-                _manual.value =
-                    _manual.value.copy(
-                        game = gameRepository.byId(game.id) ?: game,
-                        media = gameRepository.media(game.id),
-                        applying = false,
-                        message = msg,
-                        messageSuccess = ok,
-                    )
-            } catch (e: Exception) {
-                _manual.value =
-                    _manual.value.copy(
-                        applying = false,
-                        message = e.message ?: "Scrape failed",
-                        messageSuccess = false,
-                    )
-            }
-        }
     }
 }

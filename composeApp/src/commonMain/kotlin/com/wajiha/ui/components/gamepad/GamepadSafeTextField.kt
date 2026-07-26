@@ -47,6 +47,7 @@ fun GamepadSafeTextField(
     navItemId: Any? = null,
     overridden: Boolean = false,
     overrideHint: String = "Changed from global default",
+    focusRequester: FocusRequester? = null,
 ) {
     var editing by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -54,7 +55,8 @@ fun GamepadSafeTextField(
     val useCustomNav = controller != null
     val id = navItemId ?: remember { Any() }
     var highlighted by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
+    val localFocusRequester = remember { FocusRequester() }
+    val resolvedFocusRequester = focusRequester ?: localFocusRequester
 
     fun exitEditing(): Boolean {
         if (!editing) return false
@@ -87,7 +89,7 @@ fun GamepadSafeTextField(
         } else {
             editing = true
             try {
-                focusRequester.requestFocus()
+                resolvedFocusRequester.requestFocus()
             } catch (_: Exception) {
             }
             keyboard?.show()
@@ -104,7 +106,7 @@ fun GamepadSafeTextField(
             onEnterEdit = {
                 editing = true
                 try {
-                    focusRequester.requestFocus()
+                    resolvedFocusRequester.requestFocus()
                 } catch (_: Exception) {
                 }
                 keyboard?.show()
@@ -127,7 +129,7 @@ fun GamepadSafeTextField(
                 editing = editing,
                 overridden = overridden,
                 overrideHint = overrideHint,
-                focusRequester = focusRequester,
+                focusRequester = resolvedFocusRequester,
                 onTap = { enterEditing() },
                 onFocusChanged = { focused ->
                     if (!focused && editing) {
@@ -149,6 +151,7 @@ fun GamepadSafeTextField(
             overridden = overridden,
             overrideHint = overrideHint,
             modifier = fieldModifier,
+            focusRequester = resolvedFocusRequester,
         )
     }
 }
@@ -231,16 +234,14 @@ private fun LegacyGamepadSafeTextField(
     overridden: Boolean = false,
     overrideHint: String = "Changed from global default",
     modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
 ) {
     var editing by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    val focusRequester =
-        remember {
-            androidx.compose.ui.focus
-                .FocusRequester()
-        }
+    val localFocusRequester = remember { FocusRequester() }
+    val resolvedFocusRequester = focusRequester ?: localFocusRequester
 
     fun exitEditing(): Boolean {
         if (!editing) return false
@@ -278,7 +279,7 @@ private fun LegacyGamepadSafeTextField(
                 .wajihaFocusIndicator(
                     highlighted = focused,
                     shape = WajihaShapes.focus,
-                ).focusRequester(focusRequester)
+                ).focusRequester(resolvedFocusRequester)
                 .onPreviewKeyEvent { event ->
                     if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) {
                         return@onPreviewKeyEvent false
@@ -346,7 +347,7 @@ private fun LegacyGamepadSafeTextField(
                     detectTapGestures {
                         editing = true
                         try {
-                            focusRequester.requestFocus()
+                            resolvedFocusRequester.requestFocus()
                         } catch (_: Exception) {
                         }
                         keyboard?.show()

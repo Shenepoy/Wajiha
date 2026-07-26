@@ -12,6 +12,7 @@ import com.wajiha.data.scraper.StagedMediaPick
 enum class ReviewSlot {
     Metadata,
     Boxart,
+    Square,
     Logo,
     Hero,
     Screenshot,
@@ -24,6 +25,7 @@ enum class ReviewSlot {
         when (this) {
             Metadata -> null
             Boxart -> MediaType.Boxart
+            Square -> MediaType.Square
             Logo -> MediaType.Logo
             Hero -> MediaType.Hero
             Screenshot -> MediaType.Screenshot
@@ -40,6 +42,7 @@ enum class ReviewSlot {
         when (this) {
             Metadata -> "Metadata"
             Boxart -> "Box art"
+            Square -> "Square"
             Logo -> "Logo"
             Hero -> "Hero"
             Screenshot -> "Screenshots"
@@ -174,6 +177,7 @@ fun ScrapeCandidate.key(): String = "$sourceId::$sourceGameId"
 val ReviewMediaSlots: List<MediaType> =
     listOf(
         MediaType.Boxart,
+        MediaType.Square,
         MediaType.Logo,
         MediaType.Hero,
         MediaType.Screenshot,

@@ -122,6 +122,8 @@ class GameRepository(
 
     fun observeAllIcons(): Flow<List<GameMediaEntity>> = mediaDao.observeAllOfType("icon")
 
+    fun observeAllSquares(): Flow<List<GameMediaEntity>> = mediaDao.observeAllOfType("square")
+
     suspend fun media(gameId: Long): List<GameMediaEntity> = mediaDao.forGame(gameId)
 
     suspend fun mediaForGames(gameIds: List<Long>): Map<Long, List<GameMediaEntity>> {

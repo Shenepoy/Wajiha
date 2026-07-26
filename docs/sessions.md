@@ -58,9 +58,9 @@ flowchart LR
 
 ## UI
 
-- **Session grid** — tiles in `BottomScreen` via `SessionGridTile` (same 3:4 aspect as game tiles)
+- **Session grid** — tiles in `BottomScreen` via `SessionGridTile` (aspect follows the active display’s `GameGridPreferences` art style; Icon mode can show scraped square art)
 - **Floating chip** — `NowPlayingOverlay` when `nowPlayingDisplay` includes chip mode
-- **Now Running** — full panel (`NowPlayingPanel`) on single-display or via navigation request
+- **Now Running** — full panel (`NowPlayingPanel`) on single-display or via navigation request; Settings → Screens → Now Running controls hero-as-background and logo usage
 
 Settings → Screens controls chip vs grid vs both (`NowPlayingDisplayMode`).
 

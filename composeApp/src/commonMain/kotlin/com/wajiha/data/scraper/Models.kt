@@ -6,6 +6,9 @@ enum class MediaType(
     val dbName: String,
 ) {
     Boxart("boxart"),
+
+    /** SteamGridDB square grids (1:1) — parallel to boxart, not a replacement. */
+    Square("square"),
     Logo("logo"),
     Hero("hero"),
     Screenshot("screenshot"),
@@ -74,6 +77,25 @@ data class ScrapeCandidate(
     /** How the source matched this game (hash / name / autocomplete). */
     val matchConfidence: MatchConfidence = MatchConfidence.Unknown,
 )
+
+/** Preview thumb for candidate lists — prefers Square (1:1), then source thumb / boxart. */
+data class CandidatePreviewThumb(
+    val url: String?,
+    val square: Boolean,
+)
+
+fun ScrapeCandidate.previewThumb(): CandidatePreviewThumb {
+    val squareUrl = media.firstOrNull { it.type == MediaType.Square }?.url?.takeIf { it.isNotBlank() }
+    if (squareUrl != null) {
+        return CandidatePreviewThumb(url = squareUrl, square = true)
+    }
+    val boxartUrl = media.firstOrNull { it.type == MediaType.Boxart }?.url?.takeIf { it.isNotBlank() }
+    val url =
+        thumbnailUrl?.takeIf { it.isNotBlank() }
+            ?: boxartUrl
+            ?: media.firstOrNull()?.url
+    return CandidatePreviewThumb(url = url, square = false)
+}
 
 /**
  * Per-platform scraper overrides. Null fields inherit the global [ScraperSettings] value.
@@ -159,6 +181,8 @@ data class ScraperSettings(
     val steamGridDbApiKey: String = "",
     val raUsername: String = "",
     val raApiKey: String = "",
+    /** Stable RA user id from profile (preferred for progress `u=`). */
+    val raUlid: String = "",
     val rommUrl: String = "",
     val rommUsername: String = "",
     val rommPassword: String = "",
@@ -273,6 +297,7 @@ data class ScraperSettings(
         val defaultMediaPriority: Map<String, List<String>> =
             mapOf(
                 MediaType.Boxart.dbName to listOf("screenscraper", "steamgriddb", "libretro", "romm", "local"),
+                MediaType.Square.dbName to listOf("steamgriddb", "local"),
                 MediaType.Logo.dbName to listOf("steamgriddb", "screenscraper", "local"),
                 MediaType.Hero.dbName to listOf("steamgriddb", "screenscraper", "local"),
                 MediaType.Screenshot.dbName to listOf("screenscraper", "libretro", "local"),

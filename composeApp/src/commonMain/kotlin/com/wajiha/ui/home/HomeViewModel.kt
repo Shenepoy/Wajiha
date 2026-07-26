@@ -30,6 +30,7 @@ data class GameTile(
     val heroPath: String? = null,
     val logoPath: String? = null,
     val iconPath: String? = null,
+    val squarePath: String? = null,
 )
 
 data class HomeUiState(
@@ -83,19 +84,25 @@ class HomeViewModel(
     /** Art maps so scraped media refreshes the grid / hero live. */
     private val mediaByGame =
         combine(
-            gameRepository.observeAllBoxart(),
-            gameRepository.observeAllVideos(),
-            gameRepository.observeAllHeroes(),
-            gameRepository.observeAllLogos(),
-            gameRepository.observeAllIcons(),
-        ) { boxart, videos, heroes, logos, icons ->
-            GameMediaMaps(
-                boxart = boxart.pathMap(),
-                videos = videos.pathMap(),
-                heroes = heroes.pathMap(),
-                logos = logos.pathMap(),
-                icons = icons.pathMap(),
-            )
+            combine(
+                gameRepository.observeAllBoxart(),
+                gameRepository.observeAllVideos(),
+                gameRepository.observeAllHeroes(),
+                gameRepository.observeAllLogos(),
+                gameRepository.observeAllIcons(),
+            ) { boxart, videos, heroes, logos, icons ->
+                GameMediaMaps(
+                    boxart = boxart.pathMap(),
+                    videos = videos.pathMap(),
+                    heroes = heroes.pathMap(),
+                    logos = logos.pathMap(),
+                    icons = icons.pathMap(),
+                    squares = emptyMap(),
+                )
+            },
+            gameRepository.observeAllSquares(),
+        ) { base, squares ->
+            base.copy(squares = squares.pathMap())
         }
 
     private val gamesForSelected =
@@ -233,6 +240,7 @@ private data class GameMediaMaps(
     val heroes: Map<Long, String>,
     val logos: Map<Long, String>,
     val icons: Map<Long, String>,
+    val squares: Map<Long, String>,
 )
 
 private fun List<GameMediaEntity>.pathMap(): Map<Long, String> = filter { it.localPath != null }.associate { it.gameId to it.localPath!! }
@@ -245,4 +253,5 @@ private fun GameEntity.toTile(media: GameMediaMaps): GameTile =
         heroPath = media.heroes[id],
         logoPath = media.logos[id],
         iconPath = media.icons[id],
+        squarePath = media.squares[id],
     )

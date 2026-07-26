@@ -108,9 +108,8 @@ fun TopScreen(
                 tile = focused,
                 platformName = platformName,
                 onExit = {
-                    // B on the hero canvas — persist before clearing edit mode.
-                    // Settings controls also save on dispose; this covers swap /
-                    // owner-teardown races where that path can miss a frame.
+                    // B on the hero canvas — persist, then drop edit mode. Settings
+                    // observes heroLayoutEditing and closes the fullscreen page.
                     val draft = dualStore.heroLayoutEditDraft.value
                     val slot = dualStore.heroLayoutEditSlot.value
                     if (draft != null) {
@@ -120,9 +119,11 @@ fun TopScreen(
                             }
                         }
                     }
+                    dualStore.clearHeroLayoutEditDraft()
                     dualStore.setHeroLayoutEditing(false)
                 },
                 modifier = Modifier.fillMaxSize(),
+                contentFocusRequester = contentFocusRequester,
             )
         } else {
             AnimatedContent(
@@ -383,6 +384,7 @@ private fun GameDetailHero(
                 heroPath = state.media.firstOrNull { it.type == "hero" }?.localPath,
                 logoPath = state.media.firstOrNull { it.type == "logo" }?.localPath,
                 iconPath = state.media.firstOrNull { it.type == "icon" }?.localPath,
+                squarePath = state.media.firstOrNull { it.type == "square" }?.localPath,
             )
         }
 

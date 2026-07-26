@@ -58,6 +58,9 @@
         <package android:name="dev.eden.eden_emulator" />
         <package android:name="org.ryujinx.android" />
         <package android:name="xyz.aethersx2.android" />
+        <package android:name="xyz.aethersx2.tturnip" />
+        <package android:name="xyz.aethersx2.cturnip" />
+        <package android:name="xyz.aethersx2.custom" />
         <package android:name="net.rpcsx" />
         <package android:name="com.explusalpha.Snes9xPlus" />
         <package android:name="com.explusalpha.MdEmu" />

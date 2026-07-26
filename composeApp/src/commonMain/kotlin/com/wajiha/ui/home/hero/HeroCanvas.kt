@@ -1,23 +1,34 @@
 package com.wajiha.ui.home.hero
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -130,7 +141,11 @@ fun HeroCanvas(
                     }
 
                     HeroElementId.Logo -> {
-                        LogoElement(tile = tile, modifier = boxMod)
+                        LogoElement(
+                            tile = tile,
+                            modifier = boxMod,
+                            animate = !dimFreeform,
+                        )
                     }
 
                     HeroElementId.PlatformIcon -> {
@@ -314,27 +329,95 @@ private fun CoverElement(
 private fun LogoElement(
     tile: GameTile,
     modifier: Modifier,
+    animate: Boolean,
 ) {
     val path = tile.logoPath ?: return
-    Box(
-        modifier =
-            modifier.background(
-                Color.Black.copy(alpha = 0.25f),
-                shape = WajihaShapes.tile,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        AsyncImage(
-            model = path,
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(WajihaSpacing.sm),
+    val density = LocalDensity.current
+    val floatAmplitudePx = with(density) { LogoFloatAmplitude.toPx() }
+
+    val idleScale: Float
+    val idleTranslationY: Float
+    if (animate) {
+        val transition = rememberInfiniteTransition(label = "hero_logo_idle")
+        val breathe by
+            transition.animateFloat(
+                initialValue = 1f,
+                targetValue = LogoBreatheMaxScale,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation =
+                            tween(
+                                durationMillis = LogoIdleCycleMs,
+                                easing = FastOutSlowInEasing,
+                            ),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                label = "hero_logo_breathe",
+            )
+        val floatY by
+            transition.animateFloat(
+                initialValue = -floatAmplitudePx,
+                targetValue = floatAmplitudePx,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation =
+                            tween(
+                                durationMillis = LogoIdleCycleMs,
+                                easing = FastOutSlowInEasing,
+                            ),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                label = "hero_logo_float",
+            )
+        idleScale = breathe
+        idleTranslationY = floatY
+    } else {
+        idleScale = 1f
+        idleTranslationY = 0f
+    }
+
+    val pulse = remember { Animatable(1f) }
+    LaunchedEffect(path, tile.game.id, animate) {
+        if (!animate) {
+            pulse.snapTo(1f)
+            return@LaunchedEffect
+        }
+        pulse.snapTo(1f)
+        pulse.animateTo(
+            targetValue = LogoPulseMaxScale,
+            animationSpec = tween(durationMillis = LogoPulseUpMs, easing = FastOutSlowInEasing),
+        )
+        pulse.animateTo(
+            targetValue = 1f,
+            animationSpec =
+                spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
         )
     }
+
+    val scale = idleScale * pulse.value
+    AsyncImage(
+        model = path,
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier =
+            modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationY = idleTranslationY
+                },
+    )
 }
+
+private const val LogoIdleCycleMs = 3500
+private const val LogoBreatheMaxScale = 1.03f
+private const val LogoPulseMaxScale = 1.06f
+private const val LogoPulseUpMs = 160
+private val LogoFloatAmplitude = 3.dp
 
 @Composable
 private fun elementModifier(

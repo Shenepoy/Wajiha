@@ -28,10 +28,11 @@ data class SteamGridDbMediaPage(
 )
 
 /**
- * SteamGridDB — grids (boxart), heroes, logos, icons.
+ * SteamGridDB — grids (boxart + square), heroes, logos, icons.
  *
  * Auto path: cheap autocomplete only; art is fetched lazily by [ScrapeMatchTool]
  * for the chosen game id / needed types. Parses `score` + `author` for ranking.
+ * Square uses the grids endpoint with `dimensions=1024x1024,512x512` (Cocoon-style).
  */
 class SteamGridDbSource(
     private val http: HttpClient,
@@ -165,9 +166,7 @@ class SteamGridDbSource(
         if (!health.isAvailable()) {
             return SteamGridDbMediaPage(emptyList(), page, hasMore = false)
         }
-        val endpoint =
-            Endpoints.entries.firstOrNull { it.value == type }?.key
-                ?: return SteamGridDbMediaPage(emptyList(), page, hasMore = false)
+        val endpoint = endpointFor(type) ?: return SteamGridDbMediaPage(emptyList(), page, hasMore = false)
         health.recordCall()
         val fetch =
             http.getJsonResult<SgdbEnvelope<SgdbAsset>>(
@@ -175,6 +174,9 @@ class SteamGridDbSource(
             ) {
                 steamGridDbAuth(settings)
                 applyGridFilters(endpoint, settings)
+                if (type == MediaType.Square) {
+                    parameter("dimensions", SquareGridDimensions)
+                }
                 parameter("limit", limit.coerceAtMost(50))
                 parameter("page", page)
             }
@@ -295,15 +297,20 @@ class SteamGridDbSource(
         val avatar: String? = null,
     )
 
+    private fun endpointFor(type: MediaType): String? =
+        when (type) {
+            MediaType.Boxart, MediaType.Square -> "grids"
+            MediaType.Hero -> "heroes"
+            MediaType.Logo -> "logos"
+            MediaType.Icon -> "icons"
+            else -> null
+        }
+
     companion object {
         const val PageSize = 50
         private const val SEARCH_CACHE_MS = 5_000L
-        private val Endpoints =
-            mapOf(
-                "grids" to MediaType.Boxart,
-                "heroes" to MediaType.Hero,
-                "logos" to MediaType.Logo,
-                "icons" to MediaType.Icon,
-            )
+
+        /** Cocoon-style square grid dimensions for SteamGridDB. */
+        private const val SquareGridDimensions = "1024x1024,512x512"
     }
 }

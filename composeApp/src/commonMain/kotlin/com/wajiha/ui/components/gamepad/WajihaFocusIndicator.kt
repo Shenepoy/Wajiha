@@ -176,7 +176,9 @@ private fun Modifier.outsideFocusViaOverlay(
     composed {
         val token = remember { Any() }
         var boundsInRoot by remember { mutableStateOf<Rect?>(null) }
-        val viewportBoundsInRoot = LocalSettingSectionScroll.current?.viewportBoundsInRoot()
+        val viewportBoundsInRoot =
+            LocalFocusRingClipViewport.current?.boundsInRoot
+                ?: LocalSettingSectionScroll.current?.viewportBoundsInRoot()
         val continuity = LocalFocusContinuityController.current
         val layerId = LocalFocusLayerId.current
         val resolvedAnchor =

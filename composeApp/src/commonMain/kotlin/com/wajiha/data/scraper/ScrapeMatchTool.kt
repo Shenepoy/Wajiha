@@ -51,6 +51,8 @@ class ScrapeMatchTool(
         val gameMatches = mutableListOf<RankedGameMatch>()
         val metadataCandidates = mutableListOf<ScrapeCandidate>()
         val rawMedia = mutableListOf<RankedMediaOption>()
+        var rejectedLowConfidence = 0
+        var bestRejectedScore: Float? = null
 
         val name = searchName?.takeIf { it.isNotBlank() } ?: query.displayName
 
@@ -90,6 +92,23 @@ class ScrapeMatchTool(
                         } else {
                             outcome.candidate
                         }
+                    val nameScore = NameMatchScorer.score(name, tagged.name)
+                    // Auto: Cocoon-style gate — refuse weak name/autocomplete before art fetch.
+                    if (mode == MatchMode.Auto &&
+                        !NameMatchScorer.passesAutoGate(confidence, name, tagged.name)
+                    ) {
+                        rejectedLowConfidence++
+                        bestRejectedScore =
+                            maxOf(bestRejectedScore ?: 0f, nameScore)
+                        WajihaLog.i(
+                            WajihaTags.SCRAPE,
+                            "No confident ${source.id} match for \"$name\": " +
+                                "score ${"%.2f".format(nameScore)} below " +
+                                "${"%.2f".format(NameMatchScorer.AutoConfidenceThreshold)} " +
+                                "(candidate=\"${tagged.name}\")",
+                        )
+                        continue
+                    }
                     gameMatches +=
                         RankedGameMatch(
                             sourceId = source.id,
@@ -97,6 +116,7 @@ class ScrapeMatchTool(
                             name = tagged.name,
                             confidence = confidence,
                             candidate = tagged,
+                            nameScore = nameScore,
                         )
                     if (tagged.metadata != null) {
                         metadataCandidates += tagged
@@ -136,6 +156,7 @@ class ScrapeMatchTool(
                         it in
                             setOf(
                                 MediaType.Boxart,
+                                MediaType.Square,
                                 MediaType.Hero,
                                 MediaType.Logo,
                                 MediaType.Icon,
@@ -185,6 +206,7 @@ class ScrapeMatchTool(
                                     name = tagged.name,
                                     confidence = conf,
                                     candidate = tagged,
+                                    nameScore = NameMatchScorer.score(name, tagged.name),
                                 )
                         }
                         if (tagged.metadata != null &&
@@ -219,6 +241,7 @@ class ScrapeMatchTool(
         val orderedGames =
             gameMatches.sortedWith(
                 compareBy<RankedGameMatch> { it.confidence.ordinal }
+                    .thenByDescending { it.nameScore }
                     .thenBy { settings.metadataPriority.indexOf(it.sourceId).let { i -> if (i < 0) 99 else i } },
             )
 
@@ -231,6 +254,8 @@ class ScrapeMatchTool(
                 },
             sourceSummaries = summaries,
             steamGridDbHasMoreByType = sgdbHasMoreByType,
+            rejectedLowConfidenceCount = rejectedLowConfidence,
+            bestRejectedNameScore = bestRejectedScore,
         )
     }
 

@@ -57,6 +57,7 @@ data class NowPlayingState(
     val heroPath: String? = null,
     val logoPath: String? = null,
     val iconPath: String? = null,
+    val squarePath: String? = null,
     val sessionStartedAt: Long = 0,
     /** Accumulated ms on the top display before the current segment. */
     val sessionElapsedMs: Long = 0,

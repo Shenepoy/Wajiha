@@ -170,11 +170,12 @@ object GameGridPreferences {
         boxartPath: String?,
         iconPath: String?,
         logoPath: String?,
+        squarePath: String? = null,
     ): String? =
         when (normalizeArt(art)) {
-            ART_ICON -> iconPath ?: boxartPath ?: logoPath
-            ART_LOGO -> logoPath ?: boxartPath ?: iconPath
-            else -> boxartPath ?: iconPath ?: logoPath
+            ART_ICON -> squarePath ?: iconPath ?: boxartPath ?: logoPath
+            ART_LOGO -> logoPath ?: boxartPath ?: squarePath ?: iconPath
+            else -> boxartPath ?: squarePath ?: iconPath ?: logoPath
         }
 
     fun resolveSessionArtPath(
@@ -182,5 +183,6 @@ object GameGridPreferences {
         boxartPath: String?,
         iconPath: String?,
         logoPath: String?,
-    ): String? = resolveArtPath(art, boxartPath, iconPath, logoPath)
+        squarePath: String? = null,
+    ): String? = resolveArtPath(art, boxartPath, iconPath, logoPath, squarePath)
 }

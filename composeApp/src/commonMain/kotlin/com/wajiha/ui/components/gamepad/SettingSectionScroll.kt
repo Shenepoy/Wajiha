@@ -42,8 +42,8 @@ import kotlin.math.roundToInt
 
 /**
  * Scroll container for grouped settings cards. Provided via [LocalSettingSectionScroll]
- * so [MultiChoiceSettingRow] can scroll the row header to the top on expand and shared
- * focus chrome can resolve the clipped settings viewport.
+ * so expandable sections can optionally pin a header, rows can ensure focus visibility,
+ * and focus chrome can resolve the settings clip viewport.
  */
 class SettingSectionScroll(
     val scrollState: ScrollState,
@@ -121,6 +121,17 @@ class SettingSectionScroll(
 
 val LocalSettingSectionScroll = compositionLocalOf<SettingSectionScroll?> { null }
 
+/**
+ * Clip bounds for Outside focus chrome. Nested providers override parents:
+ * [WajihaSettingGroup] (inner card) → [WajihaSettingPanel] → scroll viewport.
+ */
+class FocusRingClipViewport {
+    var boundsInRoot by mutableStateOf<Rect?>(null)
+        internal set
+}
+
+val LocalFocusRingClipViewport = compositionLocalOf<FocusRingClipViewport?> { null }
+
 @Stable
 class SettingSectionFocusRestorer(
     private val memoryKey: String,
@@ -145,12 +156,13 @@ class SettingSectionFocusRestorer(
     }
 }
 
-/** Scrollable column used inside settings / game-detail section cards. */
+/** Column used inside settings / game-detail section cards; publishes a focus-ring clip viewport. */
 @Composable
 fun SettingSectionScrollColumn(
     modifier: Modifier = Modifier,
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
     focusRestorer: SettingSectionFocusRestorer? = null,
+    scrollEnabled: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val scrollState =
@@ -190,10 +202,12 @@ fun SettingSectionScrollColumn(
         }
     }
 
-    LaunchedEffect(scrollState) {
-        snapshotFlow { scrollState.value }
-            .drop(1)
-            .collect { focusRestorer?.rememberScrollOffset(it) }
+    if (scrollEnabled) {
+        LaunchedEffect(scrollState) {
+            snapshotFlow { scrollState.value }
+                .drop(1)
+                .collect { focusRestorer?.rememberScrollOffset(it) }
+        }
     }
 
     CompositionLocalProvider(LocalSettingSectionScroll provides sectionScroll) {
@@ -208,9 +222,16 @@ fun SettingSectionScrollColumn(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .verticalScroll(scrollState)
-                        // Extra bottom so D-pad can bring the last row fully into view.
-                        .padding(bottom = WajihaSpacing.xl + WajihaSpacing.md),
+                        .then(
+                            if (scrollEnabled) {
+                                Modifier
+                                    .verticalScroll(scrollState)
+                                    // Extra bottom so D-pad can bring the last row fully into view.
+                                    .padding(bottom = WajihaSpacing.xl + WajihaSpacing.md)
+                            } else {
+                                Modifier
+                            },
+                        ),
                 verticalArrangement = verticalArrangement,
                 content = content,
             )

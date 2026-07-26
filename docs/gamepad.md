@@ -22,12 +22,19 @@ When `GamepadNavHost` is active (`LocalGamepadNavController` set), controls defe
 - **A / Enter** — confirm / activate focused control
 - **B / Escape** — back; dismisses text edit, then top gamepad layer, then in-screen back
 - **Y** — context actions (e.g. close session tile on grid)
+- **X** — contextual secondary (Menu, Edit, Remove, …) when the screen defines it
 - **L1/R1** — section/tab switching in settings and scraper
-- **L2** — switch gamepad focus between top and bottom screens (dual display); sticky until toggled again or single-display. Works while a game is running with the bottom grid visible; disabled during secondary blackout and when Settings → Screens → Single screen is on. Accepts digital `BUTTON_L2` and analog `AXIS_LTRIGGER` (Xbox / Thor).
-- **R2** — toggle the top-screen system notification panel (open and close)
+- **L2** — switch gamepad focus between top and bottom screens (dual display); sticky until toggled again or single-display. Disabled in single-screen mode and secondary blackout. Accepts digital `BUTTON_L2` and analog `AXIS_LTRIGGER` (Xbox / Thor). The **Focus** hint (`l2HintOwner`) appears mainly when the hero is interactive (settings hero picking, scrape review, hero layout editor); the toggle itself still works more broadly while browsing / grid-visible.
+- **R2** — toggle the top-screen system notification panel (open and close); ignored while a game is running or secondary is blacked out
+- **L3** (left stick click) — open Apps on the menu-owning display; ignored while a game is running or secondary is blacked out
+- **Start** — open Settings (or Apps options when the menu is already on Apps); ignored while a game is running or secondary is blacked out
 - **SELECT** — swap screen roles (dual display); no-op in single-screen mode
 
 Keycode semantics stay Xbox/Thor everywhere. Switch glyph labels swap face-button **display** only (B shown for confirm); they do not remap physical keycodes.
+
+### Hero layout editor
+
+Settings → Screens → Hero layout → **Customize layout** is a fullscreen drill-in. Gamepad follows the hero display; L2 flips canvas ↔ controls (“Focus”) when the editor is active. Save persists the slot via `SettingsRepository`; B / Back exits edit (draft discarded or saved per the editor’s exit path).
 
 ## Action bar hints + glyphs
 
@@ -86,8 +93,9 @@ Reusable primitives in `ui/components/gamepad/`:
 - `GamepadTile` — game grid cells
 - `GamepadButton` / `GamepadChip` — actions
 - `GamepadList` — scrollable focusable lists
-- `GamepadForm` / `GamepadSettingRow` — settings screens
+- `GamepadForm` / `GamepadSettingRow` / public `Wajiha*Setting` wrappers — settings screens
 - `GamepadSlider` — brightness/volume in Quick Settings
+- `GamepadSafeTextField` — Idle → Selected → Editing text fields (B exits edit)
 - `GamepadNavHost` — full-screen gamepad routing (scraper, platform picker)
 - `GamepadActionBar` — fixed-height bottom hint chrome with scheme-aware glyphs
 

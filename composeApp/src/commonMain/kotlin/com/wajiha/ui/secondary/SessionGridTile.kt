@@ -65,6 +65,7 @@ fun SessionGridTile(
             boxartPath = session.boxartPath,
             iconPath = session.iconPath,
             logoPath = session.logoPath,
+            squarePath = session.squarePath,
         )
 
     GamepadTile(

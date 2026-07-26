@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -49,6 +48,7 @@ import com.wajiha.data.db.EmulatorEntity
 import com.wajiha.data.db.GameEntity
 import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.SettingsRepository
+import com.wajiha.data.scraper.GapFillMediaTypes
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeRunPolicy
 import com.wajiha.data.scraper.missingGapTypes
@@ -70,6 +70,9 @@ import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
 import com.wajiha.ui.components.gamepad.ProvideSettingsDensity
 import com.wajiha.ui.components.gamepad.SettingType
+import com.wajiha.ui.components.gamepad.WajihaFieldMessage
+import com.wajiha.ui.components.gamepad.WajihaFieldMessageSeverity
+import com.wajiha.ui.components.gamepad.WajihaFieldMessageState
 import com.wajiha.ui.components.gamepad.WajihaMultiChoiceSetting
 import com.wajiha.ui.components.gamepad.WajihaSettingBlurb
 import com.wajiha.ui.components.gamepad.WajihaSettingDivider
@@ -872,15 +875,14 @@ private fun ScraperSectionContent(
     val sourcesReady = state.scraperSources.isNotEmpty()
     val previewTypes =
         remember {
-            listOf(
-                MediaType.Boxart,
-                MediaType.Logo,
-                MediaType.Hero,
-                MediaType.Screenshot,
-                MediaType.Fanart,
-                MediaType.Banner,
-                MediaType.Icon,
-            )
+            val rest =
+                listOf(
+                    MediaType.Screenshot,
+                    MediaType.Fanart,
+                    MediaType.Banner,
+                    MediaType.Icon,
+                )
+            GapFillMediaTypes + rest
         }
 
     if (reviewing && game != null) {
@@ -912,8 +914,8 @@ private fun ScraperSectionContent(
         onSelect = { mode = it },
         actionLabel =
             when (mode) {
-                ScrapeUiMode.Review -> "Open Manual"
-                ScrapeUiMode.Force -> "Force scrape"
+                ScrapeUiMode.Review -> "Manual"
+                ScrapeUiMode.Force -> "Force"
                 ScrapeUiMode.FillGaps -> "Scrape"
             },
         onAction = {
@@ -936,28 +938,41 @@ private fun ScraperSectionContent(
         singleGameLabels = true,
     )
 
-    Text(
-        text =
-            when {
-                !sourcesReady -> {
-                    "No scraper sources configured — enable sources in Settings → Scraper."
-                }
+    WajihaFieldMessage(
+        WajihaFieldMessageState(
+            text =
+                when {
+                    !sourcesReady -> {
+                        "No scraper sources configured — enable sources in Settings → Scraper."
+                    }
 
-                mode == ScrapeUiMode.FillGaps && gapTypes.isNotEmpty() -> {
-                    "Missing: ${gapTypes.joinToString { it.dbName }}"
-                }
+                    mode == ScrapeUiMode.FillGaps && gapTypes.isNotEmpty() -> {
+                        "Missing: ${gapTypes.joinToString { it.dbName }}"
+                    }
 
-                mode == ScrapeUiMode.FillGaps -> {
-                    "Preferred artwork present — use Force or Manual to replace."
-                }
+                    mode == ScrapeUiMode.FillGaps -> {
+                        "Basics complete — use Force or Manual to replace."
+                    }
 
-                else -> {
-                    "${state.scraperSources.size} source(s) configured"
-                }
-            },
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = WajihaSpacing.xs),
+                    else -> {
+                        "${state.scraperSources.size} source(s) configured"
+                    }
+                },
+            severity =
+                when {
+                    !sourcesReady -> {
+                        WajihaFieldMessageSeverity.Warning
+                    }
+
+                    mode == ScrapeUiMode.FillGaps && gapTypes.isNotEmpty() -> {
+                        WajihaFieldMessageSeverity.Info
+                    }
+
+                    else -> {
+                        WajihaFieldMessageSeverity.Supporting
+                    }
+                },
+        ),
     )
 
     WajihaSettingDivider()
@@ -966,10 +981,11 @@ private fun ScraperSectionContent(
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurface,
     )
-    Text(
-        text = "A/tap Manual · X/long-press remove",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    WajihaFieldMessage(
+        WajihaFieldMessageState(
+            text = "A/tap opens Review · X/long-press remove · gap types listed first",
+            severity = WajihaFieldMessageSeverity.Supporting,
+        ),
     )
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
@@ -978,20 +994,29 @@ private fun ScraperSectionContent(
         items(previewTypes, key = { it.dbName }) { type ->
             val path = state.media.firstOrNull { it.type == type.dbName }?.localPath
             val focused = focusedPreview == type
+            val isGapType = type in GapFillMediaTypes
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier =
                     Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(WajihaShapes.tile)
                         .border(
                             width = if (focused) 2.dp else 1.dp,
                             color =
-                                if (focused) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.outlineVariant
+                                when {
+                                    focused -> {
+                                        MaterialTheme.colorScheme.primary
+                                    }
+
+                                    isGapType && path.isNullOrBlank() -> {
+                                        MaterialTheme.colorScheme.tertiary
+                                    }
+
+                                    else -> {
+                                        MaterialTheme.colorScheme.outlineVariant
+                                    }
                                 },
-                            shape = RoundedCornerShape(8.dp),
+                            shape = WajihaShapes.tile,
                         ).background(MaterialTheme.colorScheme.surfaceVariant)
                         .combinedClickable(
                             onClick = {

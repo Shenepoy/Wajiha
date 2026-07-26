@@ -48,15 +48,20 @@ import com.wajiha.ui.components.WajihaFolderSettingChrome
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.WajihaToolbar
 import com.wajiha.ui.components.gamepad.GamepadButton
-import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.GamepadFormField
 import com.wajiha.ui.components.gamepad.GamepadSafeTextField
 import com.wajiha.ui.components.gamepad.GamepadSettingRow
+import com.wajiha.ui.components.gamepad.GamepadSettingTrailingActions
 import com.wajiha.ui.components.gamepad.ProvideSettingsDensity
 import com.wajiha.ui.components.gamepad.SettingSectionFocusRestorer
 import com.wajiha.ui.components.gamepad.SettingType
-import com.wajiha.ui.components.gamepad.WajihaSettingBlurb
+import com.wajiha.ui.components.gamepad.SettingsTrailingActionButton
+import com.wajiha.ui.components.gamepad.WajihaChoiceSetting
+import com.wajiha.ui.components.gamepad.WajihaFieldMessage
+import com.wajiha.ui.components.gamepad.WajihaFieldMessageSeverity
+import com.wajiha.ui.components.gamepad.WajihaFieldMessageState
 import com.wajiha.ui.components.gamepad.WajihaSettingDivider
+import com.wajiha.ui.components.gamepad.WajihaSettingGroup
 import com.wajiha.ui.components.gamepad.WajihaToggleSetting
 import com.wajiha.ui.components.gamepad.gameDetailGamepadHints
 import com.wajiha.ui.scraper.PlatformScraperSettingsSection
@@ -293,17 +298,10 @@ private fun PlatformGeneralTabContent(
     dualStore: DualScreenStore,
     firstFocusRequester: FocusRequester,
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-    ) {
-        WajihaSettingBlurb(
-            "Show this system in the home filter when it has games. " +
-                "Turning off does not remove ROM folders.",
-        )
+    WajihaSettingGroup(title = "Visibility") {
         WajihaToggleSetting(
             label = "In library",
-            description = "When off, this system is hidden from the home platform filter.",
+            description = "When off, hidden from the home platform filter.",
             checked = platform.enabled,
             onCheckedChange = viewModel::setEnabled,
             defaultChecked = true,
@@ -317,8 +315,8 @@ private fun PlatformGeneralTabContent(
                     checked = platform.enabled,
                 ),
         )
-        WajihaSettingDivider()
-        WajihaSettingBlurb("Display name and short label shown in the library grid.")
+    }
+    WajihaSettingGroup(title = "Names") {
         NameFields(
             platform = platform,
             onNameCommit = viewModel::setDisplayName,
@@ -337,14 +335,7 @@ private fun PlatformEmulatorTabContent(
     settingsHeroActions: Boolean,
     firstFocusRequester: FocusRequester,
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-    ) {
-        WajihaSettingBlurb(
-            "Player used when launching games for this system " +
-                "(same idea as Daijishō / Cocoon players).",
-        )
+    WajihaSettingGroup(title = "Emulator") {
         if (state.emulators.isEmpty()) {
             WajihaEmptyState(
                 title = "No emulators",
@@ -435,14 +426,25 @@ private fun PlatformFoldersTabContent(
             clearSettingsHero(dualStore)
         }
     }
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-    ) {
-        WajihaSettingBlurb(
-            "Folders scanned for games on this system. " +
-                "Add at least one to include it in Settings → Library.",
+    WajihaSettingGroup(title = "Scan") {
+        WajihaToggleSetting(
+            label = "Deep scan",
+            description = "Walk nested subfolders more thoroughly (depth 15 vs 3).",
+            checked = platform.deepScan,
+            onCheckedChange = viewModel::setDeepScan,
+            defaultChecked = false,
+            onReset = { viewModel.setDeepScan(false) },
+            focusRequester = if (state.folders.isEmpty()) null else firstFocusRequester,
+            onFocusedChanged =
+                settingsToggleHeroFocus(
+                    store = dualStore,
+                    title = "Deep scan",
+                    subtitle = "Walk nested subfolders more thoroughly when scanning (depth 15 vs 3).",
+                    checked = platform.deepScan,
+                ),
         )
+    }
+    WajihaSettingGroup(title = "Folders") {
         if (state.folders.isEmpty()) {
             WajihaEmptyState(
                 title = "Choose your games folder",
@@ -458,63 +460,50 @@ private fun PlatformFoldersTabContent(
                     )
                 },
             )
-        }
-        WajihaToggleSetting(
-            label = "Deep scan",
-            description = "Walk nested subfolders more thoroughly when scanning (depth 15 vs 3).",
-            checked = platform.deepScan,
-            onCheckedChange = viewModel::setDeepScan,
-            defaultChecked = false,
-            onReset = { viewModel.setDeepScan(false) },
-            focusRequester = if (state.folders.isEmpty()) null else firstFocusRequester,
-            onFocusedChanged =
-                settingsToggleHeroFocus(
-                    store = dualStore,
-                    title = "Deep scan",
-                    subtitle = "Walk nested subfolders more thoroughly when scanning (depth 15 vs 3).",
-                    checked = platform.deepScan,
-                ),
-        )
-        if (state.folders.isNotEmpty()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                GamepadButton(
-                    text = "Rescan",
-                    onClick = viewModel::rescanPlatform,
-                    outlined = true,
-                    onFocusedChanged = { focused ->
-                        if (focused) {
-                            publishSettingsHero(
-                                store = dualStore,
-                                detail =
-                                    genericSettingHeroDetail(
-                                        title = "Rescan",
-                                        subtitle = "Scan ROM folders for this system and refresh the library.",
-                                    ).copy(
-                                        actions =
-                                            if (settingsHeroActions) {
-                                                listOf(SettingsHeroAction("rescan", "Rescan"))
-                                            } else {
-                                                emptyList()
-                                            },
-                                    ),
-                                onPrimaryAction = viewModel::rescanPlatform,
-                            )
-                        } else {
-                            clearSettingsHero(dualStore)
-                        }
-                    },
-                )
-                GamepadButton(
-                    text = "Add folder",
-                    onClick = viewModel::pickRomFolder,
-                    modifier = Modifier.padding(start = WajihaSpacing.sm),
-                    onFocusedChanged = addFolderHeroFocus,
-                )
-            }
-            state.folders.forEach { folder ->
+        } else {
+            GamepadSettingRow(
+                label = "ROM folders",
+                description = "Scan existing folders or add another ROM path.",
+                type = SettingType.Action,
+                onActivate = viewModel::pickRomFolder,
+                onSecondaryActivate = viewModel::rescanPlatform,
+                onFocusedChanged = { focused ->
+                    if (focused) {
+                        publishSettingsHero(
+                            store = dualStore,
+                            detail =
+                                genericSettingHeroDetail(
+                                    title = "ROM folders",
+                                    subtitle = "Add a folder (A) or rescan this system (X).",
+                                ).copy(
+                                    actions =
+                                        if (settingsHeroActions) {
+                                            listOf(
+                                                SettingsHeroAction("add", "Add folder"),
+                                                SettingsHeroAction("rescan", "Rescan"),
+                                            )
+                                        } else {
+                                            emptyList()
+                                        },
+                                ),
+                            onPrimaryAction = viewModel::pickRomFolder,
+                            onSecondaryAction = viewModel::rescanPlatform,
+                        )
+                    } else {
+                        clearSettingsHero(dualStore)
+                    }
+                },
+                content = {
+                    GamepadSettingTrailingActions(
+                        secondaryLabel = "Rescan",
+                        onSecondaryClick = viewModel::rescanPlatform,
+                        primaryLabel = "Add",
+                        onPrimaryClick = viewModel::pickRomFolder,
+                    )
+                },
+            )
+            state.folders.forEachIndexed { index, folder ->
+                WajihaSettingDivider()
                 FolderRow(
                     folder = folder,
                     dualStore = dualStore,
@@ -587,32 +576,11 @@ private fun PlatformScraperTabContent(
         )
     }
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-    ) {
-        WajihaSettingBlurb(
-            "Scrape metadata and media for games on this platform, " +
-                "or adjust linkage IDs and per-system source overrides.",
-        )
-
+    WajihaSettingGroup(title = "Scrape") {
         ScrapeModeSelector(
             selected = mode,
             onSelect = { mode = it },
-            actionLabel =
-                when (mode) {
-                    ScrapeUiMode.Review -> {
-                        "Start review"
-                    }
-
-                    ScrapeUiMode.Force -> {
-                        if (scrapeBusy) "Scraping…" else "Force scrape"
-                    }
-
-                    ScrapeUiMode.FillGaps -> {
-                        if (scrapeBusy) "Scraping…" else "Fill gaps"
-                    }
-                },
+            actionLabel = if (mode == ScrapeUiMode.Review) "Start" else "Run",
             onAction = {
                 when (mode) {
                     ScrapeUiMode.Review -> {
@@ -648,92 +616,125 @@ private fun PlatformScraperTabContent(
         )
 
         if (mode == ScrapeUiMode.Review) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-            ) {
-                GamepadChip(
-                    label = "Gaps only",
-                    selected = !includeScraped,
-                    onClick = { if (!progress.running) includeScraped = false },
-                )
-                GamepadChip(
-                    label = "Include scraped",
-                    selected = includeScraped,
-                    onClick = { if (!progress.running) includeScraped = true },
-                )
-            }
+            WajihaSettingDivider()
+            WajihaChoiceSetting(
+                label = "Review queue",
+                description = "Which games enter the interactive review list.",
+                options =
+                    listOf(
+                        "gaps" to "Gaps only",
+                        "all" to "Include scraped",
+                    ),
+                selected = if (includeScraped) "all" else "gaps",
+                onSelect = { value ->
+                    if (!progress.running) includeScraped = value == "all"
+                },
+                defaultValue = "gaps",
+                onReset = { includeScraped = false },
+            )
         }
 
         estimate?.let { count ->
-            Text(
-                text =
-                    when (mode) {
-                        ScrapeUiMode.Review -> "$count game(s) in review queue"
-                        ScrapeUiMode.Force -> "$count game(s) will be force-scraped"
-                        ScrapeUiMode.FillGaps -> "$count game(s) need gap fill"
-                    },
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            WajihaFieldMessage(
+                WajihaFieldMessageState(
+                    text =
+                        when (mode) {
+                            ScrapeUiMode.Review -> {
+                                "$count game(s) in review queue"
+                            }
+
+                            ScrapeUiMode.Force -> {
+                                "$count game(s) will be force-scraped"
+                            }
+
+                            ScrapeUiMode.FillGaps -> {
+                                "$count game(s) need gap fill (boxart, square, logo, or hero)"
+                            }
+                        },
+                    severity = WajihaFieldMessageSeverity.Supporting,
+                ),
+            )
+        }
+        if (mode == ScrapeUiMode.FillGaps && !progress.running) {
+            WajihaFieldMessage(
+                WajihaFieldMessageState(
+                    text = "Fill gaps never overwrites existing preferred artwork.",
+                    severity = WajihaFieldMessageSeverity.Supporting,
+                ),
             )
         }
 
         if (canRetry && mode != ScrapeUiMode.Review) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                GamepadButton(
-                    text = "Retry failed",
-                    onClick = { scraperViewModel.retryFailedBatch(platform.id) },
-                    outlined = true,
-                    enabled = !progress.running,
-                )
-            }
+            WajihaSettingDivider()
+            GamepadSettingRow(
+                label = "Retry failed games",
+                type = SettingType.Action,
+                onActivate =
+                    if (!progress.running) {
+                        { scraperViewModel.retryFailedBatch(platform.id) }
+                    } else {
+                        null
+                    },
+                content = {
+                    SettingsTrailingActionButton(
+                        text = "Retry",
+                        onClick = { scraperViewModel.retryFailedBatch(platform.id) },
+                        enabled = !progress.running,
+                    )
+                },
+            )
         }
 
         if (scrapeBusy) {
-            Row(horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
-                if (progress.paused) {
-                    GamepadButton(
-                        text = "Resume",
-                        onClick = scraperViewModel::resumeBatch,
-                        outlined = true,
+            WajihaSettingDivider()
+            GamepadSettingRow(
+                label = if (progress.paused) "Batch paused" else "Batch running",
+                type = SettingType.Action,
+                onActivate =
+                    if (progress.paused) {
+                        scraperViewModel::resumeBatch
+                    } else {
+                        scraperViewModel::pauseBatch
+                    },
+                onSecondaryActivate = scraperViewModel::cancelBatch,
+                content = {
+                    GamepadSettingTrailingActions(
+                        secondaryLabel = "Cancel",
+                        onSecondaryClick = scraperViewModel::cancelBatch,
+                        primaryLabel = if (progress.paused) "Resume" else "Pause",
+                        onPrimaryClick =
+                            if (progress.paused) {
+                                scraperViewModel::resumeBatch
+                            } else {
+                                scraperViewModel::pauseBatch
+                            },
                     )
-                } else {
-                    GamepadButton(
-                        text = "Pause",
-                        onClick = scraperViewModel::pauseBatch,
-                        outlined = true,
-                    )
-                }
-                GamepadButton(
-                    text = "Cancel",
-                    onClick = scraperViewModel::cancelBatch,
-                    outlined = true,
-                )
-            }
+                },
+            )
         }
 
         if (!sourcesReady) {
-            Text(
-                text = "No scraper sources configured — enable and sign in under Settings → Scraper.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            WajihaFieldMessage(
+                WajihaFieldMessageState(
+                    text = "No scraper sources configured — enable and sign in under Settings → Scraper.",
+                    severity = WajihaFieldMessageSeverity.Warning,
+                ),
             )
         }
         linkageWarning.forEach { warning ->
-            Text(
-                text = warning,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            WajihaFieldMessage(
+                WajihaFieldMessageState(
+                    text = warning,
+                    severity = WajihaFieldMessageSeverity.Warning,
+                ),
             )
         }
         batchFeedback?.let { feedback ->
-            Text(
-                text = feedback,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
+            WajihaFieldMessage(
+                WajihaFieldMessageState(
+                    text = feedback,
+                    severity = WajihaFieldMessageSeverity.Error,
+                ),
             )
         }
         if (scrapeBusy) {
@@ -757,21 +758,18 @@ private fun PlatformScraperTabContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
 
-        WajihaSettingDivider()
-        WajihaSettingBlurb(
-            "IDs used to match games on ScreenScraper, RetroAchievements, and Libretro. " +
-                "Defaults come from platform packs; tweak here if a match is wrong.",
-        )
+    WajihaSettingGroup(title = "Linkage IDs") {
         ScraperIdFields(
             platform = platform,
             onScreenScraperId = viewModel::setScreenScraperId,
             onRaConsoleId = viewModel::setRaConsoleId,
             onLibretroName = viewModel::setLibretroName,
         )
+    }
 
-        WajihaSettingDivider()
-        WajihaSettingBlurb("Override global scraper sources and options for this system only.")
+    WajihaSettingGroup(title = "Source overrides") {
         PlatformScraperSettingsSection(
             platformId = platform.id,
             viewModel = scraperViewModel,
@@ -792,37 +790,47 @@ private fun PlatformInfoTabContent(
             ?: state.emulators.firstOrNull { it.isDefault }?.name
             ?: "—"
 
-    Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
-        WajihaSettingBlurb("Read-only platform metadata and library stats.")
-
+    WajihaSettingGroup(title = "Metadata") {
         PlatformInfoValueRow("Platform id", platform.id, firstFocusRequester)
+        WajihaSettingDivider()
         PlatformInfoValueRow("Display name", platform.name)
+        WajihaSettingDivider()
         PlatformInfoValueRow("Short name", platform.shortName)
+        WajihaSettingDivider()
         PlatformInfoValueRow("In library", if (platform.enabled) "Yes" else "No")
+        WajihaSettingDivider()
         PlatformInfoValueRow("Games", "${state.gameCount}")
+        WajihaSettingDivider()
         PlatformInfoValueRow("ROM folders", "${state.folders.size}")
+        WajihaSettingDivider()
         PlatformInfoValueRow("Default emulator", defaultEmulatorName)
         platform.boxartAspectRatio?.let {
+            WajihaSettingDivider()
             PlatformInfoValueRow("Boxart aspect", it)
         }
+        WajihaSettingDivider()
         PlatformInfoValueRow("Extensions", platform.extensions)
+        WajihaSettingDivider()
         PlatformInfoValueRow(
             "ScreenScraper id",
             platform.screenScraperId?.toString() ?: "—",
         )
+        WajihaSettingDivider()
         PlatformInfoValueRow(
             "RetroAchievements id",
             platform.raConsoleId?.toString() ?: "—",
         )
+        WajihaSettingDivider()
         PlatformInfoValueRow(
             "Libretro name",
             platform.libretroName ?: "—",
         )
+    }
 
-        if (state.folders.isNotEmpty()) {
-            WajihaSettingDivider()
-            WajihaSettingBlurb("Folder paths")
-            state.folders.forEach { folder ->
+    if (state.folders.isNotEmpty()) {
+        WajihaSettingGroup(title = "Folder paths") {
+            state.folders.forEachIndexed { index, folder ->
+                if (index > 0) WajihaSettingDivider()
                 PlatformInfoValueRow(
                     label = "Folder",
                     value = folderDisplayPath(folder),

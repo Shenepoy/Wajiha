@@ -19,8 +19,12 @@ class AetherSx2RomPathProbe(
 ) : RomPathProbe {
     override val probeId = "aethersx2"
     override val supportedPackages =
-        setOf("xyz.aethersx2.android")
-            .intersect(EmulatorPackages.standalone)
+        setOf(
+            "xyz.aethersx2.android",
+            "xyz.aethersx2.tturnip",
+            "xyz.aethersx2.cturnip",
+            "xyz.aethersx2.custom",
+        ).intersect(EmulatorPackages.standalone)
     override val priority = 10
 
     override suspend fun probe(
