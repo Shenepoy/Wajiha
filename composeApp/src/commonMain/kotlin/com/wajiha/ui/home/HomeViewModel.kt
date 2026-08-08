@@ -52,6 +52,8 @@ class HomeViewModel(
 ) : ViewModel() {
     private val selectedPlatformId = MutableStateFlow<String?>(null)
     private val launchError = MutableStateFlow<String?>(null)
+    private val _apps = MutableStateFlow<List<LaunchableApp>>(emptyList())
+    val apps: StateFlow<List<LaunchableApp>> = _apps
     private var lastLaunchAtMs = 0L
 
     init {
@@ -134,9 +136,6 @@ class HomeViewModel(
         combine(libraryState, launchError) { state, error ->
             state.copy(launchError = error)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
-
-    private val _apps = MutableStateFlow<List<LaunchableApp>>(emptyList())
-    val apps: StateFlow<List<LaunchableApp>> = _apps
 
     fun selectPlatform(platformId: String?) {
         appActions.playSound(UiSound.Navigate)
