@@ -2,6 +2,7 @@ package com.wajiha.ui.components.gamepad
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -95,6 +96,23 @@ fun settingsGamepadHints(isDual: Boolean = true): List<GamepadHint> =
         add(GamepadHint(GamepadHintButton.L1R1, "Section"))
     }
 
+/** Focused-row hints derived from [SettingHintCapabilities] (A / X / ←→ / Y only). */
+fun settingsGamepadHints(capabilities: SettingHintCapabilities): List<GamepadHint> =
+    buildList {
+        capabilities.primaryAction?.takeIf { it.isNotBlank() }?.let { action ->
+            add(GamepadHint(GamepadHintButton.A, action))
+        }
+        capabilities.secondaryAction?.takeIf { it.isNotBlank() }?.let { action ->
+            add(GamepadHint(GamepadHintButton.X, action))
+        }
+        if (capabilities.canAdjust) {
+            add(GamepadHint(GamepadHintButton.DpadLeftRight, "Adjust"))
+        }
+        if (capabilities.canReset) {
+            add(GamepadHint(GamepadHintButton.Y, "Reset"))
+        }
+    }
+
 fun libraryPlatformRowGamepadHints(isDual: Boolean = true): List<GamepadHint> =
     buildList {
         add(GamepadHint(GamepadHintButton.A, "Rescan"))
@@ -163,49 +181,64 @@ fun GamepadActionBar(
 
     val effectiveHints =
         if (GamepadTextEditRegistry.isEditing) textEditingGamepadHints else hints
-    val labelColor =
-        when (chrome) {
-            GamepadActionBarChrome.Solid -> MaterialTheme.colorScheme.onSurfaceVariant
-            GamepadActionBarChrome.Overlay -> Color.White.copy(alpha = 0.92f)
-        }
-    val chromeModifier =
-        when (chrome) {
-            GamepadActionBarChrome.Solid -> {
-                Modifier.background(MaterialTheme.colorScheme.background)
+    when (chrome) {
+        GamepadActionBarChrome.Solid -> {
+            Row(
+                modifier =
+                    modifier
+                        .fillMaxWidth()
+                        .height(GamepadActionBarHeight)
+                        .background(MaterialTheme.colorScheme.background)
+                        .clipToBounds()
+                        .padding(horizontal = WajihaSpacing.md),
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                effectiveHints.forEach { hint ->
+                    GamepadHintChip(
+                        hint = hint,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        // Equal-width share so dense menu bars truncate cleanly.
+                        modifier = Modifier.weight(1f, fill = true),
+                    )
+                }
             }
+        }
 
-            // Soft bottom fade so hero art stays full-bleed under mirrored hints.
-            GamepadActionBarChrome.Overlay -> {
-                Modifier.background(
-                    Brush.verticalGradient(
-                        colors =
-                            listOf(
-                                Color.Transparent,
-                                WajihaColors.HeroScrim,
+        // Soft scrim over hero art: chips pack to the trailing bottom so they
+        // clear the classic cover and sit flush with the screen edge.
+        GamepadActionBarChrome.Overlay -> {
+            Box(
+                modifier =
+                    modifier
+                        .fillMaxWidth()
+                        .height(GamepadActionBarHeight)
+                        .background(
+                            Brush.verticalGradient(
+                                colors =
+                                    listOf(
+                                        Color.Transparent,
+                                        WajihaColors.HeroScrim,
+                                    ),
                             ),
-                    ),
-                )
+                        ).clipToBounds(),
+            ) {
+                Row(
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(horizontal = WajihaSpacing.md),
+                    horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    effectiveHints.forEach { hint ->
+                        GamepadHintChip(
+                            hint = hint,
+                            labelColor = Color.White.copy(alpha = 0.92f),
+                        )
+                    }
+                }
             }
-        }
-
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .height(GamepadActionBarHeight)
-                .then(chromeModifier)
-                .clipToBounds()
-                .padding(horizontal = WajihaSpacing.md),
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        effectiveHints.forEach { hint ->
-            GamepadHintChip(
-                hint = hint,
-                labelColor = labelColor,
-                // fill=true so many hints share width evenly and truncate instead of overflowing.
-                modifier = Modifier.weight(1f, fill = true),
-            )
         }
     }
 }

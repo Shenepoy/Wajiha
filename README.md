@@ -1,6 +1,57 @@
-# Wajiha
+<!-- markdownlint-disable MD033 MD060 -->
 
-A dual-screen emulation launcher, HOME replacement, and system controller for Android — built for the **AYN Thor** (top + bottom displays) with a graceful single-display fallback. The UX is inspired by the Nintendo 3DS home screen: hero/preview on the top screen, touch grid on the bottom.
+<p align="center">
+  <img src="assets/wajiha-logo.svg" alt="Wajiha" width="220" />
+</p>
+
+<h1 align="center">Wajiha - واجهة</h1>
+
+<p align="center">
+  <strong>Dual-screen emulation launcher for Android</strong><br/>
+  HOME replacement and system controller — built for the <strong>AYN Thor</strong><br/>
+  (top + bottom displays) with a graceful single-display fallback.<br/>
+  3DS-style UX · Kotlin Multiplatform · gamepad-first.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Zyzto/Wajiha/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/Zyzto/Wajiha?style=flat-square&color=2E7D32" /></a>
+  <a href="https://github.com/Zyzto/Wajiha"><img alt="repo" src="https://img.shields.io/badge/github-Zyzto%2FWajiha-C0C0C0?style=flat-square" /></a>
+  <a href="https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/Zyzto/Wajiha/releases"><img alt="Obtainium" src="https://img.shields.io/badge/Obtainium-add-2E7D32?style=flat-square&logo=android&logoColor=white" /></a>
+  <img alt="android" src="https://img.shields.io/badge/Android-11%2B-2E7D32?style=flat-square&logo=android&logoColor=white" />
+  <img alt="kotlin" src="https://img.shields.io/badge/Kotlin-Multiplatform-C0C0C0?style=flat-square&logo=kotlin&logoColor=white" />
+  <img alt="thor" src="https://img.shields.io/badge/AYN-Thor-2E7D32?style=flat-square" />
+  <img alt="license" src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-2E7D32?style=flat-square" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/Zyzto/Wajiha/releases/latest">Latest release</a>
+  ·
+  <a href="docs/architecture.md">Documentation</a>
+</p>
+
+<p align="center">
+  <a href="#what-you-get">What you get</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#requirements">Requirements</a> ·
+  <a href="#build">Build</a> ·
+  <a href="#first-run-setup">First-run</a> ·
+  <a href="#gamepad-navigation">Gamepad</a> ·
+  <a href="#dual-screen-behavior">Dual-screen</a> ·
+  <a href="#project-structure">Structure</a> ·
+  <a href="docs/architecture.md">Docs</a> ·
+  <a href="README.ar.md">العربية</a>
+</p>
+
+<p align="center">
+  The name <strong>Wajiha</strong> comes from Arabic
+  <span dir="rtl"><strong>واجهة</strong></span>
+  (<em>wājaha</em>): interface / facade —
+  the face of the handheld.
+</p>
+
+---
+
+## What you get
 
 Wajiha combines the best patterns from four studied apps (NeoStation, Daijishō, Cocoon, iiSU — see `Study/docs/`):
 
@@ -10,6 +61,15 @@ Wajiha combines the best patterns from four studied apps (NeoStation, Daijishō,
 - **NeoStation-grade launching** — SAF URI grants, FileProvider rewrap, multi-disc sibling grants, RetroArch core/config defaults, per-game emulator overrides
 - **Deep scraping** — six sources (ScreenScraper, SteamGridDB, libretro-thumbnails, RetroAchievements, RomM, local media) with per-media-type source priority, region/language chains, batch jobs, and a manual match UI — including Cocoon-style square covers alongside boxart
 - **RetroAchievements** — hash/title game linking via the Web API, used for scrape metadata and progress lookups
+
+## Install
+
+### Android
+
+| Option | |
+|--------|--|
+| **Obtainium** (recommended) | [![Obtainium](https://img.shields.io/badge/Obtainium-add-2E7D32?style=flat-square&logo=android&logoColor=white)](https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/Zyzto/Wajiha/releases) — tracks [GitHub Releases](https://github.com/Zyzto/Wajiha/releases) |
+| **APK** | Download `Wajiha-<version>.apk` from [latest release](https://github.com/Zyzto/Wajiha/releases/latest) |
 
 ## Requirements
 
@@ -21,10 +81,16 @@ Wajiha combines the best patterns from four studied apps (NeoStation, Daijishō,
 
 ```bash
 ./gradlew :androidApp:assembleDebug     # debug APK
-./gradlew :androidApp:assembleRelease   # R8-minified release APK
+./gradlew :androidApp:assembleRelease   # R8-minified release APK (signed if keystore props set)
 ./gradlew :composeApp:testAndroidHostTest  # host-side unit tests (importers, parsers, scanner)
 ./gradlew :androidApp:test                 # Android unit tests (ROM path probes)
+./gradlew :androidApp:connectedDebugAndroidTest  # instrumented + smoke (device/emulator)
+./scripts/ktlint.sh check
+./scripts/install-thor.sh               # install debug APK on Thor + launch
+./scripts/thor-e2e.sh                   # Thor boot smoke (local / agent; not CI)
 ```
+
+CI on every PR/`main` push runs ktlint, unit tests, release assemble, and emulator instrumented tests. Tag `vX.Y.Z` publishes a signed release APK — see [docs/ci.md](docs/ci.md).
 
 ScreenScraper’s API requires a developer app pair (`devid` / `devpassword`) on every call, plus your user login in Settings for quotas. Enter Dev ID/password in **Settings → Scraper → Accounts**, or (for local builds) in `~/.gradle/gradle.properties`:
 
@@ -162,3 +228,8 @@ Full architecture: [docs/architecture.md](docs/architecture.md). Session model: 
 
 - iOS target compiles as scaffolding only; all host services are Android.
 - **Collections** — DB schema and `CollectionRepository` exist; UI is not implemented yet.
+
+## License
+
+[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) — share and adapt with attribution, **non-commercial** only, same license for derivatives.  
+Full text: [LICENSE](LICENSE).

@@ -1,6 +1,6 @@
 # Wajiha architecture
 
-This document explains how the pieces fit together and where to make changes. For product context and setup, see the [README](../README.md).
+This document explains how the pieces fit together and where to make changes. For product context and setup, see the [README](../README.md). For CI, release signing, and test layers, see [ci.md](ci.md).
 
 ## Module split
 

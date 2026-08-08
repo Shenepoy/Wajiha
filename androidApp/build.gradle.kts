@@ -1,9 +1,33 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.File
 
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeCompiler)
 }
+
+val wajihaVersionName =
+    providers.gradleProperty("wajiha.versionName").orNull?.takeIf { it.isNotBlank() } ?: "0.2.0"
+val wajihaVersionCode =
+    providers.gradleProperty("wajiha.versionCode").orNull?.toIntOrNull() ?: 2
+
+fun gradleOrEnv(
+    property: String,
+    env: String,
+): String? =
+    providers.gradleProperty(property).orNull?.takeIf { it.isNotBlank() }
+        ?: System.getenv(env)?.takeIf { it.isNotBlank() }
+
+val releaseKeystorePath = gradleOrEnv("wajiha.keystore.path", "WAJIHA_KEYSTORE_PATH")
+val releaseKeystorePassword = gradleOrEnv("wajiha.keystore.password", "WAJIHA_KEYSTORE_PASSWORD")
+val releaseKeyAlias = gradleOrEnv("wajiha.key.alias", "WAJIHA_KEY_ALIAS")
+val releaseKeyPassword = gradleOrEnv("wajiha.key.password", "WAJIHA_KEY_PASSWORD")
+val releaseSigningConfigured =
+    !releaseKeystorePath.isNullOrBlank() &&
+        !releaseKeystorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank() &&
+        File(releaseKeystorePath).isFile
 
 android {
     namespace = "com.wajiha.android"
@@ -22,8 +46,8 @@ android {
             libs.versions.android.targetSdk
                 .get()
                 .toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = wajihaVersionCode
+        versionName = wajihaVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -39,6 +63,17 @@ android {
         )
     }
 
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -47,6 +82,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {

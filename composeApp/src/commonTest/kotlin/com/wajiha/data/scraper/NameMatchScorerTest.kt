@@ -9,10 +9,14 @@ class NameMatchScorerTest {
     @Test
     fun exactNormalizedMatchScoresOne() {
         assertEquals(1f, NameMatchScorer.score("The Legend of Zelda", "the legend of zelda"))
-        assertEquals(
-            1f,
-            NameMatchScorer.score("Zelda (USA).n64", "The Legend of Zelda [!].n64"),
-        )
+    }
+
+    @Test
+    fun containedShortTitleUsesLengthFloor() {
+        // "zelda" ⊂ "the legend of zelda" → containment floor, not an exact match.
+        val score = NameMatchScorer.score("Zelda (USA).n64", "The Legend of Zelda [!].n64")
+        assertTrue(score in 0.2f..0.95f, "score=$score")
+        assertTrue(score < NameMatchScorer.AutoConfidenceThreshold)
     }
 
     @Test

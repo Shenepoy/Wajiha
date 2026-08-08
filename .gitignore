@@ -26,6 +26,9 @@ generated/
 # Local configuration
 local.properties
 keystore.properties
+*.jks
+*.keystore
+!**/debug.keystore
 
 # Android
 /.cxx/
@@ -70,6 +73,10 @@ Desktop.ini
 
 # Local tooling caches (ktlint binary, etc.)
 .tools/
+
+# Agent / local scratch (screenshots, UI dumps, one-off captures)
+tmp/
+.tmp*
 
 # IDE
 .fleet/

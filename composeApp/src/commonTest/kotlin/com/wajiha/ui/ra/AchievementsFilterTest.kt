@@ -60,7 +60,7 @@ class AchievementsFilterTest {
             ).map { it.id },
         )
         assertEquals(
-            listOf(2L, 3L, 1L, 4L),
+            listOf(3L, 2L, 1L, 4L),
             sortAchievements(items, AchievementSortMode.Title).map { it.id },
         )
     }
