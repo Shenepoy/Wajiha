@@ -62,6 +62,7 @@ jobs:
       - name: Verify ABI splits
         run: ./scripts/verify-apk-abis.sh androidApp/build/outputs/apk/release
       - name: Upload unsigned release APKs
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: release-apks-unsigned
