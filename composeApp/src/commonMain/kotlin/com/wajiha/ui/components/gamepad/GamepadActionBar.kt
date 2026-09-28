@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -18,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextOverflow
 import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.input.ControllerGlyphLabels
@@ -27,7 +25,6 @@ import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadTextEditRegistry
 import com.wajiha.ui.theme.WajihaColors
-import com.wajiha.ui.theme.WajihaIconSize
 import com.wajiha.ui.theme.WajihaSpacing
 import org.koin.compose.koinInject
 
@@ -44,8 +41,6 @@ enum class GamepadActionBarChrome {
 
 /** Fixed chrome height: one labelMedium line + Kenney glyph. */
 val GamepadActionBarHeight = WajihaSpacing.actionBarHeight
-
-private val GlyphSize = WajihaIconSize.md
 
 /** L2 cross-display focus switch — injected by [com.wajiha.input.MirroredOrLocalGamepadActionBar]. */
 val FocusScreenGamepadHint = GamepadHint(GamepadHintButton.L2, "Focus")
@@ -275,23 +270,10 @@ private fun GamepadHintChip(
     modifier: Modifier = Modifier,
     labelColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
-    Row(
+    WajihaGlyphAction(
+        button = hint.button,
+        label = hint.action,
         modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
-    ) {
-        GamepadHintGlyph(
-            button = hint.button,
-            size = GlyphSize,
-        )
-        Text(
-            text = hint.action,
-            style = MaterialTheme.typography.labelMedium,
-            color = labelColor,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-    }
+        labelColor = labelColor,
+    )
 }

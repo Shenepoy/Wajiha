@@ -1,6 +1,8 @@
 package com.wajiha.platform
 
 import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 data class LaunchableApp(
     val packageName: String,
@@ -14,6 +16,16 @@ enum class UiSound { Navigate, Open, Back, Launch }
 
 /** Host-side actions the shared UI needs (actual implementation on Android). */
 interface AppActions {
+    /**
+     * Emits when a launcher app is installed, updated, or removed.
+     * Collectors should reload [installedApps].
+     */
+    val installedAppsChanges: Flow<Unit>
+        get() = emptyFlow()
+
+    /** Host calls this after a package install, update, or removal. */
+    fun notifyInstalledAppsChanged() {}
+
     suspend fun installedApps(): List<LaunchableApp>
 
     fun launchApp(packageName: String)

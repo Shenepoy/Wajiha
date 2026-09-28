@@ -25,26 +25,42 @@ data class RaUiState(
 
 class RaViewModel(
     private val raRepository: RaRepository,
-    dualScreenStore: DualScreenStore,
+    private val dualScreenStore: DualScreenStore,
 ) : ViewModel() {
     private val _state = MutableStateFlow(RaUiState())
     val state: StateFlow<RaUiState> = _state
+
+    /** While set, game detail owns the panel and the running session is ignored. */
+    private var pinnedGameId: Long? = null
 
     init {
         viewModelScope.launch {
             _state.value = _state.value.copy(configured = raRepository.isConfigured())
         }
-        // Follow the running game: load its achievements automatically
         dualScreenStore.nowPlaying
             .map { it?.gameId }
             .distinctUntilChanged()
             .onEach { gameId ->
-                if (gameId != null) {
-                    loadForGame(gameId)
-                } else {
-                    _state.value = _state.value.copy(progress = null)
-                }
+                if (pinnedGameId != null) return@onEach
+                showGame(gameId)
             }.launchIn(viewModelScope)
+    }
+
+    /**
+     * Pin progress to [gameId], or pass null to follow the running session again.
+     */
+    fun pinGame(gameId: Long?) {
+        pinnedGameId = gameId
+        val target = gameId ?: dualScreenStore.nowPlaying.value?.gameId
+        showGame(target)
+    }
+
+    private fun showGame(gameId: Long?) {
+        if (gameId != null) {
+            loadForGame(gameId)
+        } else {
+            _state.value = _state.value.copy(progress = null, loading = false)
+        }
     }
 
     fun login() {

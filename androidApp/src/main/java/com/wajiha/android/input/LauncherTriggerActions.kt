@@ -15,11 +15,24 @@ class LauncherTriggerActions(
     private val notifications: SystemNotificationStore,
     private val appActions: AppActions,
 ) {
-    /** @return true when the press was handled. */
+    /**
+     * Cross-display focus switch. Only acts when the other screen has real
+     * interactive UI ([DualScreenStore.isL2SwitchAvailable]); otherwise the
+     * press is eaten quietly so idle hero artwork does not beep / steal focus.
+     *
+     * @return true when the press was handled (including no-op absorb).
+     */
     fun onL2(label: String): Boolean {
         val dualState = store.state.value
         if (dualState == DualScreenState.SingleDisplay) return false
         if (dualState == DualScreenState.BlackoutSecondary) return false
+        if (!store.isL2SwitchAvailable()) {
+            WajihaLog.i(
+                WajihaTags.GAMEPAD,
+                "map: L2($label) ignored (no interactive cross-display target)",
+            )
+            return true
+        }
         store.toggleGamepadOwner()
         WajihaLog.i(
             WajihaTags.GAMEPAD,

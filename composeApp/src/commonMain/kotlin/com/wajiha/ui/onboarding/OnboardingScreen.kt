@@ -4,28 +4,28 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,12 +38,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
+import com.wajiha.input.GamepadKeys
 import com.wajiha.input.requestContentFocus
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.platform.PermissionStates
@@ -51,13 +57,16 @@ import com.wajiha.platform.SystemControls
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.WajihaScreen
 import com.wajiha.ui.components.gamepad.GamepadButton
-import com.wajiha.ui.components.gamepad.GamepadForm
+import com.wajiha.ui.components.gamepad.WajihaGlyphAction
 import com.wajiha.ui.settings.SettingsViewModel
 import com.wajiha.ui.theme.WajihaMotion
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.koinInject
+import wajiha.composeapp.generated.resources.Res
+import wajiha.composeapp.generated.resources.logo
 
 /**
  * Cocoon-style first-run: conversational copy, typewriter welcome,
@@ -89,7 +98,79 @@ fun OnboardingScreen(
     val settings by settingsViewModel.settings.collectAsState()
     val singleScreen = settings.singleScreen
     val contentFocus = remember { FocusRequester() }
+    var welcomeReady by remember { mutableStateOf(false) }
+    val backLabel =
+        when (step) {
+            SetupStep.Welcome -> "Skip"
+            SetupStep.Done -> null
+            else -> "Back"
+        }
+    val onBack: (() -> Unit)? =
+        when (step) {
+            SetupStep.Welcome -> {
+                onFinished
+            }
 
+            SetupStep.Theme -> {
+                { step = SetupStep.Welcome }
+            }
+
+            SetupStep.GrantAccess -> {
+                { step = SetupStep.Theme }
+            }
+
+            SetupStep.DisplayLayout -> {
+                { step = SetupStep.GrantAccess }
+            }
+
+            SetupStep.DefaultHome -> {
+                { step = SetupStep.DisplayLayout }
+            }
+
+            SetupStep.AddGames -> {
+                { step = SetupStep.DefaultHome }
+            }
+
+            SetupStep.Done -> {
+                null
+            }
+        }
+    val continueLabel =
+        when (step) {
+            SetupStep.Theme, SetupStep.DisplayLayout -> null
+            else -> "Continue"
+        }
+    val continueEnabled = step != SetupStep.Welcome || welcomeReady
+    val onContinue: (() -> Unit)? =
+        when (step) {
+            SetupStep.Welcome -> {
+                { step = SetupStep.Theme }
+            }
+
+            SetupStep.GrantAccess -> {
+                { step = SetupStep.DisplayLayout }
+            }
+
+            SetupStep.DefaultHome -> {
+                { step = SetupStep.AddGames }
+            }
+
+            SetupStep.AddGames -> {
+                { step = SetupStep.Done }
+            }
+
+            SetupStep.Done -> {
+                onFinished
+            }
+
+            SetupStep.Theme, SetupStep.DisplayLayout -> {
+                null
+            }
+        }
+
+    LaunchedEffect(step) {
+        if (step == SetupStep.Welcome) welcomeReady = false
+    }
     LaunchedEffect(Unit) {
         while (true) {
             perms = controls.permissionStates()
@@ -100,20 +181,29 @@ fun OnboardingScreen(
     WajihaScreen(
         layerId = "onboarding",
         modifier = modifier,
-        showActionBar = true,
-        gamepadHints =
-            buildList {
-                add(GamepadHint(GamepadHintButton.A, "Continue"))
-                add(GamepadHint(GamepadHintButton.B, "Back / Skip"))
-                if (!singleScreen) {
-                    add(GamepadHint(GamepadHintButton.L2, "Focus screen"))
-                }
-            },
+        showActionBar = false,
         gamepadOwner = gamepadOwner,
         onClaimGamepad = onClaimGamepad,
         onOwnerGainedFocus = { contentFocus.requestContentFocus() },
+        onPreviewKey = { event ->
+            when {
+                GamepadKeys.isL1(event.type, event.key) && onBack != null -> {
+                    onBack.invoke()
+                    true
+                }
+
+                GamepadKeys.isR1(event.type, event.key) && onContinue != null && continueEnabled -> {
+                    onContinue.invoke()
+                    true
+                }
+
+                else -> {
+                    false
+                }
+            }
+        },
     ) {
-        Box(
+        Column(
             modifier =
                 Modifier
                     .fillMaxSize()
@@ -125,92 +215,121 @@ fun OnboardingScreen(
                             ),
                         ),
                     ),
-            contentAlignment = Alignment.Center,
         ) {
-            AnimatedContent(
-                targetState = step,
-                transitionSpec = {
-                    fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
-                },
-                label = "setup",
-            ) { current ->
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .widthIn(max = 560.dp)
-                            .focusRequester(contentFocus)
-                            .wajihaGamepadFocus(),
-                ) {
-                    GamepadForm(
-                        modifier = Modifier.fillMaxWidth(),
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                AnimatedContent(
+                    targetState = step,
+                    transitionSpec = {
+                        fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
+                    },
+                    label = "setup",
+                    modifier = Modifier.fillMaxSize(),
+                ) { current ->
+                    val scroll = rememberScrollState()
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth()
+                                .widthIn(max = 560.dp)
+                                .focusRequester(contentFocus)
+                                .wajihaGamepadFocus(),
                     ) {
-                        when (current) {
-                            SetupStep.Welcome -> {
-                                WelcomeBeat(
-                                    singleScreen = singleScreen,
-                                    onContinue = { step = SetupStep.Theme },
-                                    onSkip = onFinished,
-                                )
-                            }
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(scroll)
+                                    .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+                        ) {
+                            when (current) {
+                                SetupStep.Welcome -> {
+                                    WelcomeBeat(
+                                        singleScreen = singleScreen,
+                                        onReady = { welcomeReady = true },
+                                    )
+                                }
 
-                            SetupStep.Theme -> {
-                                ThemeBeat(
-                                    onPick = { theme ->
+                                SetupStep.Theme -> {
+                                    ThemeBeat { theme ->
                                         settingsViewModel.setTheme(theme)
                                         step = SetupStep.GrantAccess
-                                    },
-                                    onBack = { step = SetupStep.Welcome },
-                                )
-                            }
+                                    }
+                                }
 
-                            SetupStep.GrantAccess -> {
-                                GrantAccessBeat(
-                                    perms = perms,
-                                    controls = controls,
-                                    singleScreen = singleScreen,
-                                    onBack = { step = SetupStep.Theme },
-                                    onContinue = { step = SetupStep.DisplayLayout },
-                                )
-                            }
+                                SetupStep.GrantAccess -> {
+                                    GrantAccessBeat(
+                                        perms = perms,
+                                        controls = controls,
+                                        singleScreen = singleScreen,
+                                    )
+                                }
 
-                            SetupStep.DisplayLayout -> {
-                                DisplayLayoutBeat(
-                                    onPick = { single ->
+                                SetupStep.DisplayLayout -> {
+                                    DisplayLayoutBeat { single ->
                                         settingsViewModel.setSingleScreen(single)
                                         step = SetupStep.DefaultHome
-                                    },
-                                    onBack = { step = SetupStep.GrantAccess },
-                                )
-                            }
+                                    }
+                                }
 
-                            SetupStep.DefaultHome -> {
-                                HomeBeat(
-                                    isDefault = perms.isDefaultLauncher,
-                                    singleScreen = singleScreen,
-                                    onOpenHome = controls::openHomeSettings,
-                                    onBack = { step = SetupStep.DisplayLayout },
-                                    onContinue = { step = SetupStep.AddGames },
-                                )
-                            }
+                                SetupStep.DefaultHome -> {
+                                    HomeBeat(
+                                        isDefault = perms.isDefaultLauncher,
+                                        singleScreen = singleScreen,
+                                        onOpenHome = controls::openHomeSettings,
+                                    )
+                                }
 
-                            SetupStep.AddGames -> {
-                                AddGamesBeat(
-                                    folderCount = folders.size,
-                                    onAddPlatform = {
-                                        onOpenPlatformPicker?.invoke() ?: onFinished()
-                                    },
-                                    onBack = { step = SetupStep.DefaultHome },
-                                    onContinue = { step = SetupStep.Done },
-                                    onSkip = { step = SetupStep.Done },
-                                )
-                            }
+                                SetupStep.AddGames -> {
+                                    AddGamesBeat(
+                                        folderCount = folders.size,
+                                        onAddPlatform = {
+                                            onOpenPlatformPicker?.invoke() ?: onFinished()
+                                        },
+                                    )
+                                }
 
-                            SetupStep.Done -> {
-                                DoneBeat(singleScreen = singleScreen, onFinished = onFinished)
+                                SetupStep.Done -> {
+                                    DoneBeat(singleScreen = singleScreen)
+                                }
                             }
                         }
+                        OnboardingScrollbar(
+                            scrollState = scroll,
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                        )
                     }
+                }
+            }
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (backLabel != null && onBack != null) {
+                    WajihaGlyphAction(
+                        button = GamepadHintButton.L1,
+                        label = backLabel,
+                        onClick = onBack,
+                    )
+                } else {
+                    Spacer(modifier = Modifier)
+                }
+                if (continueLabel != null && onContinue != null) {
+                    WajihaGlyphAction(
+                        button = GamepadHintButton.R1,
+                        label = continueLabel,
+                        onClick = onContinue,
+                        glyphAtEnd = true,
+                        enabled = continueEnabled,
+                    )
                 }
             }
         }
@@ -220,8 +339,7 @@ fun OnboardingScreen(
 @Composable
 private fun WelcomeBeat(
     singleScreen: Boolean,
-    onContinue: () -> Unit,
-    onSkip: () -> Unit,
+    onReady: () -> Unit,
 ) {
     val full = "Welcome to Wajiha! Let's get you ready to go."
     var typed by remember { mutableStateOf("") }
@@ -230,68 +348,64 @@ private fun WelcomeBeat(
             typed = full.take(i + 1)
             delay(28)
         }
+        onReady()
     }
-    Spacer(modifier = Modifier.height(WajihaSpacing.touchMin))
-    Text(
-        text = "Wajiha",
-        style = MaterialTheme.typography.displayMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
-    )
-    Spacer(modifier = Modifier.height(WajihaSpacing.mdPlus))
-    Text(
-        text = typed + if (typed.length < full.length) "|" else "",
-        style = MaterialTheme.typography.titleLarge,
-        textAlign = TextAlign.Center,
+    Column(
         modifier = Modifier.fillMaxWidth(),
-    )
-    Spacer(modifier = Modifier.height(WajihaShapes.heroInnerCornerRadius))
-    Text(
-        text =
-            if (singleScreen) {
-                "Preview on top, library below — all on one display.\n" +
-                    "Even games you start yourself show up as Now Playing."
-            } else {
-                "Top screen for game art. Bottom screen to browse and launch.\n" +
-                    "Even games you start yourself show up as Now Playing."
-            },
-        style = MaterialTheme.typography.bodyMedium,
-        textAlign = TextAlign.Center,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(modifier = Modifier.height(WajihaSpacing.actionBarHeight))
-    GamepadButton(
-        text = "Let's go",
-        onClick = onContinue,
-        enabled = typed.length >= full.length,
-        modifier = Modifier.fillMaxWidth().widthIn(max = 320.dp),
-    )
-    GamepadButton(text = "Skip for now", onClick = onSkip, outlined = true)
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+    ) {
+        Image(
+            painter = painterResource(Res.drawable.logo),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(96.dp).clip(CircleShape),
+        )
+        Text(
+            text = "Wajiha",
+            style = MaterialTheme.typography.displayMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = typed + if (typed.length < full.length) "|" else "",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text =
+                if (singleScreen) {
+                    "Preview on top, library below — all on one display.\n" +
+                        "Even games you start yourself show up as Now Running."
+                } else {
+                    "Top screen for game art. Bottom screen to browse and launch.\n" +
+                        "Even games you start yourself show up as Now Running."
+                },
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @Composable
-private fun ThemeBeat(
-    onPick: (String) -> Unit,
-    onBack: () -> Unit,
-) {
+private fun ThemeBeat(onPick: (String) -> Unit) {
     BeatTitle("Choose your look")
     BeatBody("Dark feels like a handheld console. Light is closer to the classic 3DS home menu. You can change this anytime.")
-    Spacer(modifier = Modifier.height(WajihaSpacing.mdPlus))
     ChoiceCard(
         title = "Dark",
         description = "Deep navy chrome — easy on OLED panels",
     ) { onPick("dark") }
-    Spacer(modifier = Modifier.height(WajihaSpacing.smPlus))
     ChoiceCard(
         title = "Light",
         description = "Soft blue-greys — bright play sessions",
     ) { onPick("light") }
-    Spacer(modifier = Modifier.height(WajihaSpacing.smPlus))
     ChoiceCard(
         title = "Follow system",
         description = "Match Android's light / dark setting",
     ) { onPick("system") }
-    BackOnly(onBack)
 }
 
 @Composable
@@ -299,8 +413,6 @@ private fun GrantAccessBeat(
     perms: PermissionStates,
     controls: SystemControls,
     singleScreen: Boolean,
-    onBack: () -> Unit,
-    onContinue: () -> Unit,
 ) {
     val items =
         listOf(
@@ -344,39 +456,30 @@ private fun GrantAccessBeat(
                 "Android will bounce you to Settings — come back and they'll light up."
         },
     )
-    Spacer(modifier = Modifier.height(WajihaSpacing.md))
     items.forEach { item ->
         GrantCard(item)
-        Spacer(modifier = Modifier.height(WajihaSpacing.sm))
     }
-    BeatNav(onBack = onBack, onNext = onContinue, nextLabel = if (granted > 0) "Continue" else "Continue anyway")
 }
 
 @Composable
-private fun DisplayLayoutBeat(
-    onPick: (singleScreen: Boolean) -> Unit,
-    onBack: () -> Unit,
-) {
+private fun DisplayLayoutBeat(onPick: (singleScreen: Boolean) -> Unit) {
     BeatTitle("One screen or two?")
     BeatBody(
         "Wajiha can use both screens on clamshell handhelds, or combine everything " +
             "on the main display. Change anytime in Settings → Screens.",
     )
-    Spacer(modifier = Modifier.height(WajihaSpacing.mdPlus))
     ChoiceCard(
         title = "Dual screens",
         description =
             "Art on one display, browse and launch on the other. " +
                 "Best on AYN Thor and clamshell handhelds.",
     ) { onPick(false) }
-    Spacer(modifier = Modifier.height(WajihaSpacing.smPlus))
     ChoiceCard(
         title = "Single screen",
         description =
             "Combined preview + library on the main display. " +
                 "Use this on phones or when you only want one panel.",
     ) { onPick(true) }
-    BackOnly(onBack)
 }
 
 @Composable
@@ -384,8 +487,6 @@ private fun HomeBeat(
     isDefault: Boolean,
     singleScreen: Boolean,
     onOpenHome: () -> Unit,
-    onBack: () -> Unit,
-    onContinue: () -> Unit,
 ) {
     BeatTitle("Make Wajiha home")
     BeatBody(
@@ -411,7 +512,6 @@ private fun HomeBeat(
             }
         },
     )
-    Spacer(modifier = Modifier.height(WajihaSpacing.mdPlus))
     if (isDefault) {
         StatusPill("Default home set")
     } else {
@@ -421,20 +521,12 @@ private fun HomeBeat(
             modifier = Modifier.fillMaxWidth().widthIn(max = 360.dp),
         )
     }
-    BeatNav(
-        onBack = onBack,
-        onNext = onContinue,
-        nextLabel = if (isDefault) "Continue" else "I'll do this later",
-    )
 }
 
 @Composable
 private fun AddGamesBeat(
     folderCount: Int,
     onAddPlatform: () -> Unit,
-    onBack: () -> Unit,
-    onContinue: () -> Unit,
-    onSkip: () -> Unit,
 ) {
     BeatTitle("Add Games")
     BeatBody(
@@ -445,48 +537,27 @@ private fun AddGamesBeat(
                 "It scans in the background — neat box art comes later in Scraper."
         },
     )
-    Spacer(modifier = Modifier.height(WajihaSpacing.md))
     GamepadButton(
         text = "Choose a platform",
         onClick = onAddPlatform,
         modifier = Modifier.fillMaxWidth().widthIn(max = 360.dp),
     )
-    Spacer(modifier = Modifier.height(WajihaSpacing.sm))
     Text(
         text = "You’ll pick from the full catalog, then set emulator and folders.",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
     )
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = WajihaSpacing.mdPlus),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        GamepadButton(text = "Back", onClick = onBack, outlined = true)
-        Row {
-            GamepadButton(text = "Skip", onClick = onSkip, outlined = true)
-            GamepadButton(
-                text = if (folderCount > 0) "Continue" else "Continue anyway",
-                onClick = onContinue,
-                modifier = Modifier.padding(start = WajihaSpacing.xs),
-            )
-        }
-    }
 }
 
 @Composable
-private fun DoneBeat(
-    singleScreen: Boolean,
-    onFinished: () -> Unit,
-) {
-    Spacer(modifier = Modifier.height(40.dp))
+private fun DoneBeat(singleScreen: Boolean) {
     Text(
         text = "All set up!",
         style = MaterialTheme.typography.headlineMedium,
         fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onBackground,
     )
-    Spacer(modifier = Modifier.height(WajihaShapes.heroInnerCornerRadius))
     Text(
         text =
             if (singleScreen) {
@@ -504,12 +575,6 @@ private fun DoneBeat(
         textAlign = TextAlign.Center,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Spacer(modifier = Modifier.height(WajihaSpacing.xl))
-    GamepadButton(
-        text = "Show me around",
-        onClick = onFinished,
-        modifier = Modifier.fillMaxWidth().widthIn(max = 320.dp),
-    )
 }
 
 // —— shared beats ——
@@ -520,6 +585,7 @@ private fun BeatTitle(text: String) {
         text = text,
         style = MaterialTheme.typography.headlineSmall,
         fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onBackground,
         textAlign = TextAlign.Center,
     )
 }
@@ -531,29 +597,7 @@ private fun BeatBody(text: String) {
         style = MaterialTheme.typography.bodyMedium,
         textAlign = TextAlign.Center,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = WajihaSpacing.smPlus),
     )
-}
-
-@Composable
-private fun BeatNav(
-    onBack: () -> Unit,
-    onNext: () -> Unit,
-    nextLabel: String,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = WajihaSpacing.lg),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        GamepadButton(text = "Back", onClick = onBack, outlined = true)
-        GamepadButton(text = nextLabel, onClick = onNext)
-    }
-}
-
-@Composable
-private fun BackOnly(onBack: () -> Unit) {
-    GamepadButton(text = "Back", onClick = onBack, outlined = true)
 }
 
 @Composable
@@ -570,12 +614,14 @@ private fun ChoiceCard(
     ) {
         Column(
             modifier =
-                Modifier.padding(
-                    horizontal = WajihaShapes.heroCornerRadius,
-                    vertical = WajihaSpacing.mdTight,
-                ),
+                Modifier.padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.sm),
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
@@ -634,7 +680,12 @@ private fun GrantCard(item: GrantItem) {
                         .weight(1f)
                         .padding(horizontal = WajihaShapes.heroInnerCornerRadius),
             ) {
-                Text(item.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Text(
+                    text = item.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
                 Text(
                     text = item.description,
                     style = MaterialTheme.typography.labelSmall,
@@ -649,9 +700,43 @@ private fun GrantCard(item: GrantItem) {
                     color = MaterialTheme.colorScheme.primary,
                 )
             } else {
-                GamepadButton(text = "Grant Access", onClick = item.onRequest, outlined = true)
+                WajihaGlyphAction(
+                    button = GamepadHintButton.A,
+                    label = "Grant Access",
+                    onClick = item.onRequest,
+                    glyphAtEnd = true,
+                    outlined = true,
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun OnboardingScrollbar(
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+) {
+    if (scrollState.maxValue <= 0) return
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    Canvas(
+        modifier
+            .padding(vertical = WajihaSpacing.xs, horizontal = WajihaSpacing.micro)
+            .fillMaxHeight()
+            .width(WajihaSpacing.xs),
+    ) {
+        val viewport = scrollState.viewportSize.coerceAtLeast(1)
+        val total = viewport + scrollState.maxValue
+        val minThumb = WajihaSpacing.lg.toPx()
+        val thumbHeight = (size.height * viewport / total).coerceIn(minThumb, size.height)
+        val travel = (size.height - thumbHeight).coerceAtLeast(0f)
+        val y = travel * (scrollState.value.toFloat() / scrollState.maxValue)
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(0f, y),
+            size = Size(size.width, thumbHeight),
+            cornerRadius = CornerRadius(size.width / 2f),
+        )
     }
 }
 

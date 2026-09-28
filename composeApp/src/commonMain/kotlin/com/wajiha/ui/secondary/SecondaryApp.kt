@@ -55,6 +55,7 @@ import com.wajiha.ui.apps.AppDrawerScreen
 import com.wajiha.ui.components.LocalUiFeedback
 import com.wajiha.ui.components.WajihaFolderSettingChrome
 import com.wajiha.ui.components.WajihaScreen
+import com.wajiha.ui.components.gamepad.achievementsGamepadHints
 import com.wajiha.ui.components.gamepad.quickSettingsGamepadHints
 import com.wajiha.ui.components.gamepad.runningAppsGamepadHints
 import com.wajiha.ui.components.gamepad.secondaryModeTabGamepadHints
@@ -64,6 +65,7 @@ import com.wajiha.ui.home.HomeViewModel
 import com.wajiha.ui.navigation.LauncherHeroPane
 import com.wajiha.ui.navigation.heroOnSecondary
 import com.wajiha.ui.navigation.menuOnSecondary
+import com.wajiha.ui.ra.AchievementsPanel
 import com.wajiha.ui.running.RunningAppsPanel
 import com.wajiha.ui.scraper.ScraperScreen
 import com.wajiha.ui.scraper.ScraperViewModel
@@ -546,25 +548,39 @@ fun SecondaryApp() {
                                 BlackoutScreen(onTap = backToGrid)
                             }
 
-                            SecondaryMode.NowPlaying,
-                            SecondaryMode.Achievements,
-                            -> {
+                            SecondaryMode.NowPlaying -> {
+                                val heroBackdrop = settings.nowPlayingHeroBackground
                                 SecondaryModeFrame(
                                     current = SecondaryMode.NowPlaying,
                                     store = store,
                                     sessionActive = sessionActive,
                                     backgroundContent =
-                                        if (settings.nowPlayingHeroBackground) {
+                                        if (heroBackdrop) {
                                             { NowPlayingBackdrop(state = nowPlaying) }
                                         } else {
                                             null
                                         },
+                                    transparentPanel = heroBackdrop,
                                 ) { _ ->
                                     NowPlayingPanel(
                                         state = nowPlaying,
-                                        heroBackground = settings.nowPlayingHeroBackground,
+                                        heroBackground = heroBackdrop,
                                         useLogo = settings.nowPlayingLogo,
                                         backgroundInParent = true,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
+                            }
+
+                            SecondaryMode.Achievements -> {
+                                SecondaryModeFrame(
+                                    current = SecondaryMode.Achievements,
+                                    store = store,
+                                    sessionActive = sessionActive,
+                                ) { _ ->
+                                    AchievementsPanel(
+                                        showGamepadHints = false,
+                                        embedInFolderPanel = true,
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }
@@ -583,6 +599,15 @@ fun SecondaryApp() {
                                     gameGridShowTitles = settings.gameGridSecondaryShowTitles,
                                     gameGridShowTileChrome = settings.gameGridSecondaryShowTileChrome,
                                     onSelectPlatform = viewModel::selectPlatform,
+                                    onOpenCollections = viewModel::openCollections,
+                                    onSelectCollection = viewModel::selectCollection,
+                                    onCreateCollection = { name -> viewModel.createCollection(name) },
+                                    onCreateCollectionForGame = { name, gameId ->
+                                        viewModel.createCollection(name, gameId)
+                                    },
+                                    onDeleteCollection = viewModel::deleteCollection,
+                                    onSetGameInCollection = viewModel::setGameInCollection,
+                                    membershipForGame = viewModel::observeMembership,
                                     onFocusGame = viewModel::focusGame,
                                     onLaunchGame = viewModel::launchGame,
                                     onOpenGameDetail = openGameDetail,
@@ -741,12 +766,15 @@ private fun SecondaryModeFrame(
     store: DualScreenStore,
     sessionActive: Boolean,
     backgroundContent: (@Composable () -> Unit)? = null,
+    /** When true with [backgroundContent], folder panel is clear over the hero. */
+    transparentPanel: Boolean = false,
     content: @Composable ColumnScope.(contentFocus: FocusRequester) -> Unit,
 ) {
     val tabs =
         buildList {
             if (sessionActive) {
                 add(SecondaryMode.NowPlaying to "Now Running")
+                add(SecondaryMode.Achievements to "Achievements")
             }
             add(SecondaryMode.RunningApps to "Running")
             add(SecondaryMode.QuickSettings to "System")
@@ -768,6 +796,10 @@ private fun SecondaryModeFrame(
 
             SecondaryMode.QuickSettings -> {
                 quickSettingsGamepadHints + GamepadHint(GamepadHintButton.L1R1, "Tab")
+            }
+
+            SecondaryMode.Achievements -> {
+                achievementsGamepadHints + GamepadHint(GamepadHintButton.L1R1, "Tab")
             }
 
             else -> {
@@ -808,6 +840,12 @@ private fun SecondaryModeFrame(
             selectedIndex = currentIndex,
             onSelect = ::selectTab,
             scrollable = current == SecondaryMode.QuickSettings,
+            panelColor =
+                if (transparentPanel && backgroundContent != null) {
+                    Color.Transparent
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerLow
+                },
             modifier =
                 Modifier
                     .fillMaxSize()

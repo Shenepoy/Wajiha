@@ -17,9 +17,16 @@ data class ScrapeRunPolicy(
     val overwriteMetadata: Boolean = false,
     val overwriteMedia: Boolean = false,
     val onlyMissingMedia: Boolean = true,
-    /** Optional per-run source override. Null uses the enabled source list. */
-    val sourceId: String? = null,
+    /**
+     * Optional per-run source filter. Null/empty uses the enabled source list.
+     * One or more source ids (e.g. `screenscraper`, `steamgriddb`).
+     */
+    val sourceIds: List<String>? = null,
 ) {
+    /** Single-source shorthand when exactly one id is selected. */
+    val sourceId: String?
+        get() = sourceIds?.singleOrNull()
+
     companion object {
         val FillGaps = ScrapeRunPolicy()
         val Force =
@@ -33,7 +40,14 @@ data class ScrapeRunPolicy(
         fun fromName(name: String?): ScrapeRunPolicy {
             val parts = name.orEmpty().lowercase().split(':', limit = 2)
             val base = if (parts.firstOrNull() == "force") Force else FillGaps
-            return base.copy(sourceId = parts.getOrNull(1)?.takeIf(String::isNotBlank))
+            val ids =
+                parts
+                    .getOrNull(1)
+                    ?.split(',')
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotBlank() }
+                    ?.distinct()
+            return base.copy(sourceIds = ids?.takeIf { it.isNotEmpty() })
         }
     }
 
@@ -43,7 +57,20 @@ data class ScrapeRunPolicy(
                 ScrapeRunMode.FillGaps -> "fill_gaps"
                 ScrapeRunMode.Force -> "force"
             }
-        return sourceId?.takeIf(String::isNotBlank)?.let { "$modeName:$it" } ?: modeName
+        val ids = sourceIds.orEmpty().filter { it.isNotBlank() }
+        return if (ids.isEmpty()) modeName else "$modeName:${ids.joinToString(",")}"
+    }
+
+    /** Restrict [settings] enabled sources for this run, if a filter is set. */
+    fun applySourceFilter(settings: ScraperSettings): ScraperSettings {
+        val ids =
+            sourceIds
+                .orEmpty()
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+        if (ids.isEmpty()) return settings
+        return settings.copy(enabledSources = ids)
     }
 }
 

@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -100,31 +101,51 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/wajiha-signing"
           echo "$WAJIHA_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/wajiha-signing/release.jks"
-          echo "KEYSTORE_PATH=$RUNNER_TEMP/wajiha-signing/release.jks" >> "$GITHUB_ENV"
+          echo "WAJIHA_KEYSTORE_PATH=$RUNNER_TEMP/wajiha-signing/release.jks" >> "$GITHUB_ENV"
 
-      - name: Build signed release APK
+      - name: Build signed release APKs
         env:
           WAJIHA_KEYSTORE_PASSWORD: ${{ secrets.WAJIHA_KEYSTORE_PASSWORD }}
           WAJIHA_KEY_ALIAS: ${{ secrets.WAJIHA_KEY_ALIAS }}
           WAJIHA_KEY_PASSWORD: ${{ secrets.WAJIHA_KEY_PASSWORD }}
         run: |
           ./gradlew :androidApp:assembleRelease \
+            -Pwajiha.abiSplits=true \
             -Pwajiha.versionName="${{ steps.meta.outputs.version }}" \
-            -Pwajiha.versionCode="${{ github.run_number }}" \
-            -Pwajiha.keystore.path="${{ env.KEYSTORE_PATH }}" \
-            -Pwajiha.keystore.password="${WAJIHA_KEYSTORE_PASSWORD}" \
-            -Pwajiha.key.alias="${WAJIHA_KEY_ALIAS}" \
-            -Pwajiha.key.password="${WAJIHA_KEY_PASSWORD}"
+            -Pwajiha.versionCode="${{ github.run_number }}"
 
-      - name: Stage APK
-        id: apk
+      - name: Verify ABI splits
+        run: ./scripts/verify-apk-abis.sh androidApp/build/outputs/apk/release
+
+      - name: Stage APKs
         run: |
           set -euo pipefail
           mkdir -p dist
-          SRC="$(ls androidApp/build/outputs/apk/release/*.apk | head -n1)"
-          DEST="dist/Wajiha-${{ steps.meta.outputs.version }}.apk"
-          cp "$SRC" "$DEST"
-          echo "apk_path=${DEST}" >> "$GITHUB_OUTPUT"
+          src=androidApp/build/outputs/apk/release
+          version="${{ steps.meta.outputs.version }}"
+
+          cp_one() {
+            local pattern="$1"
+            local dest="$2"
+            shopt -s nullglob
+            local files=("$src"/$pattern)
+            if [[ ${#files[@]} -ne 1 ]]; then
+              echo "Expected one APK matching $pattern, found ${#files[@]}" >&2
+              printf '  %s\n' "${files[@]:-}" >&2
+              exit 1
+            fi
+            cp "${files[0]}" "$dest"
+          }
+
+          cp_one '*universal*.apk' "dist/Wajiha-${version}.apk"
+          cp_one '*arm64-v8a*.apk' "dist/Wajiha-${version}-arm64-v8a.apk"
+          cp_one '*armeabi-v7a*.apk' "dist/Wajiha-${version}-armeabi-v7a.apk"
+          cp_one '*x86_64*.apk' "dist/Wajiha-${version}-x86_64.apk"
+          cp_one '*-x86-release*.apk' "dist/Wajiha-${version}-x86.apk"
+          (
+            cd dist
+            sha256sum Wajiha-*.apk > SHA256SUMS
+          )
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -133,4 +154,10 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
           make_latest: ${{ steps.meta.outputs.make_latest }}
-          files: ${{ steps.apk.outputs.apk_path }}
+          files: |
+            dist/Wajiha-${{ steps.meta.outputs.version }}.apk
+            dist/Wajiha-${{ steps.meta.outputs.version }}-arm64-v8a.apk
+            dist/Wajiha-${{ steps.meta.outputs.version }}-armeabi-v7a.apk
+            dist/Wajiha-${{ steps.meta.outputs.version }}-x86_64.apk
+            dist/Wajiha-${{ steps.meta.outputs.version }}-x86.apk
+            dist/SHA256SUMS

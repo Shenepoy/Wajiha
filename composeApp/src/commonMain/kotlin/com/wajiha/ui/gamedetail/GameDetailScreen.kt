@@ -79,6 +79,7 @@ import com.wajiha.ui.components.gamepad.WajihaSettingDivider
 import com.wajiha.ui.components.gamepad.WajihaSettingPanel
 import com.wajiha.ui.components.gamepad.WajihaToggleSetting
 import com.wajiha.ui.components.gamepad.gameDetailGamepadHints
+import com.wajiha.ui.ra.AchievementsPanel
 import com.wajiha.ui.scraper.ScrapeModeSelector
 import com.wajiha.ui.scraper.ScrapeUiMode
 import com.wajiha.ui.scraper.review.ScrapeReviewPicker
@@ -101,6 +102,7 @@ private enum class ActionPaneSection(
     Launch("Launch"),
     Emulator("Emulator"),
     Scraper("Scraper"),
+    Achievements("Achievements"),
 }
 
 @Composable
@@ -310,6 +312,7 @@ private fun GameDetailTabsPane(
         onSelect = onSelectSection,
         onBack = onBack.takeIf { dualDisplay },
         modifier = modifier,
+        scrollable = sections.getOrNull(selectedSectionIndex) != ActionPaneSection.Achievements,
     ) {
         when (sections[selectedSectionIndex]) {
             ActionPaneSection.Launch -> {
@@ -349,6 +352,15 @@ private fun GameDetailTabsPane(
                     dualDisplay = dualDisplay,
                     gamepadOwner = gamepadOwner,
                     firstFocusRequester = sectionFocus,
+                )
+            }
+
+            ActionPaneSection.Achievements -> {
+                AchievementsPanel(
+                    gameId = game.id,
+                    embedInFolderPanel = true,
+                    showGamepadHints = false,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
             }
         }

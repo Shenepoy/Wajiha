@@ -67,3 +67,5 @@ Settings → Screens controls chip vs grid vs both (`NowPlayingDisplayMode`).
 ## Playtime persistence
 
 `PlaySessionTracker` maintains a `Map<String, ActiveLaunch>` aligned with `sessionCache`. Each package gets its own open `play_sessions` row; closing one does not affect others.
+
+Active duration counts only while that package is the top-display foreground. `syncTopDisplayForeground` pauses every other open session, so a background emulator does not accrue playtime. Orphan rows left open across process death have no pause tracking and close with wall-clock duration.

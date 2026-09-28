@@ -6,6 +6,7 @@ import com.wajiha.data.db.GameEntity
 import com.wajiha.data.db.GameMediaEntity
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.prefs.SettingsRepository
+import com.wajiha.domain.repository.CollectionRepository
 import com.wajiha.domain.repository.GameRepository
 import com.wajiha.domain.repository.PlatformRepository
 import com.wajiha.platform.AppActions
@@ -13,12 +14,15 @@ import com.wajiha.platform.LaunchableApp
 import com.wajiha.platform.UiSound
 import com.wajiha.state.DualScreenStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -36,21 +40,27 @@ data class GameTile(
 data class HomeUiState(
     val platforms: List<PlatformEntity> = emptyList(),
     val selectedPlatformId: String? = null,
+    val collections: List<CollectionSummary> = emptyList(),
+    val selectedCollectionId: Long? = null,
+    val browsingCollections: Boolean = false,
     val tiles: List<GameTile> = emptyList(),
     val recent: List<GameTile> = emptyList(),
     val favorites: List<GameTile> = emptyList(),
     val launchError: String? = null,
 )
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class HomeViewModel(
     private val gameRepository: GameRepository,
     private val platformRepository: PlatformRepository,
+    private val collectionRepository: CollectionRepository,
     private val appActions: AppActions,
     val dualScreenStore: DualScreenStore,
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
     private val selectedPlatformId = MutableStateFlow<String?>(null)
+    private val selectedCollectionId = MutableStateFlow<Long?>(null)
+    private val browsingCollections = MutableStateFlow(false)
     private val launchError = MutableStateFlow<String?>(null)
     private val _apps = MutableStateFlow<List<LaunchableApp>>(emptyList())
     val apps: StateFlow<List<LaunchableApp>> = _apps
@@ -62,6 +72,10 @@ class HomeViewModel(
                 .map { it.iconPackPackage to it.iconShape }
                 .distinctUntilChanged()
                 .collect { loadApps() }
+        }
+        viewModelScope.launch {
+            // Install often emits ADDED and REPLACED together; one reload is enough.
+            appActions.installedAppsChanges.debounce(300).collect { loadApps() }
         }
     }
 
@@ -107,39 +121,124 @@ class HomeViewModel(
             base.copy(squares = squares.pathMap())
         }
 
+    private val librarySelection =
+        combine(selectedPlatformId, selectedCollectionId, browsingCollections) { platformId, collectionId, browsing ->
+            LibrarySelection(
+                platformId = platformId,
+                collectionId = collectionId,
+                browsingCollections = browsing,
+            )
+        }
+
     private val gamesForSelected =
-        selectedPlatformId.flatMapLatest { platformId ->
-            if (platformId == null) {
-                gameRepository.observeAll()
-            } else {
-                gameRepository.observeForPlatform(platformId)
+        librarySelection.flatMapLatest { selection ->
+            when (selection.gameSource()) {
+                LibraryGameSource.All -> gameRepository.observeAll()
+                LibraryGameSource.Platform -> gameRepository.observeForPlatform(selection.platformId!!)
+                LibraryGameSource.Collection -> collectionRepository.observeGames(selection.collectionId!!)
+                LibraryGameSource.None -> flowOf(emptyList())
+            }
+        }
+
+    private val collectionSummaries =
+        combine(collectionRepository.observeAll(), collectionRepository.observeCounts()) { collections, counts ->
+            val byId = counts.associate { it.collectionId to it.gameCount.toInt() }
+            collections.map { collection ->
+                CollectionSummary(
+                    id = collection.id,
+                    name = collection.name,
+                    gameCount = byId[collection.id] ?: 0,
+                )
             }
         }
 
     private val libraryState =
         combine(
             platformsWithGames,
-            selectedPlatformId,
+            librarySelection,
             gamesForSelected,
             gameRepository.observeRecent(12),
             mediaByGame,
-        ) { platforms, selected, games, recent, media ->
+        ) { platforms, selection, games, recent, media ->
             HomeUiState(
                 platforms = platforms,
-                selectedPlatformId = selected,
+                selectedPlatformId = selection.platformId,
+                selectedCollectionId = selection.collectionId,
+                browsingCollections = selection.browsingCollections,
                 tiles = games.map { it.toTile(media) },
                 recent = recent.map { it.toTile(media) },
             )
         }
 
     val uiState: StateFlow<HomeUiState> =
-        combine(libraryState, launchError) { state, error ->
-            state.copy(launchError = error)
+        combine(libraryState, collectionSummaries, launchError) { state, collections, error ->
+            state.copy(collections = collections, launchError = error)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
 
     fun selectPlatform(platformId: String?) {
         appActions.playSound(UiSound.Navigate)
-        selectedPlatformId.value = platformId
+        applySelection(
+            if (platformId == null) {
+                LibrarySelection().selectAll()
+            } else {
+                LibrarySelection().selectPlatform(platformId)
+            },
+        )
+    }
+
+    fun openCollections() {
+        appActions.playSound(UiSound.Navigate)
+        applySelection(LibrarySelection().openCollections())
+    }
+
+    fun selectCollection(collectionId: Long) {
+        appActions.playSound(UiSound.Navigate)
+        applySelection(LibrarySelection().selectCollection(collectionId))
+    }
+
+    fun observeMembership(gameId: Long) = collectionRepository.observeCollectionIds(gameId).map { it.toSet() }
+
+    fun setGameInCollection(
+        collectionId: Long,
+        gameId: Long,
+        member: Boolean,
+    ) {
+        viewModelScope.launch {
+            if (member) {
+                collectionRepository.addGame(collectionId, gameId)
+            } else {
+                collectionRepository.removeGame(collectionId, gameId)
+            }
+        }
+    }
+
+    fun createCollection(
+        name: String,
+        addGameId: Long? = null,
+    ) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            val id = collectionRepository.create(trimmed, uiState.value.collections.size)
+            if (addGameId != null) {
+                collectionRepository.addGame(id, addGameId)
+            }
+        }
+    }
+
+    fun deleteCollection(collectionId: Long) {
+        viewModelScope.launch {
+            collectionRepository.delete(collectionId)
+            if (selectedCollectionId.value == collectionId) {
+                applySelection(LibrarySelection().openCollections())
+            }
+        }
+    }
+
+    private fun applySelection(selection: LibrarySelection) {
+        selectedPlatformId.value = selection.platformId
+        selectedCollectionId.value = selection.collectionId
+        browsingCollections.value = selection.browsingCollections
     }
 
     fun focusGame(gameId: Long?) {

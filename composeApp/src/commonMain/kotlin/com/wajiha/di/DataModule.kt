@@ -1,6 +1,8 @@
 package com.wajiha.di
 
 import com.wajiha.data.config.ConfigInstaller
+import com.wajiha.data.db.RoomStoredDataCleaner
+import com.wajiha.data.db.StoredDataCleaner
 import com.wajiha.data.db.WajihaDatabase
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.domain.repository.CollectionRepository
@@ -31,6 +33,7 @@ val dataModule: Module =
         single { GameRepository(get(), get(), get()) }
         single { SessionRepository(get()) }
         single { CollectionRepository(get()) }
+        single<StoredDataCleaner> { RoomStoredDataCleaner(get()) }
         single { ConfigInstaller(get()) }
         single { SettingsRepository(get()) }
 

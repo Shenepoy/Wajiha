@@ -1,9 +1,12 @@
 package com.wajiha.android.platform
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.SoundPool
+import android.os.Build
 import com.wajiha.android.display.DisplayCoordinator
 import com.wajiha.android.icons.IconResolver
 import com.wajiha.android.launch.GameLauncher
@@ -19,6 +22,8 @@ import com.wajiha.state.DualScreenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -34,6 +39,47 @@ class AndroidAppActions(
     private val iconResolver: IconResolver,
 ) : AppActions {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val installedAppsChangeEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    override val installedAppsChanges: Flow<Unit> = installedAppsChangeEvents
+
+    override fun notifyInstalledAppsChanged() {
+        installedAppsChangeEvents.tryEmit(Unit)
+    }
+
+    private val packageChangeReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(
+                ctx: Context,
+                intent: Intent,
+            ) {
+                val action = intent.action ?: return
+                val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+                // Skip the transient REMOVED that precedes an update.
+                if (action == Intent.ACTION_PACKAGE_ADDED ||
+                    action == Intent.ACTION_PACKAGE_REPLACED ||
+                    (action == Intent.ACTION_PACKAGE_REMOVED && !replacing)
+                ) {
+                    notifyInstalledAppsChanged()
+                }
+            }
+        }
+
+    init {
+        // Manifest delivery of PACKAGE_* is blocked while the process is up
+        // ("Background execution not allowed"), so the open drawer never reloads.
+        val filter =
+            IntentFilter().apply {
+                addAction(Intent.ACTION_PACKAGE_ADDED)
+                addAction(Intent.ACTION_PACKAGE_REMOVED)
+                addAction(Intent.ACTION_PACKAGE_REPLACED)
+                addDataScheme("package")
+            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(packageChangeReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            context.registerReceiver(packageChangeReceiver, filter)
+        }
+    }
 
     private val soundPool =
         SoundPool

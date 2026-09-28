@@ -11,8 +11,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import com.wajiha.ui.components.gamepad.GamepadButton
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.ui.components.gamepad.LocalSettingRowMinHeight
+import com.wajiha.ui.components.gamepad.WajihaGlyphAction
 import com.wajiha.ui.theme.WajihaAlphas
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaShapes
@@ -61,10 +62,13 @@ fun CriticalChangeActions(
         ) {
             Text("↩")
         }
-        GamepadButton(
-            text = confirmText,
+        WajihaGlyphAction(
+            button = GamepadHintButton.Y,
+            label = confirmText,
             onClick = onConfirm,
+            glyphAtEnd = true,
             enabled = hasChanges && confirmEnabled,
+            outlined = false,
             focusRequester = confirmFocusRequester,
         )
     }

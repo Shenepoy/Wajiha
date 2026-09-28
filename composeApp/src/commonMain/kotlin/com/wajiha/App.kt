@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.requestContentFocus
@@ -270,6 +272,13 @@ fun App() {
                 gameGridShowTitles = settings.gameGridShowTitles,
                 gameGridShowTileChrome = settings.gameGridShowTileChrome,
                 onSelectPlatform = viewModel::selectPlatform,
+                onOpenCollections = viewModel::openCollections,
+                onSelectCollection = viewModel::selectCollection,
+                onCreateCollection = { name -> viewModel.createCollection(name) },
+                onCreateCollectionForGame = { name, gameId -> viewModel.createCollection(name, gameId) },
+                onDeleteCollection = viewModel::deleteCollection,
+                onSetGameInCollection = viewModel::setGameInCollection,
+                membershipForGame = viewModel::observeMembership,
                 onFocusGame = viewModel::focusGame,
                 onLaunchGame = viewModel::launchGame,
                 onOpenGameDetail = openGameDetail,
@@ -646,6 +655,12 @@ fun App() {
                                 selectedIndex = 0,
                                 onSelect = {},
                                 scrollable = false,
+                                panelColor =
+                                    if (settings.nowPlayingHeroBackground) {
+                                        Color.Transparent
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainerLow
+                                    },
                             ) {
                                 NowPlayingPanel(
                                     state = nowPlaying,
@@ -678,6 +693,7 @@ fun App() {
                                     HomeChromeBar(
                                         state = state,
                                         onSelectPlatform = viewModel::selectPlatform,
+                                        onOpenCollections = viewModel::openCollections,
                                         onOpenApps = {
                                             viewModel.playOpen()
                                             route = Route.Apps

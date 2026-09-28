@@ -80,6 +80,7 @@ import com.wajiha.state.GamepadOwner
 import com.wajiha.state.SettingsHeroKind
 import com.wajiha.state.SettingsHeroOption
 import com.wajiha.ui.components.LocalUiFeedback
+import com.wajiha.ui.components.WajihaDialog
 import com.wajiha.ui.components.WajihaEmptyState
 import com.wajiha.ui.components.WajihaFolderSettingChrome
 import com.wajiha.ui.components.WajihaScreen
@@ -936,9 +937,9 @@ private fun ScreensSectionContent(
     }
     WajihaSettingGroup(title = "Sessions") {
         WajihaToggleSetting(
-            label = "Outside launches → Now Playing",
+            label = "Outside launches → Now Running",
             description =
-                "Detect games started outside Wajiha and show Now Playing " +
+                "Detect games started outside Wajiha and show Now Running " +
                     if (single) "here." else "on the secondary display.",
             checked = settings.detectManualLaunches,
             onCheckedChange = settingsViewModel::setDetectManualLaunches,
@@ -1065,7 +1066,7 @@ private fun ScreensDualDisplaySettings(
     WajihaSettingDivider()
     WajihaToggleSetting(
         label = "Swap gamepad hints",
-        description = "Show the hint bar on the hero display instead of under the grid.",
+        description = "Wide hero also shows the main action. The menu keeps its hint bar.",
         checked = settings.swapGamepadHints,
         onCheckedChange = settingsViewModel::setSwapGamepadHints,
         defaultChecked = false,
@@ -1075,8 +1076,8 @@ private fun ScreensDualDisplaySettings(
                 store = dualScreenStore,
                 title = "Swap gamepad hints",
                 subtitle =
-                    "Show the controller hint bar on the hero display instead of under " +
-                        "the game grid and menus.",
+                    "The wide hero shows the main action, such as Launch or Select. " +
+                        "The menu keeps A, B, and the rest of its bar. The narrow hero stays clear.",
                 checked = settings.swapGamepadHints,
                 kind = SettingsHeroKind.ScreensChrome,
             ),
@@ -1137,6 +1138,7 @@ private fun ScreensDualDisplaySettings(
         choiceOptions =
             listOf(
                 MultiChoiceOption("NowPlaying", "Now Running", icon = "▶"),
+                MultiChoiceOption("Achievements", "Achievements", icon = "★"),
                 MultiChoiceOption("QuickSettings", "Quick Settings", icon = "⚙"),
                 MultiChoiceOption("RunningApps", "Running Apps", icon = "▣"),
                 MultiChoiceOption("Clock", "Clock", icon = "◷"),
@@ -1164,9 +1166,9 @@ private fun ScreensDualDisplaySettings(
     if (settings.gameDimEnabled) {
         WajihaSettingDivider()
         WajihaToggleSetting(
-            label = "Dim only on Now Playing page",
+            label = "Dim only on Now Running page",
             description =
-                "When on, the dim scrim applies only while the bottom screen shows Now Playing. " +
+                "When on, the dim scrim applies only while the bottom screen shows Now Running. " +
                     "When off, dim applies on any secondary screen except Blackout.",
             checked = settings.gameDimOnlyOnNowPlaying,
             onCheckedChange = settingsViewModel::setGameDimOnlyOnNowPlaying,
@@ -2102,6 +2104,33 @@ private fun SystemSectionContent(
             focusRequester = hubFocusRequester?.takeIf { restoreLibraryScanFocus },
         )
     }
+    var confirmReset by remember { mutableStateOf(false) }
+    WajihaSettingGroup(title = "Reset") {
+        WajihaActionSetting(
+            label = "Reset everything",
+            description =
+                "Clears the library index, collections, play history, scraped artwork, " +
+                    "RetroAchievements cache, scraper accounts, and app settings, then returns to first-run setup. " +
+                    "ROM files on disk stay. Installed emulators stay.",
+            actionLabel = "Reset",
+            onClick = { confirmReset = true },
+        )
+    }
+    WajihaDialog(
+        visible = confirmReset,
+        title = "Reset everything?",
+        message =
+            "This clears the library index, collections, play history, scraped artwork, " +
+                "RetroAchievements cache, scraper accounts, and app settings, then starts first-run setup. " +
+                "ROM files on disk stay. Installed emulators stay.",
+        onDismiss = { confirmReset = false },
+        onConfirm = {
+            confirmReset = false
+            settingsViewModel.resetEverything()
+        },
+        confirmText = "Reset",
+        dismissText = "Cancel",
+    )
 }
 
 @Composable

@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,14 +23,17 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -54,7 +58,6 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -77,9 +80,9 @@ import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.LocalGamepadNavController
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.ui.components.LocalUiFeedback
+import com.wajiha.ui.components.softOutlineBorder
 import com.wajiha.ui.theme.WajihaAlphas
 import com.wajiha.ui.theme.WajihaColors
-import com.wajiha.ui.theme.WajihaElevation
 import com.wajiha.ui.theme.WajihaIconSize
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
@@ -89,7 +92,10 @@ import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.koinInject
 
 /** Compact row height for multi-choice list items (denser than [SettingsCompactRowMinHeight]). */
-private val MultiChoiceItemMinHeight = 34.dp
+private val MultiChoiceItemMinHeight = 36.dp
+
+/** Select-all toolbar + ~7 option rows before internal scroll. */
+private val MultiChoiceListMaxHeight = MultiChoiceItemMinHeight * 8
 
 /** Keep focus on the header until the list has finished opening under the row. */
 private const val MultiChoiceExpandMillis = 180
@@ -154,7 +160,7 @@ internal fun SettingExpansionIcon(
     )
 }
 
-/** One selectable value in a [SettingType.MultiChoice] row. */
+/** One selectable value in a [SettingType.MultiChoice] or [SettingType.MultiSelect] row. */
 data class MultiChoiceOption(
     val value: String,
     val label: String,
@@ -175,6 +181,9 @@ enum class SettingType {
 
     /** Four or more values — collapsed row that expands into a vertical radio list. */
     MultiChoice,
+
+    /** Expandable checklist — A toggles options; B collapses (selection stays). */
+    MultiSelect,
 
     /** Integer value — Left decreases, Right increases; A also steps up. */
     Number,
@@ -211,6 +220,11 @@ fun GamepadSettingRow(
     multiChoiceOptions: List<MultiChoiceOption> = emptyList(),
     selected: String = "",
     onSelect: ((String) -> Unit)? = null,
+    /** Selected values for [SettingType.MultiSelect]. */
+    selectedValues: Set<String> = emptySet(),
+    onSelectionChange: ((Set<String>) -> Unit)? = null,
+    /** Header summary when [selectedValues] is empty (MultiSelect). */
+    emptySelectionLabel: String = "None",
     onActivate: (() -> Unit)? = null,
     onSecondaryActivate: (() -> Unit)? = null,
     onFocusedChanged: ((Boolean) -> Unit)? = null,
@@ -221,19 +235,72 @@ fun GamepadSettingRow(
     numberLabel: ((Int) -> String)? = null,
     content: (@Composable () -> Unit)? = null,
 ) {
-    if (type == SettingType.MultiChoice && (multiChoiceOptions.isNotEmpty() || options.isNotEmpty())) {
+    if (
+        (type == SettingType.MultiChoice || type == SettingType.MultiSelect) &&
+        (multiChoiceOptions.isNotEmpty() || options.isNotEmpty())
+    ) {
         val resolved =
             if (multiChoiceOptions.isNotEmpty()) {
                 multiChoiceOptions
             } else {
                 options.map { (value, display) -> MultiChoiceOption(value, display) }
             }
+        val multiSelect = type == SettingType.MultiSelect
+        val enabledValues =
+            remember(resolved) {
+                resolved.filter { it.enabled }.map { it.value }.toSet()
+            }
+        val allSelected =
+            multiSelect &&
+                enabledValues.isNotEmpty() &&
+                selectedValues.containsAll(enabledValues)
         MultiChoiceSettingRow(
             label = label,
             description = description,
             options = resolved,
-            selected = selected,
-            onSelect = onSelect,
+            selectedValues =
+                if (multiSelect) {
+                    selectedValues
+                } else {
+                    setOfNotNull(selected.takeIf { it.isNotEmpty() })
+                },
+            onOptionActivated = { value ->
+                if (multiSelect) {
+                    val next =
+                        if (value in selectedValues) {
+                            selectedValues - value
+                        } else {
+                            selectedValues + value
+                        }
+                    onSelectionChange?.invoke(next)
+                    false
+                } else {
+                    onSelect?.invoke(value)
+                    true
+                }
+            },
+            onSelectAll =
+                if (multiSelect) {
+                    {
+                        onSelectionChange?.invoke(
+                            if (allSelected) emptySet() else enabledValues,
+                        )
+                    }
+                } else {
+                    null
+                },
+            allSelected = allSelected,
+            summaryLabel =
+                if (multiSelect) {
+                    multiSelectSummaryLabel(
+                        options = resolved,
+                        selected = selectedValues,
+                        emptyLabel = emptySelectionLabel,
+                    )
+                } else {
+                    resolved.firstOrNull { it.value == selected }?.label.orEmpty()
+                },
+            multiSelect = multiSelect,
             focusRequester = focusRequester,
             focusId = focusId ?: label,
             onReset = onReset,
@@ -623,14 +690,34 @@ fun GamepadSettingRow(
     }
 }
 
+private fun multiSelectSummaryLabel(
+    options: List<MultiChoiceOption>,
+    selected: Set<String>,
+    emptyLabel: String,
+): String {
+    if (selected.isEmpty()) return emptyLabel
+    val labels = options.filter { it.value in selected }.map { it.label }
+    return when {
+        labels.isEmpty() -> emptyLabel
+        labels.size == 1 -> labels.first()
+        labels.size == 2 -> "${labels[0]}, ${labels[1]}"
+        else -> "${labels.size} selected"
+    }
+}
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun MultiChoiceSettingRow(
     label: String,
     description: String?,
     options: List<MultiChoiceOption>,
-    selected: String,
-    onSelect: ((String) -> Unit)?,
+    selectedValues: Set<String>,
+    /** Returns true when the list should collapse after the option is activated. */
+    onOptionActivated: (String) -> Boolean,
+    onSelectAll: (() -> Unit)?,
+    allSelected: Boolean,
+    summaryLabel: String,
+    multiSelect: Boolean,
     focusRequester: FocusRequester?,
     focusId: Any,
     onReset: (() -> Unit)?,
@@ -648,8 +735,12 @@ private fun MultiChoiceSettingRow(
     val headerHighlight = !useCustomNav && headerFocused
     val canReset = onReset != null && !isAtDefault
     val feedback = LocalUiFeedback.current
-    val selectedOption = options.firstOrNull { it.value == selected }
-    val selectedLabel = selectedOption?.label.orEmpty()
+    val summaryIconRes =
+        if (!multiSelect && selectedValues.size == 1) {
+            options.firstOrNull { it.value == selectedValues.first() }?.iconRes
+        } else {
+            null
+        }
     val continuity = LocalFocusContinuityController.current
     val layerId = LocalFocusLayerId.current
     val headerAnchor =
@@ -658,6 +749,7 @@ private fun MultiChoiceSettingRow(
         }
 
     val headerFocusRequester = focusRequester ?: remember { FocusRequester() }
+    val selectAllFocusRequester = remember { FocusRequester() }
     val listFocusRequesters =
         remember(options.size) {
             List(options.size) { FocusRequester() }
@@ -675,10 +767,16 @@ private fun MultiChoiceSettingRow(
         expanded = true
     }
 
-    fun selectOption(value: String) {
+    fun activateOption(value: String) {
         feedback.confirm()
-        onSelect?.invoke(value)
-        collapse()
+        if (onOptionActivated(value)) {
+            collapse()
+        }
+    }
+
+    fun activateSelectAll() {
+        feedback.confirm()
+        onSelectAll?.invoke()
     }
 
     // Expand in place under the row (no scrollHeaderToTop). Hand off focus only after
@@ -687,13 +785,17 @@ private fun MultiChoiceSettingRow(
         if (!expanded) return@LaunchedEffect
         delay(MultiChoiceExpandMillis.toLong())
         if (!expanded) return@LaunchedEffect
-        val selectedIndex =
-            options
-                .indexOfFirst { it.value == selected && it.enabled }
-                .takeIf { it >= 0 }
-                ?: options.indexOfFirst { it.enabled }.coerceAtLeast(0)
         try {
-            listFocusRequesters[selectedIndex].requestFocus()
+            if (multiSelect && onSelectAll != null && selectedValues.isEmpty()) {
+                selectAllFocusRequester.requestFocus()
+            } else {
+                val selectedIndex =
+                    options
+                        .indexOfFirst { it.value in selectedValues && it.enabled }
+                        .takeIf { it >= 0 }
+                        ?: options.indexOfFirst { it.enabled }.coerceAtLeast(0)
+                listFocusRequesters[selectedIndex].requestFocus()
+            }
         } catch (_: Exception) {
         }
     }
@@ -774,7 +876,7 @@ private fun MultiChoiceSettingRow(
                 overrideHint = overrideHint,
                 modifier = Modifier.weight(1f),
             )
-            selectedOption?.iconRes?.let { res ->
+            summaryIconRes?.let { res ->
                 Image(
                     painter = painterResource(res),
                     contentDescription = null,
@@ -783,18 +885,15 @@ private fun MultiChoiceSettingRow(
                 )
             }
             Text(
-                text = selectedLabel,
+                text = summaryLabel,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.End,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = if (expanded) "˅" else "›",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Bold,
-            )
+            SettingExpansionIcon(expanded = expanded)
         }
 
         SettingRowDescription(
@@ -817,13 +916,23 @@ private fun MultiChoiceSettingRow(
         ) {
             MultiChoicePickerPanel(
                 options = options,
-                selected = selected,
+                selectedValues = selectedValues,
+                showCheckmarks = multiSelect,
+                selectAllLabel =
+                    when {
+                        onSelectAll == null -> null
+                        allSelected -> "Clear"
+                        else -> "Select all"
+                    },
+                selectAllSelected = allSelected,
+                selectAllFocusRequester = selectAllFocusRequester,
+                onSelectAll = onSelectAll?.let { { activateSelectAll() } },
                 canReset = canReset,
                 onReset = onReset,
                 useCustomNav = useCustomNav,
                 listFocusRequesters = listFocusRequesters,
                 focusId = focusId,
-                onSelect = ::selectOption,
+                onSelect = ::activateOption,
             )
         }
     }
@@ -832,7 +941,12 @@ private fun MultiChoiceSettingRow(
 @Composable
 private fun MultiChoicePickerPanel(
     options: List<MultiChoiceOption>,
-    selected: String,
+    selectedValues: Set<String>,
+    showCheckmarks: Boolean,
+    selectAllLabel: String?,
+    selectAllSelected: Boolean,
+    selectAllFocusRequester: FocusRequester,
+    onSelectAll: (() -> Unit)?,
     canReset: Boolean,
     onReset: (() -> Unit)?,
     useCustomNav: Boolean,
@@ -841,19 +955,21 @@ private fun MultiChoicePickerPanel(
     onSelect: (String) -> Unit,
 ) {
     val feedback = LocalUiFeedback.current
-    Surface(
+    // Flush under the header: hairline seam + indent. Clip stays on the parent group —
+    // a nested list viewport paints magenta edge artifacts on short option lists.
+    Column(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(top = WajihaSpacing.xs / 2),
-        shape = WajihaShapes.card,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = WajihaElevation.low,
+                .padding(start = WajihaSpacing.sm)
+                .heightIn(max = MultiChoiceListMaxHeight),
     ) {
+        WajihaSettingDivider()
         Column(
             modifier =
                 Modifier
-                    .padding(vertical = WajihaSpacing.micro)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .onPreviewKeyEvent { event ->
                         if (GamepadKeys.isY(event.type, event.key) && canReset) {
                             feedback.confirm()
@@ -864,10 +980,22 @@ private fun MultiChoicePickerPanel(
                         }
                     },
         ) {
+            if (selectAllLabel != null && onSelectAll != null) {
+                MultiSelectSelectAllRow(
+                    label = selectAllLabel,
+                    selected = selectAllSelected,
+                    focusRequester = selectAllFocusRequester,
+                    useCustomNav = useCustomNav,
+                    focusId = "$focusId:selectAll",
+                    onSelect = onSelectAll,
+                )
+                WajihaSettingDivider()
+            }
             options.forEachIndexed { index, option ->
                 MultiChoiceListItem(
                     option = option,
-                    selected = option.value == selected,
+                    selected = option.value in selectedValues,
+                    showCheckmark = showCheckmarks,
                     focusRequester = listFocusRequesters[index],
                     useCustomNav = useCustomNav,
                     focusId = "$focusId:option:${option.value}",
@@ -879,9 +1007,126 @@ private fun MultiChoicePickerPanel(
 }
 
 @Composable
+private fun MultiSelectCheckBox(
+    selected: Boolean,
+    enabled: Boolean = true,
+) {
+    val shape = WajihaShapes.button
+    Box(
+        modifier =
+            Modifier
+                .size(WajihaIconSize.sm)
+                .clip(shape)
+                .then(
+                    if (selected) {
+                        Modifier.background(MaterialTheme.colorScheme.primary)
+                    } else {
+                        Modifier.border(border = softOutlineBorder(), shape = shape)
+                    },
+                ).alpha(if (enabled) 1f else 0.45f),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(WajihaIconSize.xs),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MultiSelectSelectAllRow(
+    label: String,
+    selected: Boolean,
+    focusRequester: FocusRequester,
+    useCustomNav: Boolean,
+    focusId: Any,
+    onSelect: () -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val highlight = !useCustomNav && focused
+    val continuity = LocalFocusContinuityController.current
+    val layerId = LocalFocusLayerId.current
+    val anchor =
+        remember(continuity, layerId, focusId) {
+            continuity?.takeIf { layerId.isNotEmpty() }?.anchor(focusId, layerId)
+        }
+    val rowShape = WajihaShapes.focus
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = MultiChoiceItemMinHeight)
+                .clip(rowShape)
+                .background(
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = WajihaAlphas.divider),
+                ).wajihaFocusIndicator(
+                    highlighted = highlight,
+                    shape = rowShape,
+                    focusAnchor = anchor,
+                ).focusRequester(focusRequester)
+                .then(
+                    if (!useCustomNav) {
+                        Modifier
+                            .onFocusChanged {
+                                focused = it.isFocused
+                                if (it.isFocused && anchor != null) {
+                                    continuity?.claim(anchor, FocusClaimSource.Compose)
+                                }
+                            }.wajihaGamepadFocus()
+                            .onPreviewKeyEvent { event ->
+                                if (GamepadKeys.isConfirm(event.type, event.key)) {
+                                    onSelect()
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                    } else {
+                        Modifier
+                    },
+                ).pointerInput(label) {
+                    detectTapGestures {
+                        if (anchor != null) {
+                            continuity?.claim(anchor, FocusClaimSource.Touch)
+                        }
+                        try {
+                            focusRequester.requestFocus()
+                        } catch (_: Exception) {
+                        }
+                        onSelect()
+                    }
+                }.padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+    ) {
+        MultiSelectCheckBox(selected = selected)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color =
+                if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
 private fun MultiChoiceListItem(
     option: MultiChoiceOption,
     selected: Boolean,
+    showCheckmark: Boolean,
     focusRequester: FocusRequester,
     useCustomNav: Boolean,
     focusId: Any,
@@ -899,7 +1144,7 @@ private fun MultiChoiceListItem(
     val labelColor =
         when {
             !option.enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
-            selected -> MaterialTheme.colorScheme.onSurface
+            selected -> MaterialTheme.colorScheme.primary
             else -> MaterialTheme.colorScheme.onSurface
         }
     val detailColor =
@@ -908,6 +1153,13 @@ private fun MultiChoiceListItem(
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
         }
+    val leadingColor =
+        when {
+            !option.enabled -> detailColor
+            selected -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    val rowShape = WajihaShapes.focus
 
     Row(
         modifier =
@@ -915,29 +1167,18 @@ private fun MultiChoiceListItem(
                 .fillMaxWidth()
                 .defaultMinSize(minHeight = MultiChoiceItemMinHeight)
                 .focusProperties { canFocus = option.enabled }
-                .background(
-                    when {
-                        highlight -> {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                        }
-
-                        selected && option.enabled -> {
-                            MaterialTheme.colorScheme.primaryContainer.copy(
-                                alpha = WajihaAlphas.outlineSubtle,
-                            )
-                        }
-
-                        selected && !option.enabled -> {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-                        }
-
-                        else -> {
-                            Color.Transparent
-                        }
+                .clip(rowShape)
+                .then(
+                    if (showCheckmark && selected && option.enabled) {
+                        Modifier.background(
+                            MaterialTheme.colorScheme.primary.copy(alpha = WajihaAlphas.divider),
+                        )
+                    } else {
+                        Modifier
                     },
                 ).wajihaFocusIndicator(
                     highlighted = highlight,
-                    shape = RectangleShape,
+                    shape = rowShape,
                     focusAnchor = anchor,
                 ).focusRequester(focusRequester)
                 .then(
@@ -977,10 +1218,13 @@ private fun MultiChoiceListItem(
                     } else {
                         Modifier
                     },
-                ).padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.micro),
+                ).padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
+        if (showCheckmark) {
+            MultiSelectCheckBox(selected = selected, enabled = option.enabled)
+        }
         val iconRes = option.iconRes
         if (iconRes != null) {
             Image(
@@ -992,17 +1236,11 @@ private fun MultiChoiceListItem(
                         .then(if (option.enabled) Modifier else Modifier.alpha(disabledAlpha)),
                 contentScale = ContentScale.Fit,
             )
-        } else {
-            val leading = option.icon ?: if (selected) "●" else "○"
+        } else if (option.icon != null) {
             Text(
-                text = leading,
+                text = option.icon,
                 style = MaterialTheme.typography.labelMedium,
-                color =
-                    when {
-                        !option.enabled -> detailColor
-                        selected -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                color = leadingColor,
                 modifier = Modifier.size(WajihaIconSize.md),
                 textAlign = TextAlign.Center,
             )
@@ -1014,6 +1252,7 @@ private fun MultiChoiceListItem(
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = labelColor,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (!option.description.isNullOrBlank()) {
                 Text(
@@ -1021,16 +1260,9 @@ private fun MultiChoiceListItem(
                     style = MaterialTheme.typography.labelSmall,
                     color = detailColor,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
-        if (selected && option.enabled) {
-            Text(
-                text = "✓",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
         }
     }
 }

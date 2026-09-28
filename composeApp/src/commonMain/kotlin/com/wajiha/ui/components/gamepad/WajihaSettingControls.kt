@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
@@ -287,6 +288,11 @@ fun WajihaSettingPanel(
     folderPanel: Boolean = false,
     scrollable: Boolean = true,
     focusRestorer: SettingSectionFocusRestorer? = null,
+    /**
+     * Panel fill. Default surface container; pass [Color.Transparent] (or a
+     * low-alpha glass) when a hero/backdrop should show through (Now Running).
+     */
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
     sectionContent: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = if (folderPanel) WajihaShapes.folderPanel else WajihaShapes.card
@@ -310,7 +316,7 @@ fun WajihaSettingPanel(
                         },
                     ),
             shape = shape,
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            color = containerColor,
         ) {
             Column(
                 modifier =
@@ -459,6 +465,42 @@ fun WajihaMultiChoiceSetting(
         multiChoiceOptions = choiceOptions,
         selected = selected,
         onSelect = onSelect,
+        focusRequester = focusRequester,
+        onReset = onReset,
+        isAtDefault = selected == defaultValue,
+        overridden = overridden,
+        overrideHint = overrideHint,
+        onFocusedChanged = onFocusedChanged,
+    )
+}
+
+/**
+ * Expandable checklist — A toggles options without collapsing; B / header closes.
+ * Empty [selected] is a valid state (caller chooses the empty summary via [emptySelectionLabel]).
+ */
+@Composable
+fun WajihaMultiSelectSetting(
+    label: String,
+    description: String,
+    choiceOptions: List<MultiChoiceOption>,
+    selected: Set<String>,
+    onSelectionChange: (Set<String>) -> Unit,
+    defaultValue: Set<String> = emptySet(),
+    onReset: (() -> Unit)? = null,
+    emptySelectionLabel: String = "None",
+    focusRequester: FocusRequester? = null,
+    onFocusedChanged: ((Boolean) -> Unit)? = null,
+    overridden: Boolean = false,
+    overrideHint: String = "Changed from global default",
+) {
+    GamepadSettingRow(
+        label = label,
+        description = description,
+        type = SettingType.MultiSelect,
+        multiChoiceOptions = choiceOptions,
+        selectedValues = selected,
+        onSelectionChange = onSelectionChange,
+        emptySelectionLabel = emptySelectionLabel,
         focusRequester = focusRequester,
         onReset = onReset,
         isAtDefault = selected == defaultValue,

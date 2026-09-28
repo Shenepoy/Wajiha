@@ -1,5 +1,6 @@
 package com.wajiha.domain.repository
 
+import com.wajiha.data.db.CollectionCountRow
 import com.wajiha.data.db.CollectionDao
 import com.wajiha.data.db.CollectionEntity
 import com.wajiha.data.db.CollectionGameCrossRef
@@ -11,6 +12,10 @@ class CollectionRepository(
 ) {
     fun observeAll(): Flow<List<CollectionEntity>> = collectionDao.observeAll()
 
+    fun observeCounts(): Flow<List<CollectionCountRow>> = collectionDao.observeCounts()
+
+    fun observeCollectionIds(gameId: Long): Flow<List<Long>> = collectionDao.observeCollectionIds(gameId)
+
     fun observeGames(collectionId: Long): Flow<List<GameEntity>> = collectionDao.observeGames(collectionId)
 
     suspend fun create(
@@ -18,7 +23,10 @@ class CollectionRepository(
         sortIndex: Int = 0,
     ): Long = collectionDao.insert(CollectionEntity(name = name, sortIndex = sortIndex))
 
-    suspend fun delete(id: Long) = collectionDao.delete(id)
+    suspend fun delete(id: Long) {
+        collectionDao.removeAllGames(id)
+        collectionDao.delete(id)
+    }
 
     suspend fun addGame(
         collectionId: Long,

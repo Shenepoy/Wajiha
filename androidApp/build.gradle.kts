@@ -1,3 +1,4 @@
+import com.android.build.api.variant.FilterConfiguration.FilterType.ABI
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.File
 
@@ -7,9 +8,9 @@ plugins {
 }
 
 val wajihaVersionName =
-    providers.gradleProperty("wajiha.versionName").orNull?.takeIf { it.isNotBlank() } ?: "0.2.0"
+    providers.gradleProperty("wajiha.versionName").orNull?.takeIf { it.isNotBlank() } ?: "0.3.0"
 val wajihaVersionCode =
-    providers.gradleProperty("wajiha.versionCode").orNull?.toIntOrNull() ?: 2
+    providers.gradleProperty("wajiha.versionCode").orNull?.toIntOrNull() ?: 3
 
 fun gradleOrEnv(
     property: String,
@@ -28,6 +29,16 @@ val releaseSigningConfigured =
         !releaseKeyAlias.isNullOrBlank() &&
         !releaseKeyPassword.isNullOrBlank() &&
         File(releaseKeystorePath).isFile
+
+val abiSplitsEnabled = providers.gradleProperty("wajiha.abiSplits").orNull == "true"
+
+val abiVersionOffsets =
+    linkedMapOf(
+        "armeabi-v7a" to 1,
+        "arm64-v8a" to 2,
+        "x86" to 3,
+        "x86_64" to 4,
+    )
 
 android {
     namespace = "com.wajiha.android"
@@ -50,6 +61,10 @@ android {
         versionName = wajihaVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += abiVersionOffsets.keys
+        }
 
         buildConfigField(
             "String",
@@ -87,6 +102,16 @@ android {
             }
         }
     }
+
+    splits {
+        abi {
+            isEnable = abiSplitsEnabled
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -94,6 +119,18 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abi = output.filters.find { it.filterType == ABI }?.identifier
+            val offset = abiVersionOffsets[abi]
+            if (offset != null) {
+                output.versionCode.set(wajihaVersionCode * 1000 + offset)
+            }
+        }
     }
 }
 

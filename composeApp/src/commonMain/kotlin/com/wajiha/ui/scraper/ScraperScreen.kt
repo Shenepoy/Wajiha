@@ -82,6 +82,7 @@ import com.wajiha.ui.components.gamepad.WajihaFieldMessage
 import com.wajiha.ui.components.gamepad.WajihaFieldMessageSeverity
 import com.wajiha.ui.components.gamepad.WajihaFieldMessageState
 import com.wajiha.ui.components.gamepad.WajihaMultiChoiceSetting
+import com.wajiha.ui.components.gamepad.WajihaMultiSelectSetting
 import com.wajiha.ui.components.gamepad.WajihaNumberSetting
 import com.wajiha.ui.components.gamepad.WajihaSettingDivider
 import com.wajiha.ui.components.gamepad.WajihaSettingFullscreenPage
@@ -219,6 +220,40 @@ fun ScraperSubpageFullscreen(
     modifier: Modifier = Modifier,
     contentFocusRequester: FocusRequester? = null,
 ) {
+    val apiLogs by viewModel.apiLogs.collectAsState()
+    var showApiLogs by remember(page) { mutableStateOf(false) }
+    val apiLogsOpenFocus = remember { FocusRequester() }
+    var restoreApiLogsOpenFocus by remember { mutableStateOf(false) }
+
+    if (page == ScraperSubpage.Batch && showApiLogs) {
+        ScrapeApiLogsPage(
+            entries = apiLogs,
+            onBack = {
+                restoreApiLogsOpenFocus = true
+                showApiLogs = false
+            },
+            onClear = viewModel::clearApiLogs,
+            modifier = modifier,
+            firstFocusRequester = contentFocusRequester,
+        )
+        return
+    }
+
+    // Key on showApiLogs so clearing the restore flag cannot cancel requestFocus.
+    LaunchedEffect(showApiLogs) {
+        if (showApiLogs || !restoreApiLogsOpenFocus) return@LaunchedEffect
+        restoreApiLogsOpenFocus = false
+        repeat(2) { withFrameNanos { } }
+        try {
+            apiLogsOpenFocus.requestFocus()
+        } catch (_: Exception) {
+            try {
+                contentFocusRequester?.requestFocus()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     WajihaSettingFullscreenPage(
         title = page.title,
         onBack = onBack,
@@ -229,6 +264,18 @@ fun ScraperSubpageFullscreen(
                 page = page,
                 viewModel = viewModel,
                 firstFocusRequester = contentFocusRequester,
+                onOpenApiLogs =
+                    if (page == ScraperSubpage.Batch) {
+                        { showApiLogs = true }
+                    } else {
+                        null
+                    },
+                apiLogsFocusRequester =
+                    if (page == ScraperSubpage.Batch) {
+                        apiLogsOpenFocus
+                    } else {
+                        null
+                    },
             )
         }
     }
@@ -287,10 +334,17 @@ private fun ScraperSubpageBody(
     page: ScraperSubpage,
     viewModel: ScraperViewModel,
     firstFocusRequester: FocusRequester? = null,
+    onOpenApiLogs: (() -> Unit)? = null,
+    apiLogsFocusRequester: FocusRequester? = null,
 ) {
     when (page) {
         ScraperSubpage.Batch -> {
-            ScraperBatchBlock(viewModel, firstFocusRequester = firstFocusRequester)
+            ScraperBatchBlock(
+                viewModel,
+                firstFocusRequester = firstFocusRequester,
+                onOpenApiLogs = onOpenApiLogs,
+                apiLogsFocusRequester = apiLogsFocusRequester,
+            )
         }
 
         ScraperSubpage.Sources -> {
@@ -1460,11 +1514,8 @@ private fun isPlatformSourceOverridden(
     return (sourceId in platformSources) != (sourceId in globalSources)
 }
 
-private const val AllScraperSources = "all"
-
 private val scraperRunSourceOptions =
     listOf(
-        MultiChoiceOption(AllScraperSources, "All enabled", "Use the configured source priority."),
         MultiChoiceOption("screenscraper", "ScreenScraper", "Metadata and media from ScreenScraper."),
         MultiChoiceOption("steamgriddb", "SteamGridDB", "Community artwork from SteamGridDB."),
         MultiChoiceOption("libretro", "Libretro", "No-account thumbnail library."),
@@ -1477,28 +1528,22 @@ private val scraperRunSourceOptions =
 private fun ScraperBatchBlock(
     viewModel: ScraperViewModel,
     firstFocusRequester: FocusRequester? = null,
+    onOpenApiLogs: (() -> Unit)? = null,
+    apiLogsFocusRequester: FocusRequester? = null,
 ) {
     val progress by viewModel.progress.collectAsState()
     val inUsePlatforms by viewModel.inUsePlatforms.collectAsState()
     val batchFeedback by viewModel.batchFeedback.collectAsState()
     val apiLogs by viewModel.apiLogs.collectAsState()
     var issuesExpanded by remember { mutableStateOf(false) }
-    var showApiLogs by remember { mutableStateOf(false) }
     var mode by remember { mutableStateOf(ScrapeUiMode.FillGaps) }
-    var selectedSource by remember { mutableStateOf(AllScraperSources) }
-    val selectedSourceId = selectedSource.takeUnless { it == AllScraperSources }
-    val selectedSourceLabel =
-        scraperRunSourceOptions.firstOrNull { it.value == selectedSource }?.label
-            ?: "All enabled"
-    val sourcesReady = viewModel.hasConfiguredSources(null, selectedSourceId)
-    val runPolicy = mode.toPolicy().copy(sourceId = selectedSourceId)
 
-    ScrapeApiLogsDialog(
-        visible = showApiLogs,
-        entries = apiLogs,
-        onDismiss = { showApiLogs = false },
-        onClear = viewModel::clearApiLogs,
-    )
+    /** Empty = use every source enabled under Sources. */
+    var selectedSources by remember { mutableStateOf(emptySet<String>()) }
+    val selectedSourceIds = selectedSources.toList().takeIf { it.isNotEmpty() }
+    val sourcesReady = viewModel.hasConfiguredSources(null, selectedSourceIds)
+    val runPolicy = mode.toPolicy().copy(sourceIds = selectedSourceIds)
+    val openLogs = onOpenApiLogs
 
     Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.smPlus)) {
         batchFeedback?.let { feedback ->
@@ -1565,6 +1610,7 @@ private fun ScraperBatchBlock(
                 GamepadSettingRow(
                     label = if (progress.paused) "Batch paused" else "Batch running",
                     type = SettingType.Action,
+                    focusRequester = firstFocusRequester,
                     onActivate =
                         if (progress.paused) {
                             viewModel::resumeBatch
@@ -1586,27 +1632,30 @@ private fun ScraperBatchBlock(
                         )
                     },
                 )
-                WajihaActionSetting(
-                    label = "API logs",
-                    actionLabel = "Open",
-                    onClick = { showApiLogs = true },
-                    labelMeta = apiLogs.size.toString(),
-                )
+                if (openLogs != null) {
+                    WajihaActionSetting(
+                        label = "API logs",
+                        actionLabel = "Open",
+                        onClick = openLogs,
+                        labelMeta = apiLogs.size.toString(),
+                        focusRequester = apiLogsFocusRequester,
+                    )
+                }
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(WajihaSpacing.sm)) {
-                GamepadSettingRow(
+                WajihaMultiSelectSetting(
                     label = "Scraper",
                     description =
-                        if (selectedSourceId == null) {
+                        if (selectedSources.isEmpty()) {
                             "Use every source enabled under Sources."
                         } else {
-                            "Use only $selectedSourceLabel for this run."
+                            "Use only the selected scraper(s) for this run."
                         },
-                    type = SettingType.MultiChoice,
-                    multiChoiceOptions = scraperRunSourceOptions,
-                    selected = selectedSource,
-                    onSelect = { selectedSource = it },
+                    choiceOptions = scraperRunSourceOptions,
+                    selected = selectedSources,
+                    onSelectionChange = { selectedSources = it },
+                    emptySelectionLabel = "All enabled",
                     focusRequester = firstFocusRequester,
                 )
                 ScrapeModeSelector(
@@ -1627,12 +1676,15 @@ private fun ScraperBatchBlock(
                         onClick = { viewModel.retryFailedBatch(null) },
                     )
                 }
-                WajihaActionSetting(
-                    label = "API logs",
-                    actionLabel = "Open",
-                    onClick = { showApiLogs = true },
-                    labelMeta = apiLogs.size.toString(),
-                )
+                if (openLogs != null) {
+                    WajihaActionSetting(
+                        label = "API logs",
+                        actionLabel = "Open",
+                        onClick = openLogs,
+                        labelMeta = apiLogs.size.toString(),
+                        focusRequester = apiLogsFocusRequester,
+                    )
+                }
                 if (progress.done > 0) {
                     WajihaFieldMessage(
                         WajihaFieldMessageState(
@@ -1681,7 +1733,7 @@ private fun ScraperBatchBlock(
                     if (index > 0) WajihaSettingDivider()
                     val platformReady =
                         !progress.running &&
-                            viewModel.hasConfiguredSources(platform.id, selectedSourceId)
+                            viewModel.hasConfiguredSources(platform.id, selectedSourceIds)
                     val actionLabel =
                         when (mode) {
                             ScrapeUiMode.Force -> "Force"

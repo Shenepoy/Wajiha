@@ -46,7 +46,6 @@ fun SessionGridTile(
     selected: Boolean,
     onSelect: () -> Unit,
     onOpen: () -> Unit,
-    onClose: () -> Unit,
     onLongPress: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     gamepadFocusable: Boolean = true,
@@ -84,11 +83,6 @@ fun SessionGridTile(
                     left = FocusRequester.Cancel
                 }.onPreviewKeyEvent { event ->
                     when {
-                        GamepadKeys.isY(event.type, event.key) -> {
-                            onClose()
-                            true
-                        }
-
                         GamepadKeys.isConfirm(event.type, event.key) -> {
                             onOpen()
                             true

@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,8 +54,12 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.wajiha.input.GamepadHintButton
@@ -73,9 +78,8 @@ import com.wajiha.state.SystemNotification
 import com.wajiha.state.SystemNotificationKind
 import com.wajiha.state.SystemNotificationStore
 import com.wajiha.ui.components.WajihaEmptyState
-import com.wajiha.ui.components.gamepad.GamepadButton
-import com.wajiha.ui.components.gamepad.GamepadHintGlyph
 import com.wajiha.ui.components.gamepad.GamepadList
+import com.wajiha.ui.components.gamepad.WajihaGlyphAction
 import com.wajiha.ui.theme.WajihaAlphas
 import com.wajiha.ui.theme.WajihaIconSize
 import com.wajiha.ui.theme.WajihaMotion
@@ -91,15 +95,33 @@ private const val PeekDurationMs = 4_000L
 private val NotificationPanelMaxHeight = 220.dp
 
 /**
+ * Notch size for settings-hero surfaces that carve around the status pill.
+ * Zero when the full pill is hidden (sliver / non-settings).
+ */
+data class StatusChromeCarveReserve(
+    val width: Dp = 0.dp,
+    val height: Dp = 0.dp,
+) {
+    val isActive: Boolean get() = width > 0.dp && height > 0.dp
+}
+
+val LocalStatusChromeCarveReserve =
+    compositionLocalOf { StatusChromeCarveReserve() }
+
+/**
  * Top-right status chrome on the hero screen: clock, connection, battery,
  * and notification indicator. R2 opens the in-app notification panel.
  *
  * When [reserveTopEnd] is true (hero chrome owns the corner), the pill tucks
  * to a sliver until a notification peeks or the panel opens.
+ *
+ * [onFullPillSizeChanged] reports the full chip size so settings hero can carve
+ * a top-end notch; `DpSize.Zero` while the pill is tucked.
  */
 @Composable
 fun BoxScope.TopStatusBar(
     reserveTopEnd: Boolean = false,
+    onFullPillSizeChanged: (DpSize) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val controls = koinInject<SystemControls>()
@@ -157,6 +179,14 @@ fun BoxScope.TopStatusBar(
     val unread = items.count { !it.read }
     val showFullPill = !reserveTopEnd || panelOpen || peeking
     val batteryLabel = buildBatteryLabel(status.batteryPercent, status.charging)
+    val density = LocalDensity.current
+    val reportPillSize = rememberUpdatedState(onFullPillSizeChanged)
+
+    LaunchedEffect(showFullPill) {
+        if (!showFullPill) {
+            reportPillSize.value(DpSize.Zero)
+        }
+    }
 
     Column(
         modifier =
@@ -184,6 +214,14 @@ fun BoxScope.TopStatusBar(
                     unread = unread,
                     hasNotifications = items.isNotEmpty(),
                     onClick = { notifications.togglePanel() },
+                    modifier =
+                        Modifier.onSizeChanged { size ->
+                            reportPillSize.value(
+                                with(density) {
+                                    DpSize(size.width.toDp(), size.height.toDp())
+                                },
+                            )
+                        },
                 )
             } else {
                 StatusBarSliver(onClick = { notifications.openPanel() })
@@ -239,11 +277,12 @@ private fun StatusBarChip(
     unread: Int,
     hasNotifications: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     Row(
         modifier =
-            Modifier
+            modifier
                 .clip(WajihaShapes.chip)
                 .background(scheme.surfaceContainerLow)
                 .border(
@@ -329,6 +368,10 @@ private fun NotificationPanel(
         rememberUpdatedState<(KeyEvent) -> Boolean>(
             newValue = { event ->
                 if (navController.handleKeyEvent(event)) return@rememberUpdatedState true
+                if (items.isNotEmpty() && GamepadKeys.isX(event.type, event.key)) {
+                    onClearAll()
+                    return@rememberUpdatedState true
+                }
                 // Bridge dispatches D-pad/A/X/Y/L1/R1 down the layer stack when the
                 // top handler returns false — eat those so the grid/settings under
                 // us cannot move (empty list and list edges used to leak).
@@ -393,21 +436,18 @@ private fun NotificationPanel(
                             horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
                         ) {
                             if (items.isNotEmpty()) {
-                                GamepadButton(
-                                    text = "Clear",
+                                WajihaGlyphAction(
+                                    button = GamepadHintButton.X,
+                                    label = "Clear",
                                     onClick = onClearAll,
                                     outlined = true,
                                     gamepadFocusable = false,
                                 )
                             }
-                            Text(
-                                text = "To close",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = scheme.onSurfaceVariant,
-                            )
-                            GamepadHintGlyph(
+                            WajihaGlyphAction(
                                 button = GamepadHintButton.R2,
-                                size = WajihaIconSize.sm,
+                                label = "To close",
+                                glyphAtEnd = true,
                             )
                         }
                     }

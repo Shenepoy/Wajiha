@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -87,7 +88,12 @@ import com.wajiha.input.LocalFocusLayerId
 import com.wajiha.input.wajihaGamepadFocus
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
+import com.wajiha.ui.components.WajihaContextMenuDivider
+import com.wajiha.ui.components.WajihaContextMenuExpansion
 import com.wajiha.ui.components.WajihaContextMenuMetrics
+import com.wajiha.ui.components.WajihaContextMenuPanel
+import com.wajiha.ui.components.WajihaContextMenuRow
+import com.wajiha.ui.components.WajihaContextMenuScrim
 import com.wajiha.ui.components.WajihaDialog
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
 import com.wajiha.ui.theme.FocusBorderStyle
@@ -104,10 +110,6 @@ import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
-private val ContextMenuAnimMs = 160
-private val ContextMenuMarqueeIdleMs = 1500
-private val ContextMenuMarqueePxPerSec = 40f
-
 private enum class PendingConfirm { None, RemoveFromLibrary, DeleteFile }
 
 private enum class MenuSide { Right, Left, Above, Below }
@@ -117,6 +119,7 @@ private enum class ContextMenuFocusZone {
     None,
     Open,
     Info,
+    Collections,
     Delete,
     OpenNested,
     DeleteNested,
@@ -128,6 +131,7 @@ private enum class MenuNavId {
     TopLaunch,
     BottomLaunch,
     Info,
+    Collection,
     Delete,
     RemoveLib,
     DeleteFile,
@@ -145,6 +149,7 @@ private fun menuNavItems(
             if (dualDisplay) add(MenuNavId.BottomLaunch)
         }
         add(MenuNavId.Info)
+        add(MenuNavId.Collection)
         add(MenuNavId.Delete)
         if (deleteExpanded) {
             add(MenuNavId.RemoveLib)
@@ -161,6 +166,8 @@ private fun MenuNavId.toFocusZone(): ContextMenuFocusZone =
         -> ContextMenuFocusZone.OpenNested
 
         MenuNavId.Info -> ContextMenuFocusZone.Info
+
+        MenuNavId.Collection -> ContextMenuFocusZone.Collections
 
         MenuNavId.Delete -> ContextMenuFocusZone.Delete
 
@@ -271,362 +278,6 @@ data class GameContextTarget(
     val gameName: String,
 )
 
-@Composable
-private fun ContextMenuDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = WajihaSpacing.sm),
-        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
-        thickness = 0.5.dp,
-    )
-}
-
-@Composable
-private fun ContextMenuTitleText(
-    text: String,
-    modifier: Modifier = Modifier,
-) {
-    val textStyle = MaterialTheme.typography.titleSmall
-    val textMeasurer = rememberTextMeasurer()
-    val density = LocalDensity.current
-
-    BoxWithConstraints(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .clip(WajihaShapes.focus),
-    ) {
-        val containerWidthPx = with(density) { maxWidth.toPx() }
-        val textLayoutResult =
-            remember(text, containerWidthPx) {
-                textMeasurer.measure(
-                    text = text,
-                    style = textStyle.copy(fontWeight = FontWeight.SemiBold),
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
-        val textWidthPx = textLayoutResult.size.width.toFloat()
-        val scrollDistance = (textWidthPx - containerWidthPx).coerceAtLeast(0f)
-        val overflow = scrollDistance > 0f
-        val offsetX = remember(text) { Animatable(0f) }
-
-        LaunchedEffect(text, overflow, scrollDistance) {
-            if (!overflow) {
-                offsetX.snapTo(0f)
-                return@LaunchedEffect
-            }
-            val durationMs =
-                ((scrollDistance / ContextMenuMarqueePxPerSec) * 1000f)
-                    .roundToInt()
-                    .coerceIn(1500, 10_000)
-            while (true) {
-                offsetX.snapTo(0f)
-                delay(ContextMenuMarqueeIdleMs.toLong())
-                offsetX.animateTo(-scrollDistance, tween(durationMs))
-                delay(ContextMenuMarqueeIdleMs.toLong())
-            }
-        }
-
-        Text(
-            text = text,
-            style = textStyle,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Visible,
-            softWrap = false,
-            modifier = Modifier.offset { IntOffset(offsetX.value.roundToInt(), 0) },
-        )
-    }
-}
-
-@Composable
-private fun ContextMenuRow(
-    label: String,
-    icon: ImageVector? = null,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    nested: Boolean = false,
-    destructive: Boolean = false,
-    expandable: Boolean = false,
-    expanded: Boolean = false,
-    shortcutHint: String? = null,
-    focusRequester: FocusRequester? = null,
-    /** Bridge/nav highlight when Compose focus cannot attach (secondary display). */
-    forceHighlight: Boolean = false,
-    onFocusGained: () -> Unit = {},
-) {
-    var focused by remember { mutableStateOf(false) }
-    val highlighted = focused || forceHighlight
-    val rowHeight = if (nested) WajihaContextMenuMetrics.nestedRowHeight else WajihaContextMenuMetrics.rowHeight
-    val startPad =
-        when {
-            nested && icon != null -> WajihaSpacing.sm
-            nested -> WajihaSpacing.sm + WajihaContextMenuMetrics.iconSlot + WajihaSpacing.xs
-            else -> WajihaSpacing.sm
-        }
-    val labelColor =
-        when {
-            destructive -> MaterialTheme.colorScheme.error
-            else -> MaterialTheme.colorScheme.onSurface
-        }
-    val iconColor =
-        when {
-            destructive -> MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
-            nested -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        }
-
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = rowHeight)
-                .clip(WajihaShapes.focus)
-                .wajihaFocusIndicator(highlighted = highlighted, shape = WajihaShapes.focus)
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .onFocusChanged { state ->
-                    focused = state.isFocused
-                    if (state.isFocused) onFocusGained()
-                }.wajihaGamepadFocus()
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when {
-                        expandable -> {
-                            when {
-                                !expanded && (
-                                    event.key == Key.DirectionRight ||
-                                        GamepadKeys.isConfirm(event.type, event.key)
-                                ) -> {
-                                    onClick()
-                                    true
-                                }
-
-                                expanded && (
-                                    event.key == Key.DirectionLeft ||
-                                        event.key == Key.DirectionUp
-                                ) -> {
-                                    onClick()
-                                    true
-                                }
-
-                                else -> {
-                                    false
-                                }
-                            }
-                        }
-
-                        GamepadKeys.isConfirm(event.type, event.key) -> {
-                            onClick()
-                            true
-                        }
-
-                        else -> {
-                            false
-                        }
-                    }
-                }.pointerInput(onClick) { detectTapGestures { onClick() } }
-                .padding(
-                    start = startPad,
-                    end = WajihaSpacing.sm,
-                    top = 2.dp,
-                    bottom = 2.dp,
-                ),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
-    ) {
-        if (icon != null) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier =
-                    Modifier.size(
-                        if (nested) WajihaIconSize.xs else WajihaContextMenuMetrics.iconSlot,
-                    ),
-                tint = iconColor,
-            )
-        }
-        Text(
-            text = label,
-            style =
-                if (nested) {
-                    MaterialTheme.typography.bodySmall
-                } else {
-                    MaterialTheme.typography.bodyMedium
-                },
-            fontWeight =
-                when {
-                    nested -> FontWeight.Normal
-                    else -> FontWeight.Medium
-                },
-            color = labelColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (shortcutHint != null && highlighted) {
-            Text(
-                text = shortcutHint,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ContextMenuInlineExpansion(
-    visible: Boolean,
-    content: @Composable () -> Unit,
-) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = expandVertically(animationSpec = tween(ContextMenuAnimMs)) + fadeIn(tween(ContextMenuAnimMs)),
-        exit = shrinkVertically(animationSpec = tween(ContextMenuAnimMs)) + fadeOut(tween(ContextMenuAnimMs)),
-    ) {
-        Column {
-            content()
-        }
-    }
-}
-
-/**
- * Full-screen scrim with a rounded cutout for the selected tile.
- * Hosted inside [WajihaScreen] content so [GamepadActionBar] stays undimmed.
- */
-@Composable
-private fun ContextMenuDimScrim(
-    tileCutoutRoot: Rect?,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val scrimColor = WajihaColors.MenuScrim
-    val density = LocalDensity.current
-    val focusStyle = LocalFocusIndicatorStyle.current
-    val ringPadPx =
-        with(density) {
-            when (focusStyle.borderStyle) {
-                FocusBorderStyle.Glow,
-                FocusBorderStyle.Neon,
-                FocusBorderStyle.Aura,
-                FocusBorderStyle.SoftPulse,
-                FocusBorderStyle.GradientPulse,
-                -> focusStyle.selectedThickness.toPx() * 3f
-
-                FocusBorderStyle.Double -> focusStyle.selectedThickness.toPx() * 2f
-
-                else -> focusStyle.selectedThickness.toPx()
-            }
-        }
-    val tileCornerRadiusPx =
-        with(density) {
-            WajihaShapes.tileCornerRadius.toPx() * WajihaFocus.selectedScale
-        }
-    var overlayRootBounds by remember { mutableStateOf<Rect?>(null) }
-
-    val localTileCutout =
-        remember(tileCutoutRoot, overlayRootBounds, ringPadPx) {
-            val overlay = overlayRootBounds ?: return@remember null
-            val tile = tileCutoutRoot ?: return@remember null
-            val scaled = inflateForTileScale(tile, WajihaFocus.selectedScale, ringPadPx)
-            Rect(
-                left = scaled.left - overlay.left,
-                top = scaled.top - overlay.top,
-                right = scaled.right - overlay.left,
-                bottom = scaled.bottom - overlay.top,
-            )
-        }
-
-    Box(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .onGloballyPositioned { overlayRootBounds = it.boundsInRoot() }
-                .pointerInput(localTileCutout, tileCornerRadiusPx) {
-                    detectTapGestures { offset ->
-                        val cutout = localTileCutout
-                        if (cutout != null &&
-                            isOffsetInTileCutout(
-                                offset = offset,
-                                cutout = cutout,
-                                cornerRadiusPx = tileCornerRadiusPx,
-                            )
-                        ) {
-                            return@detectTapGestures
-                        }
-                        onDismiss()
-                    }
-                },
-    ) {
-        val cutout = localTileCutout
-
-        Canvas(Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            if (h <= 0f) return@Canvas
-            if (cutout == null) {
-                drawRect(scrimColor, topLeft = Offset.Zero, size = Size(w, h))
-                return@Canvas
-            }
-            val scrimPath =
-                buildScrimPath(
-                    width = w,
-                    height = h,
-                    cutout = cutout,
-                    cornerRadiusPx = tileCornerRadiusPx,
-                )
-            drawPath(scrimPath, scrimColor)
-        }
-    }
-}
-
-private fun tileCutoutRoundRect(
-    cutout: Rect,
-    cornerRadiusPx: Float,
-): RoundRect {
-    val cornerRadius =
-        CornerRadius(
-            x = cornerRadiusPx.coerceAtMost(cutout.width / 2f),
-            y = cornerRadiusPx.coerceAtMost(cutout.height / 2f),
-        )
-    return RoundRect(
-        left = cutout.left,
-        top = cutout.top,
-        right = cutout.right,
-        bottom = cutout.bottom,
-        topLeftCornerRadius = cornerRadius,
-        topRightCornerRadius = cornerRadius,
-        bottomRightCornerRadius = cornerRadius,
-        bottomLeftCornerRadius = cornerRadius,
-    )
-}
-
-private fun buildScrimPath(
-    width: Float,
-    height: Float,
-    cutout: Rect,
-    cornerRadiusPx: Float,
-): Path {
-    val clamped =
-        Rect(
-            left = cutout.left.coerceIn(0f, width),
-            top = cutout.top.coerceIn(0f, height),
-            right = cutout.right.coerceIn(0f, width),
-            bottom = cutout.bottom.coerceIn(0f, height),
-        )
-    return Path().apply {
-        fillType = PathFillType.EvenOdd
-        addRect(Rect(0f, 0f, width, height))
-        addRoundRect(tileCutoutRoundRect(clamped, cornerRadiusPx))
-    }
-}
-
-private fun isOffsetInTileCutout(
-    offset: Offset,
-    cutout: Rect,
-    cornerRadiusPx: Float,
-): Boolean = tileCutoutRoundRect(cutout, cornerRadiusPx).contains(offset)
-
 private fun collapseSubmenus(
     openExpanded: Boolean,
     deleteExpanded: Boolean,
@@ -665,6 +316,10 @@ fun GameContextMenu(
     onOpenInfo: (gameId: Long) -> Unit,
     onRemoveFromLibrary: (gameId: Long) -> Unit,
     onDeleteFile: (gameId: Long) -> Unit,
+    collections: List<CollectionSummary> = emptyList(),
+    memberCollectionIds: Set<Long> = emptySet(),
+    onToggleCollection: (collectionId: Long, member: Boolean) -> Unit = { _, _ -> },
+    onCreateCollection: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (target == null) return
@@ -672,11 +327,13 @@ fun GameContextMenu(
     var openExpanded by remember(target.gameId) { mutableStateOf(false) }
     var deleteExpanded by remember(target.gameId) { mutableStateOf(false) }
     var pendingConfirm by remember(target.gameId) { mutableStateOf(PendingConfirm.None) }
+    var collectionPickerOpen by remember(target.gameId) { mutableStateOf(false) }
     var navIndex by remember(target.gameId) { mutableStateOf(0) }
     val openRowFocus = remember(target.gameId) { FocusRequester() }
     val topScreenFocus = remember(target.gameId) { FocusRequester() }
     val bottomScreenFocus = remember(target.gameId) { FocusRequester() }
     val infoRowFocus = remember(target.gameId) { FocusRequester() }
+    val collectionRowFocus = remember(target.gameId) { FocusRequester() }
     val deleteRowFocus = remember(target.gameId) { FocusRequester() }
     val removeFocus = remember(target.gameId) { FocusRequester() }
     val deleteFileFocus = remember(target.gameId) { FocusRequester() }
@@ -734,6 +391,7 @@ fun GameContextMenu(
                 MenuNavId.TopLaunch -> topScreenFocus
                 MenuNavId.BottomLaunch -> bottomScreenFocus
                 MenuNavId.Info -> infoRowFocus
+                MenuNavId.Collection -> collectionRowFocus
                 MenuNavId.Delete -> deleteRowFocus
                 MenuNavId.RemoveLib -> removeFocus
                 MenuNavId.DeleteFile -> deleteFileFocus
@@ -769,6 +427,10 @@ fun GameContextMenu(
             MenuNavId.Info -> {
                 onOpenInfo(target.gameId)
                 onDismiss()
+            }
+
+            MenuNavId.Collection -> {
+                collectionPickerOpen = true
             }
 
             MenuNavId.Delete -> {
@@ -823,7 +485,7 @@ fun GameContextMenu(
 
     fun onPreviewKey(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown) return false
-        if (pendingConfirm != PendingConfirm.None) return false
+        if (pendingConfirm != PendingConfirm.None || collectionPickerOpen) return false
         val items =
             menuNavItems(
                 openExpanded = openExpanded,
@@ -998,7 +660,7 @@ fun GameContextMenu(
                         onPreviewKey(event)
                     },
         ) {
-            ContextMenuDimScrim(
+            WajihaContextMenuScrim(
                 tileCutoutRoot = anchorBounds,
                 onDismiss = {
                     if (pendingConfirm == PendingConfirm.None) onDismiss()
@@ -1089,142 +751,127 @@ fun GameContextMenu(
                         .alpha(if (menuPlaced) 1f else 0f)
                         .offset { menuOffset },
             ) {
-                Column(
+                WajihaContextMenuPanel(
+                    title = target.gameName,
                     modifier =
-                        Modifier
-                            .onSizeChanged { size ->
-                                if (size != IntSize.Zero) menuSize = size
-                            }.width(WajihaContextMenuMetrics.width),
+                        Modifier.onSizeChanged { size ->
+                            if (size != IntSize.Zero) menuSize = size
+                        },
                 ) {
-                    Surface(
-                        shape = WajihaShapes.chip,
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        tonalElevation = 3.dp,
-                        shadowElevation = 3.dp,
-                    ) {
-                        ContextMenuTitleText(
-                            text = target.gameName,
-                            modifier =
-                                Modifier.padding(
-                                    horizontal = WajihaSpacing.sm,
-                                    vertical = WajihaSpacing.xs,
-                                ),
+                    WajihaContextMenuRow(
+                        label = "Open",
+                        icon = Icons.Filled.PlayArrow,
+                        expandable = true,
+                        expanded = openExpanded,
+                        focusRequester = openRowFocus,
+                        forceHighlight = selectedNav == MenuNavId.Open,
+                        onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.Open) },
+                        onClick = {
+                            deleteExpanded = false
+                            openExpanded = !openExpanded
+                        },
+                    )
+
+                    WajihaContextMenuExpansion(visible = openExpanded) {
+                        WajihaContextMenuRow(
+                            label = if (dualDisplay) "Top screen" else "Launch",
+                            nested = true,
+                            onClick = {
+                                onOpenOnDisplay(target.gameId, topDisplayId)
+                                onDismiss()
+                            },
+                            focusRequester = topScreenFocus,
+                            forceHighlight = selectedNav == MenuNavId.TopLaunch,
+                            onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.OpenNested) },
                         )
+                        if (dualDisplay) {
+                            WajihaContextMenuRow(
+                                label = "Bottom screen",
+                                nested = true,
+                                onClick = {
+                                    onOpenOnDisplay(target.gameId, bottomDisplayId)
+                                    onDismiss()
+                                },
+                                focusRequester = bottomScreenFocus,
+                                forceHighlight = selectedNav == MenuNavId.BottomLaunch,
+                                onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.OpenNested) },
+                            )
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(WajihaContextMenuMetrics.titleGap))
+                    WajihaContextMenuDivider()
 
-                    Surface(
-                        shape = WajihaShapes.chip,
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        tonalElevation = 3.dp,
-                        shadowElevation = 3.dp,
-                    ) {
-                        CompositionLocalProvider(
-                            LocalGamepadFocusChromeScope provides GamepadFocusChromeScope.Menu,
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(vertical = WajihaSpacing.xs),
-                            ) {
-                                ContextMenuRow(
-                                    label = "Open",
-                                    icon = Icons.Filled.PlayArrow,
-                                    expandable = true,
-                                    expanded = openExpanded,
-                                    focusRequester = openRowFocus,
-                                    forceHighlight = selectedNav == MenuNavId.Open,
-                                    onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.Open) },
-                                    onClick = {
-                                        deleteExpanded = false
-                                        openExpanded = !openExpanded
-                                    },
-                                )
+                    WajihaContextMenuRow(
+                        label = "Info",
+                        icon = Icons.Filled.Info,
+                        focusRequester = infoRowFocus,
+                        forceHighlight = selectedNav == MenuNavId.Info,
+                        onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.Info) },
+                        onClick = {
+                            onOpenInfo(target.gameId)
+                            onDismiss()
+                        },
+                    )
 
-                                ContextMenuInlineExpansion(visible = openExpanded) {
-                                    ContextMenuRow(
-                                        label = if (dualDisplay) "Top screen" else "Launch",
-                                        nested = true,
-                                        onClick = {
-                                            onOpenOnDisplay(target.gameId, topDisplayId)
-                                            onDismiss()
-                                        },
-                                        focusRequester = topScreenFocus,
-                                        forceHighlight = selectedNav == MenuNavId.TopLaunch,
-                                        onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.OpenNested) },
-                                    )
-                                    if (dualDisplay) {
-                                        ContextMenuRow(
-                                            label = "Bottom screen",
-                                            nested = true,
-                                            onClick = {
-                                                onOpenOnDisplay(target.gameId, bottomDisplayId)
-                                                onDismiss()
-                                            },
-                                            focusRequester = bottomScreenFocus,
-                                            forceHighlight = selectedNav == MenuNavId.BottomLaunch,
-                                            onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.OpenNested) },
-                                        )
-                                    }
-                                }
+                    WajihaContextMenuRow(
+                        label = "Add to collection",
+                        icon = Icons.Filled.Star,
+                        focusRequester = collectionRowFocus,
+                        forceHighlight = selectedNav == MenuNavId.Collection,
+                        onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.Collections) },
+                        onClick = { collectionPickerOpen = true },
+                    )
 
-                                ContextMenuDivider()
+                    WajihaContextMenuDivider()
 
-                                ContextMenuRow(
-                                    label = "Info",
-                                    icon = Icons.Filled.Info,
-                                    focusRequester = infoRowFocus,
-                                    forceHighlight = selectedNav == MenuNavId.Info,
-                                    onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.Info) },
-                                    onClick = {
-                                        onOpenInfo(target.gameId)
-                                        onDismiss()
-                                    },
-                                )
+                    WajihaContextMenuRow(
+                        label = "Delete",
+                        icon = Icons.Filled.Delete,
+                        expandable = true,
+                        expanded = deleteExpanded,
+                        focusRequester = deleteRowFocus,
+                        forceHighlight = selectedNav == MenuNavId.Delete,
+                        onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.Delete) },
+                        onClick = {
+                            openExpanded = false
+                            deleteExpanded = !deleteExpanded
+                        },
+                    )
 
-                                ContextMenuDivider()
-
-                                ContextMenuRow(
-                                    label = "Delete",
-                                    icon = Icons.Filled.Delete,
-                                    expandable = true,
-                                    expanded = deleteExpanded,
-                                    focusRequester = deleteRowFocus,
-                                    forceHighlight = selectedNav == MenuNavId.Delete,
-                                    onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.Delete) },
-                                    onClick = {
-                                        openExpanded = false
-                                        deleteExpanded = !deleteExpanded
-                                    },
-                                )
-
-                                ContextMenuInlineExpansion(visible = deleteExpanded) {
-                                    ContextMenuRow(
-                                        label = "Remove from library",
-                                        icon = Icons.Filled.Clear,
-                                        nested = true,
-                                        onClick = { pendingConfirm = PendingConfirm.RemoveFromLibrary },
-                                        focusRequester = removeFocus,
-                                        forceHighlight = selectedNav == MenuNavId.RemoveLib,
-                                        onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.DeleteNested) },
-                                    )
-                                    ContextMenuRow(
-                                        label = "Delete file",
-                                        icon = Icons.Filled.Delete,
-                                        nested = true,
-                                        destructive = true,
-                                        onClick = { pendingConfirm = PendingConfirm.DeleteFile },
-                                        focusRequester = deleteFileFocus,
-                                        forceHighlight = selectedNav == MenuNavId.DeleteFile,
-                                        onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.DeleteNested) },
-                                    )
-                                }
-                            }
-                        }
+                    WajihaContextMenuExpansion(visible = deleteExpanded) {
+                        WajihaContextMenuRow(
+                            label = "Remove from library",
+                            icon = Icons.Filled.Clear,
+                            nested = true,
+                            onClick = { pendingConfirm = PendingConfirm.RemoveFromLibrary },
+                            focusRequester = removeFocus,
+                            forceHighlight = selectedNav == MenuNavId.RemoveLib,
+                            onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.DeleteNested) },
+                        )
+                        WajihaContextMenuRow(
+                            label = "Delete file",
+                            icon = Icons.Filled.Delete,
+                            nested = true,
+                            destructive = true,
+                            onClick = { pendingConfirm = PendingConfirm.DeleteFile },
+                            focusRequester = deleteFileFocus,
+                            forceHighlight = selectedNav == MenuNavId.DeleteFile,
+                            onFocusGained = { onMenuZoneFocused(ContextMenuFocusZone.DeleteNested) },
+                        )
                     }
                 }
             }
         }
     }
+
+    CollectionMembershipDialog(
+        visible = collectionPickerOpen,
+        collections = collections,
+        memberIds = memberCollectionIds,
+        onToggle = onToggleCollection,
+        onCreate = onCreateCollection,
+        onDismiss = { collectionPickerOpen = false },
+    )
 
     WajihaDialog(
         visible = pendingConfirm == PendingConfirm.RemoveFromLibrary,

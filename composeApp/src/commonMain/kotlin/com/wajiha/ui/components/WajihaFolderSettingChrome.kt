@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Dp
@@ -57,6 +59,11 @@ fun WajihaFolderSettingChrome(
     onBack: (() -> Unit)? = null,
     scrollable: Boolean = true,
     focusRestorer: SettingSectionFocusRestorer? = null,
+    /**
+     * Folder panel fill. Default surface container; [Color.Transparent] lets a
+     * hero backdrop show through (Now Running).
+     */
+    panelColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -129,6 +136,7 @@ fun WajihaFolderSettingChrome(
             folderPanel = true,
             scrollable = scrollable,
             focusRestorer = focusRestorer,
+            containerColor = panelColor,
             modifier =
                 Modifier
                     .weight(1f)

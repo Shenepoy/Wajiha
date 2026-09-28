@@ -1,11 +1,18 @@
 package com.wajiha.input
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.state.DualScreenState
@@ -13,9 +20,12 @@ import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.gamepad.FocusScreenGamepadHint
 import com.wajiha.ui.components.gamepad.GamepadActionBar
-import com.wajiha.ui.components.gamepad.GamepadActionBarChrome
+import com.wajiha.ui.components.gamepad.WajihaGlyphAction
 import com.wajiha.ui.components.gamepad.withoutFocusScreenHint
 import com.wajiha.ui.navigation.menuOnPrimary
+import com.wajiha.ui.theme.WajihaColors
+import com.wajiha.ui.theme.WajihaShapes
+import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -103,7 +113,8 @@ fun PublishGamepadHintsEffect(
  *
  * L2 "Focus" is stripped from [hints], never mirrored, and re-added only when
  * [DualScreenStore.l2HintOwner] matches [hostOwner] (unfocused target).
- * When other hints are mirrored away, an L2-only local bar can still appear.
+ * The menu bar always stays. Swap gamepad hints only publishes a copy so the
+ * wide hero can show the primary act.
  *
  * [hostOwner] null = treat as menu host (single-display / embedded panels); no L2.
  */
@@ -123,26 +134,56 @@ fun MirroredOrLocalGamepadActionBar(
         }
     val showL2Here = hostOwner != null && l2HintOwner == hostOwner
     val l2Hints = if (showL2Here) listOf(FocusScreenGamepadHint) else emptyList()
-    val mirrorAway = swapActive && isMenuHost && baseHints.isNotEmpty()
-    PublishGamepadHintsEffect(publisherId, baseHints, mirrorAway)
-    val localHints = if (mirrorAway) l2Hints else baseHints + l2Hints
+    val publishToHero = swapActive && isMenuHost && baseHints.isNotEmpty()
+    PublishGamepadHintsEffect(publisherId, baseHints, publishToHero)
+    val localHints = baseHints + l2Hints
     if (localHints.isNotEmpty()) {
         GamepadActionBar(hints = localHints)
     }
 }
 
-/** Hero-side host for mirrored hints (empty when swap is off or nothing published). */
+/** Wide hero glass. Narrow Thor Screen-2 stays under this. */
+private val WideHeroGlassMin = 640.dp
+
+/**
+ * Hero-side host for Swap gamepad hints.
+ * The wide hero shows the primary act (A, or the first hint) at the bottom end.
+ * The narrow hero stays clear. The rest of the menu bar stays on the menu glass.
+ */
 @Composable
 fun MirroredGamepadHintsHost(modifier: Modifier = Modifier) {
     val swapActive = rememberSwapGamepadHintsActive()
     val hints by GamepadHintMirror.hints.collectAsState()
-    val safeHints = remember(hints) { hints.withoutFocusScreenHint() }
-    if (swapActive && safeHints.isNotEmpty()) {
-        // Overlay chrome: hero stays full-bleed under the bar.
-        GamepadActionBar(
-            modifier = modifier,
-            hints = safeHints,
-            chrome = GamepadActionBarChrome.Overlay,
-        )
+    val primary =
+        remember(hints) {
+            val safe = hints.withoutFocusScreenHint()
+            safe.firstOrNull { it.button == GamepadHintButton.A } ?: safe.firstOrNull()
+        }
+    if (!swapActive || primary == null) return
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        if (maxWidth < WideHeroGlassMin) return@BoxWithConstraints
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(WajihaSpacing.md),
+            contentAlignment = Alignment.BottomEnd,
+        ) {
+            Surface(
+                shape = WajihaShapes.chip,
+                color = WajihaColors.HeroScrim,
+            ) {
+                WajihaGlyphAction(
+                    button = primary.button,
+                    label = primary.action,
+                    labelColor = WajihaColors.OnDark,
+                    modifier =
+                        Modifier.padding(
+                            horizontal = WajihaSpacing.sm,
+                            vertical = WajihaSpacing.xs,
+                        ),
+                )
+            }
+        }
     }
 }

@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -19,17 +20,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,8 +47,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import coil3.compose.AsyncImage
 import com.wajiha.data.prefs.AppSettings
 import com.wajiha.data.prefs.HeroDisplaySlot
@@ -64,13 +71,17 @@ import com.wajiha.ui.home.hero.HeroLayoutEditorCanvasFromStore
 import com.wajiha.ui.scraper.review.ScrapeReviewSlotHero
 import com.wajiha.ui.settings.SettingsFocusHero
 import com.wajiha.ui.settings.SettingsHeroDetailBody
+import com.wajiha.ui.settings.SettingsHeroStagePaddingVertical
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaElevation
 import com.wajiha.ui.theme.WajihaMotion
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.koinInject
+import wajiha.composeapp.generated.resources.Res
+import wajiha.composeapp.generated.resources.logo
 
 /**
  * Top screen (3DS style): hero/preview of the focused game — backdrop,
@@ -93,6 +104,14 @@ fun TopScreen(
     val dualStore = koinInject<DualScreenStore>()
     val layoutEditing by dualStore.heroLayoutEditing.collectAsState()
     val editorScope = rememberCoroutineScope()
+    var fullPillSize by remember { mutableStateOf(DpSize.Zero) }
+    val statusCarve =
+        remember(fullPillSize, heroContext) {
+            settingsHeroStatusCarveReserve(
+                pillSize = fullPillSize,
+                settingsHero = heroContext is HeroContext.Settings,
+            )
+        }
     Box(
         modifier =
             modifier
@@ -103,79 +122,105 @@ fun TopScreen(
                     ),
                 ),
     ) {
-        if (layoutEditing) {
-            HeroLayoutEditorCanvasFromStore(
-                tile = focused,
-                platformName = platformName,
-                onExit = {
-                    // B on the hero canvas — persist, then drop edit mode. Settings
-                    // observes heroLayoutEditing and closes the fullscreen page.
-                    val draft = dualStore.heroLayoutEditDraft.value
-                    val slot = dualStore.heroLayoutEditSlot.value
-                    if (draft != null) {
-                        editorScope.launch {
-                            settingsRepository.updateHeroLayoutSlot(slot) {
-                                draft.copy(configured = true)
+        CompositionLocalProvider(LocalStatusChromeCarveReserve provides statusCarve) {
+            if (layoutEditing) {
+                HeroLayoutEditorCanvasFromStore(
+                    tile = focused,
+                    platformName = platformName,
+                    onExit = {
+                        // B on the hero canvas — persist, then drop edit mode. Settings
+                        // observes heroLayoutEditing and closes the fullscreen page.
+                        val draft = dualStore.heroLayoutEditDraft.value
+                        val slot = dualStore.heroLayoutEditSlot.value
+                        if (draft != null) {
+                            editorScope.launch {
+                                settingsRepository.updateHeroLayoutSlot(slot) {
+                                    draft.copy(configured = true)
+                                }
                             }
                         }
-                    }
-                    dualStore.clearHeroLayoutEditDraft()
-                    dualStore.setHeroLayoutEditing(false)
-                },
-                modifier = Modifier.fillMaxSize(),
-                contentFocusRequester = contentFocusRequester,
-            )
-        } else {
-            AnimatedContent(
-                targetState = heroContext,
-                contentKey = { it.transitionKey },
-                transitionSpec = {
-                    fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
-                },
-                label = "hero-context",
-            ) { context ->
-                when (context) {
-                    is HeroContext.GameLibrary -> {
-                        GameLibraryHero(
-                            focused,
-                            platformName,
-                            settings,
-                            contentFocusRequester,
-                            displaySlot,
-                        )
-                    }
+                        dualStore.clearHeroLayoutEditDraft()
+                        dualStore.setHeroLayoutEditing(false)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    contentFocusRequester = contentFocusRequester,
+                )
+            } else {
+                AnimatedContent(
+                    targetState = heroContext,
+                    contentKey = { it.transitionKey },
+                    transitionSpec = {
+                        fadeIn(WajihaMotion.fadeInSpec()) togetherWith fadeOut(WajihaMotion.fadeOutSpec())
+                    },
+                    label = "hero-context",
+                ) { context ->
+                    when (context) {
+                        is HeroContext.GameLibrary -> {
+                            GameLibraryHero(
+                                focused,
+                                platformName,
+                                settings,
+                                contentFocusRequester,
+                                displaySlot,
+                            )
+                        }
 
-                    is HeroContext.Settings -> {
-                        SettingsHero(context, contentFocusRequester)
-                    }
+                        is HeroContext.Settings -> {
+                            SettingsHero(context, contentFocusRequester)
+                        }
 
-                    is HeroContext.Apps -> {
-                        AppsHero(context, contentFocusRequester)
-                    }
+                        is HeroContext.Apps -> {
+                            AppsHero(context, contentFocusRequester)
+                        }
 
-                    is HeroContext.System -> {
-                        SystemHero(context, contentFocusRequester)
-                    }
+                        is HeroContext.System -> {
+                            SystemHero(context, contentFocusRequester)
+                        }
 
-                    is HeroContext.GameDetail -> {
-                        GameDetailHero(
-                            context.gameId,
-                            settings,
-                            contentFocusRequester,
-                            displaySlot,
-                        )
-                    }
+                        is HeroContext.GameDetail -> {
+                            GameDetailHero(
+                                context.gameId,
+                                settings,
+                                contentFocusRequester,
+                                displaySlot,
+                            )
+                        }
 
-                    is HeroContext.ScrapeReview -> {
-                        ScrapeReviewSlotHero(
-                            contentFocusRequester = contentFocusRequester,
-                        )
+                        is HeroContext.ScrapeReview -> {
+                            ScrapeReviewSlotHero(
+                                contentFocusRequester = contentFocusRequester,
+                            )
+                        }
                     }
                 }
             }
         }
-        TopStatusBar(reserveTopEnd = heroContext.claimsStatusCorner())
+        TopStatusBar(
+            reserveTopEnd = heroContext.claimsStatusCorner(),
+            onFullPillSizeChanged = { fullPillSize = it },
+        )
     }
+}
+
+/** Notch metrics so [SettingsFocusHero] clears the floating status pill. */
+private fun settingsHeroStatusCarveReserve(
+    pillSize: DpSize,
+    settingsHero: Boolean,
+): StatusChromeCarveReserve {
+    if (!settingsHero || pillSize.width <= 0.dp || pillSize.height <= 0.dp) {
+        return StatusChromeCarveReserve()
+    }
+    val gap = WajihaSpacing.sm
+    // Pill top pad (sm) + height + gap, minus settings stage top inset.
+    val carveHeight =
+        max(
+            gap,
+            WajihaSpacing.sm + pillSize.height + gap - SettingsHeroStagePaddingVertical,
+        )
+    return StatusChromeCarveReserve(
+        width = pillSize.width + gap,
+        height = carveHeight,
+    )
 }
 
 @Composable
@@ -221,11 +266,18 @@ private fun IdleHero() {
     val scheme = MaterialTheme.colorScheme
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                painter = painterResource(Res.drawable.logo),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(112.dp).clip(CircleShape),
+            )
             Text(
                 text = "Wajiha",
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Bold,
                 color = scheme.primary,
+                modifier = Modifier.padding(top = WajihaSpacing.md),
             )
             Text(
                 text = "Pick a game on the touch screen",

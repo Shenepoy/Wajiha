@@ -147,9 +147,15 @@ class BatchScraper(
         userCancelled = true
     }
 
-    /** Seeds the UI with the persisted snapshot (e.g. last run's summary). */
+    /**
+     * Seeds the UI with the persisted snapshot (e.g. last run's summary).
+     * Always drops a leftover resumable/running bit from disk when this process
+     * is idle — otherwise a killed WorkManager job can block a new Run after reload.
+     */
     suspend fun restoreIfIdle() {
-        if (restored || _progress.value.running || _progress.value.done > 0) return
+        if (_progress.value.running) return
+        clearResumableCheckpoint()
+        if (restored || _progress.value.done > 0) return
         restored = true
         progressStore.load()?.let { saved ->
             if (!_progress.value.running) {
@@ -161,6 +167,36 @@ class BatchScraper(
                         statusMessage = null,
                     )
             }
+        }
+    }
+
+    /**
+     * Persists an idle checkpoint when no scrape is executing in this process.
+     * Clears [BatchScrapeProgress.running] left by an interrupted worker so the
+     * next Fill-gaps run does not treat a dead job as resumable.
+     */
+    suspend fun clearResumableCheckpoint() {
+        if (_progress.value.running) return
+        val saved = progressStore.load() ?: return
+        if (!saved.running && !saved.paused) return
+        val idle =
+            saved.copy(
+                running = false,
+                paused = false,
+                currentGameName = null,
+                statusMessage = null,
+            )
+        progressStore.save(idle)
+        if (!_progress.value.running && _progress.value.done == 0) {
+            _progress.value = idle
+        } else if (!_progress.value.running) {
+            _progress.value =
+                _progress.value.copy(
+                    running = false,
+                    paused = false,
+                    currentGameName = null,
+                    statusMessage = null,
+                )
         }
     }
 
@@ -193,12 +229,10 @@ class BatchScraper(
     ): String? {
         val settings = settingsRepository.current()
         val platformSettings = if (platformId != null) settings.forPlatform(platformId) else settings
-        val effective =
-            policy.sourceId?.let { platformSettings.copy(enabledSources = listOf(it)) }
-                ?: platformSettings
+        val effective = policy.applySourceFilter(platformSettings)
         if (!engine.hasConfiguredSources(effective)) {
-            return if (policy.sourceId != null) {
-                "Selected scraper is not configured — check Sources / Accounts"
+            return if (!policy.sourceIds.isNullOrEmpty()) {
+                "Selected scraper(s) not configured — check Sources / Accounts"
             } else {
                 "No scraper sources configured — enable and sign in under Sources / Accounts"
             }

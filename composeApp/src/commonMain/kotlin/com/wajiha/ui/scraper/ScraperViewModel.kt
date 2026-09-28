@@ -374,13 +374,13 @@ class ScraperViewModel(
 
     fun hasConfiguredSources(
         platformId: String? = null,
-        sourceId: String? = null,
+        sourceIds: Collection<String>? = null,
     ): Boolean {
         val s = settings.value
         val platformSettings = if (platformId != null) s.forPlatform(platformId) else s
         val effective =
-            sourceId?.let { platformSettings.copy(enabledSources = listOf(it)) }
-                ?: platformSettings
+            ScrapeRunPolicy(sourceIds = sourceIds?.toList()?.takeIf { it.isNotEmpty() })
+                .applySourceFilter(platformSettings)
         return engine.hasConfiguredSources(effective)
     }
 }

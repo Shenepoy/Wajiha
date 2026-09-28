@@ -2,6 +2,7 @@ package com.wajiha.ui.ra
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,6 +12,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -28,20 +30,27 @@ import com.wajiha.ui.theme.WajihaSpacing
 import org.koin.compose.koinInject
 
 /**
- * Secondary-screen achievements panel: earned/locked badge list for the
- * game that is currently running (or was last loaded).
+ * Earned and locked badges for [gameId], or for the running session when
+ * [gameId] is null.
  */
 @Composable
 fun AchievementsPanel(
     modifier: Modifier = Modifier,
+    gameId: Long? = null,
     showGamepadHints: Boolean = true,
     embedInFolderPanel: Boolean = false,
 ) {
     val viewModel = koinInject<RaViewModel>()
     val state by viewModel.state.collectAsState()
+    DisposableEffect(gameId) {
+        if (gameId != null) viewModel.pinGame(gameId)
+        onDispose {
+            if (gameId != null) viewModel.pinGame(null)
+        }
+    }
 
     if (embedInFolderPanel) {
-        AchievementsSectionContent(state = state)
+        AchievementsSectionContent(state = state, modifier = modifier)
     } else {
         SecondaryPanelScaffold(
             modifier = modifier,
@@ -54,7 +63,17 @@ fun AchievementsPanel(
 }
 
 @Composable
-private fun AchievementsSectionContent(state: RaUiState) {
+private fun AchievementsSectionContent(
+    state: RaUiState,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxSize()) {
+        AchievementsBody(state)
+    }
+}
+
+@Composable
+private fun ColumnScope.AchievementsBody(state: RaUiState) {
     val progress = state.progress
     when {
         !state.configured -> {
@@ -91,7 +110,11 @@ private fun AchievementsSectionContent(state: RaUiState) {
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(progress.title, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = progress.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
                     Text(
                         text = "${progress.numAwardedToUser} / ${progress.numAchievements} achievements",
                         style = MaterialTheme.typography.labelMedium,
@@ -112,7 +135,7 @@ private fun AchievementsSectionContent(state: RaUiState) {
             GamepadList(
                 items = progress.sortedAchievements,
                 key = { it.id },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
             ) { achievement ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),

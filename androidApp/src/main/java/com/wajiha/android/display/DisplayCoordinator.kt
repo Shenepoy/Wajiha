@@ -3,7 +3,10 @@ package com.wajiha.android.display
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.ActivityOptions
+import android.app.AppOpsManager
 import android.app.PendingIntent
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -11,18 +14,21 @@ import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.Process
 import android.view.Display
 import androidx.activity.ComponentActivity
 import com.wajiha.android.MainActivity
 import com.wajiha.android.SecondaryHomeActivity
+import com.wajiha.android.monitor.PrimaryHeroRestoreGate
 import com.wajiha.android.monitor.SessionTaskRegistry
 import com.wajiha.android.monitor.TopDisplayTaskResolver
+import com.wajiha.android.monitor.UsageTimelineActive
+import com.wajiha.android.monitor.UsageTimelineEvent
 import com.wajiha.android.system.SystemController
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
 import com.wajiha.state.DualScreenState
 import com.wajiha.state.DualScreenStore
-import com.wajiha.state.SecondaryMode
 
 /**
  * Watches connected displays and keeps [DualScreenStore] in sync.
@@ -50,6 +56,9 @@ class DisplayCoordinator(
     private val secondaryTransitionCover = SecondaryTransitionCover()
     private var listenerRegistered = false
     private var secondaryAppPackage: String? = null
+
+    /** Wall-clock when [secondaryAppPackage] was armed — grace against Thor ATM blindness. */
+    private var secondaryAppArmedAt = 0L
     private var exhaustedRecoveryRetryUsed = false
     private var lastSecondaryProbeAt = 0L
     private var lastPrimaryHomeRequestAt = 0L
@@ -271,27 +280,23 @@ class DisplayCoordinator(
                 SessionTaskRegistry.clear(topGame)
             }
         }
-        // Never pull the hero over a normal app that owns the top display.
-        // Prefer ATM top-task when visible; store can lag on Thor (resolver→wajiha).
-        val topPkg =
-            TopDisplayTaskResolver.topPackageOnDisplay(context, Display.DEFAULT_DISPLAY)
-                ?: store.topDisplayForegroundPackage.value
-        if (topPkg != null && topPkg != context.packageName) {
+        // Never pull the hero over a live foreign top owner. ATM alone is not enough
+        // on Thor (often reports Wajiha while Chrome/emu still own display 0).
+        val foreignTop = PrimaryHeroRestoreGate.foreignTopOwnerIfAny(context, store)
+        if (foreignTop != null) {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
-                "restorePrimaryHero: skip — foreign top pkg=$topPkg",
+                "restorePrimaryHero: skip — usage/foreign top pkg=$foreignTop",
             )
             return
         }
         mainHandler.postDelayed({
-            // Re-check after the settle delay — a game may have taken focus.
-            val liveTop =
-                TopDisplayTaskResolver.topPackageOnDisplay(context, Display.DEFAULT_DISPLAY)
-                    ?: store.topDisplayForegroundPackage.value
-            if (liveTop != null && liveTop != context.packageName) {
+            // Re-check after the settle delay — a game/app may have taken focus.
+            val liveTop = PrimaryHeroRestoreGate.foreignTopOwnerIfAny(context, store)
+            if (liveTop != null) {
                 WajihaLog.d(
                     WajihaTags.DISPLAY,
-                    "restorePrimaryHero: skip delayed — foreign top pkg=$liveTop",
+                    "restorePrimaryHero: skip delayed — usage/foreign top pkg=$liveTop",
                 )
                 return@postDelayed
             }
@@ -357,6 +362,15 @@ class DisplayCoordinator(
                 )
                 return@runOnMain
             }
+            // Foreign app owns bottom — do not reclaim over Chrome/etc.
+            if (secondaryAppPackage != null) {
+                WajihaLog.d(
+                    WajihaTags.DISPLAY,
+                    "secondaryHome: skip availability — app-on-secondary " +
+                        "pkg=$secondaryAppPackage reason=$reason",
+                )
+                return@runOnMain
+            }
             val displayId = secondaryDisplay()?.displayId ?: return@runOnMain
             exhaustedRecoveryRetryUsed = false
             secondaryRecovery.request(displayId, reason)
@@ -387,11 +401,13 @@ class DisplayCoordinator(
             )
             return
         }
+        // Intentional Home — release sticky bottom-app ownership so reclaim can run.
+        clearSecondaryAppOwner("user-secondary-home")
         WajihaLog.i(
             WajihaTags.DISPLAY,
             "secondaryHome: user HOME — bringing primary launcher forward",
         )
-        bringPrimaryLauncherForward(activity)
+        bringPrimaryLauncherForward(activity, userHome = true)
     }
 
     /**
@@ -400,7 +416,12 @@ class DisplayCoordinator(
      * cross-display Home launch after SecondaryHome has stopped.
      */
     fun onSecondaryHomeUserLeave(activity: ComponentActivity) {
-        if (store.state.value == DualScreenState.AppOnSecondary) return
+        // Bottom foreign app — leave it alone (do not arm Citra CLEAR_TASK / HOME).
+        if (store.state.value == DualScreenState.AppOnSecondary ||
+            secondaryAppPackage != null
+        ) {
+            return
+        }
 
         // Thor fires SecondaryHome onUserLeaveHint synchronously when a top-
         // display game starts. Remounting Overlay / CLEAR_TASK flashes black.
@@ -483,7 +504,10 @@ class DisplayCoordinator(
                 WajihaTags.DISPLAY,
                 "secondaryHome: user leave — bringing primary launcher over $foreignOwner",
             )
-            bringPrimaryLauncherForward(activity)
+            bringPrimaryLauncherForward(
+                activity,
+                expectedForeignOwner = foreignOwner,
+            )
         } else {
             WajihaLog.d(
                 WajihaTags.DISPLAY,
@@ -577,24 +601,27 @@ class DisplayCoordinator(
     }
 
     /**
-     * After deferred bottom UI has been applied on the live Overlay, hand
-     * Overlay → Activity (Activity Compose stayed mounted underneath).
+     * Apply the deferred bottom mode on the next main turn, then hand
+     * Overlay → Activity. Doing that in the [startActivity] frame flashes black.
      */
     fun finishLaunchCoverAfterSecondaryUi() {
         runOnMain {
-            cancelLaunchCoverRelease()
-            val release =
-                Runnable {
-                    holdOverlayForGameLaunch = false
-                    secondaryTransitionCover.hide(force = true)
-                    WajihaLog.d(
-                        WajihaTags.DISPLAY,
-                        "secondaryCover: launch live handoff Overlay → Activity",
-                    )
-                    handSecondaryToActivityIfHealthy("launch-settled")
-                }
-            launchCoverReleaseRunnable = release
-            mainHandler.postDelayed(release, LAUNCH_COVER_AFTER_UI_MS)
+            mainHandler.post {
+                store.applyDeferredSecondaryModeAfterLaunch()
+                cancelLaunchCoverRelease()
+                val release =
+                    Runnable {
+                        holdOverlayForGameLaunch = false
+                        secondaryTransitionCover.hide(force = true)
+                        WajihaLog.d(
+                            WajihaTags.DISPLAY,
+                            "secondaryCover: launch live handoff Overlay → Activity",
+                        )
+                        handSecondaryToActivityIfHealthy("launch-settled")
+                    }
+                launchCoverReleaseRunnable = release
+                mainHandler.postDelayed(release, LAUNCH_COVER_AFTER_UI_MS)
+            }
         }
     }
 
@@ -677,7 +704,10 @@ class DisplayCoordinator(
                         holdOverlayForForeignSurface = false
                         mainHandler.postDelayed(
                             {
-                                bringPrimaryLauncherForward(activity)
+                                bringPrimaryLauncherForward(
+                                    activity,
+                                    expectedForeignOwner = packageName,
+                                )
                                 handSecondaryToActivityIfHealthy("surface-released")
                             },
                             PRIMARY_RECLAIM_AFTER_SURFACE_RELEASE_MS,
@@ -719,13 +749,38 @@ class DisplayCoordinator(
         requestSecondaryRecovery(displayId, "stop")
     }
 
-    private fun bringPrimaryLauncherForward(activity: Activity) {
+    /**
+     * Bring Wajiha Home onto display 0.
+     *
+     * @param userHome intentional secondary Home — always allowed when default launcher.
+     * @param expectedForeignOwner Citra-family package being cleared; proceed only when
+     *   no other live foreign top owner is present (or it matches this package).
+     */
+    private fun bringPrimaryLauncherForward(
+        activity: Activity,
+        userHome: Boolean = false,
+        expectedForeignOwner: String? = null,
+    ) {
         if (!systemController.isDefaultLauncher()) {
             WajihaLog.i(
                 WajihaTags.DISPLAY,
                 "secondaryHome: skip primary HOME — not default launcher",
             )
             return
+        }
+        if (!userHome) {
+            val foreignTop =
+                PrimaryHeroRestoreGate.foreignTopOwnerIfAny(context, store)
+            if (foreignTop != null &&
+                (expectedForeignOwner == null || foreignTop != expectedForeignOwner)
+            ) {
+                WajihaLog.i(
+                    WajihaTags.DISPLAY,
+                    "secondaryHome: skip primary HOME — foreign top pkg=$foreignTop" +
+                        " expected=$expectedForeignOwner",
+                )
+                return
+            }
         }
         val primaryTaskId = MainActivity.primaryTaskId
         try {
@@ -818,6 +873,14 @@ class DisplayCoordinator(
     fun probeSecondaryHome(reason: String) {
         mainHandler.post {
             if (yieldSecondaryToSystemHome) return@post
+            if (secondaryAppPackage != null) {
+                WajihaLog.d(
+                    WajihaTags.DISPLAY,
+                    "secondaryProbe: skip — app-on-secondary pkg=$secondaryAppPackage " +
+                        "reason=$reason",
+                )
+                return@post
+            }
             val now = System.currentTimeMillis()
             if (now - lastSecondaryProbeAt < SECONDARY_PROBE_MIN_INTERVAL_MS) return@post
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -841,8 +904,19 @@ class DisplayCoordinator(
             SECONDARY_COVER_REMOVE_DELAY_MS,
         )
         runOnMain {
-            secondaryAppPackage = null
-            store.onSecondaryAppDismissed()
+            // Do not clear sticky bottom-app ownership on every resume — Thor can
+            // briefly resume SecondaryHome during launch / focus flashes and that
+            // used to re-arm reclaim over Chrome. Clear only when the foreign app
+            // is confirmed gone (or intentional Home already cleared it).
+            val foreignPkg = secondaryAppPackage
+            if (foreignPkg != null && shouldKeepSecondaryAppOwner(foreignPkg)) {
+                WajihaLog.d(
+                    WajihaTags.DISPLAY,
+                    "secondaryHome: resume ignored — keep app-on-secondary pkg=$foreignPkg",
+                )
+            } else if (foreignPkg != null) {
+                clearSecondaryAppOwner("resume-app-gone:$foreignPkg")
+            }
             secondaryRecovery.onResumed(displayId)
             // Never tear the live cover down from focusGameOnPrimary. Also wait
             // out foreign Presentation CLEAR_TASK — resume alone races HWC.
@@ -923,18 +997,14 @@ class DisplayCoordinator(
         if (yieldSecondaryToSystemHome) {
             return SecondaryRecoveryGate(suppressReason = "yield-system-home")
         }
-        if (store.state.value == DualScreenState.AppOnSecondary) {
-            val packageName = secondaryAppPackage
-            val appStillPresent =
-                packageName != null &&
-                    secondaryDisplay()?.displayId?.let { displayId ->
-                        TopDisplayTaskResolver.isPackageOnDisplay(context, packageName, displayId)
-                    } == true
-            if (appStillPresent) {
-                return SecondaryRecoveryGate(suppressReason = "app-on-secondary:$packageName")
+        // Sticky while a foreign app owns the bottom — independent of DualScreenState
+        // (GameRunning + bottom Chrome used to fall through and reclaim).
+        val foreignPkg = secondaryAppPackage
+        if (foreignPkg != null) {
+            if (shouldKeepSecondaryAppOwner(foreignPkg)) {
+                return SecondaryRecoveryGate(suppressReason = "app-on-secondary:$foreignPkg")
             }
-            secondaryAppPackage = null
-            store.onSecondaryAppDismissed()
+            clearSecondaryAppOwner("gate-app-gone:$foreignPkg")
         }
         val now = System.currentTimeMillis()
         val memoryDelay = (memoryGuardReclaimDeferUntil - now).coerceAtLeast(0L)
@@ -955,6 +1025,136 @@ class DisplayCoordinator(
             }
         }
         return SecondaryRecoveryGate()
+    }
+
+    private fun shouldKeepSecondaryAppOwner(packageName: String): Boolean {
+        val now = System.currentTimeMillis()
+        val withinGrace =
+            secondaryAppArmedAt > 0L &&
+                now - secondaryAppArmedAt < SECONDARY_APP_OWNER_GRACE_MS
+        val stopped =
+            withinGrace && packageStoppedSinceArm(packageName, secondaryAppArmedAt)
+        return SecondaryOwnerGrace.keepOwner(
+            now = now,
+            armedAt = secondaryAppArmedAt,
+            graceMs = SECONDARY_APP_OWNER_GRACE_MS,
+            stoppedSinceArm = stopped,
+            aliveAfterGrace = isSecondaryForeignAppAlive(packageName),
+        )
+    }
+
+    /**
+     * True when usage access shows this package stopped after it was armed and
+     * no activity has resumed since. Empty or failed queries keep the grace.
+     */
+    private fun packageStoppedSinceArm(
+        packageName: String,
+        armedAt: Long,
+    ): Boolean {
+        val events = usageEventsForPackage(packageName) ?: return false
+        if (events.isEmpty()) return false
+        val stoppedAfterArm =
+            events.any { event ->
+                event.eventType == UsageTimelineActive.ACTIVITY_STOPPED &&
+                    event.timeStamp >= armedAt
+            }
+        if (!stoppedAfterArm) return false
+        return !UsageTimelineActive.isActive(events)
+    }
+
+    private fun usageEventsForPackage(packageName: String): List<UsageTimelineEvent>? {
+        if (!hasUsageStatsAccess()) return null
+        try {
+            val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+            val end = System.currentTimeMillis()
+            val windowMs = SECONDARY_APP_OWNER_GRACE_MS + 5_000L
+            val events = usm.queryEvents(end - windowMs, end)
+            val matched = mutableListOf<UsageTimelineEvent>()
+            val event = UsageEvents.Event()
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                if (event.packageName != packageName) continue
+                if (event.eventType != UsageTimelineActive.ACTIVITY_RESUMED &&
+                    event.eventType != UsageTimelineActive.ACTIVITY_PAUSED &&
+                    event.eventType != UsageTimelineActive.ACTIVITY_STOPPED
+                ) {
+                    continue
+                }
+                matched +=
+                    UsageTimelineEvent(
+                        eventType = event.eventType,
+                        className = event.className,
+                        timeStamp = event.timeStamp,
+                    )
+            }
+            return matched
+        } catch (_: Exception) {
+            return null
+        }
+    }
+
+    private fun hasUsageStatsAccess(): Boolean {
+        try {
+            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            val mode =
+                appOps.unsafeCheckOpNoThrow(
+                    AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    Process.myUid(),
+                    context.packageName,
+                )
+            return mode == AppOpsManager.MODE_ALLOWED
+        } catch (_: Exception) {
+            return false
+        }
+    }
+
+    private fun isSecondaryForeignAppAlive(packageName: String): Boolean {
+        val displayId = secondaryDisplay()?.displayId
+        if (displayId != null &&
+            TopDisplayTaskResolver.isPackageOnDisplay(context, packageName, displayId)
+        ) {
+            return true
+        }
+        // Thor ATM often cannot see foreign tasks on display 4 — fall back.
+        if (TopDisplayTaskResolver.taskIdForPackage(context, packageName) != null) return true
+        try {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            if (am.runningAppProcesses?.any { proc ->
+                    proc.pkgList?.contains(packageName) == true
+                } == true
+            ) {
+                return true
+            }
+        } catch (_: Exception) {
+        }
+        return false
+    }
+
+    private fun clearSecondaryAppOwner(reason: String) {
+        val pkg =
+            secondaryAppPackage ?: run {
+                store.onSecondaryAppDismissed()
+                return
+            }
+        secondaryAppPackage = null
+        secondaryAppArmedAt = 0L
+        store.onSecondaryAppDismissed()
+        WajihaLog.i(
+            WajihaTags.DISPLAY,
+            "secondaryHome: clear app-on-secondary pkg=$pkg reason=$reason",
+        )
+    }
+
+    private fun armSecondaryAppOwner(packageName: String) {
+        secondaryAppPackage = packageName
+        secondaryAppArmedAt = System.currentTimeMillis()
+        store.onAppSentToSecondary()
+        cancelSecondaryRecovery("app-on-secondary")
+        secondaryDisplayHost.showActivity("app-on-secondary:$packageName")
+        WajihaLog.i(
+            WajihaTags.DISPLAY,
+            "secondaryHome: arm app-on-secondary pkg=$packageName",
+        )
     }
 
     /**
@@ -1129,14 +1329,20 @@ class DisplayCoordinator(
             )
             return
         }
+        if (secondaryAppPackage != null) {
+            WajihaLog.d(
+                WajihaTags.DISPLAY,
+                "ensureSecondaryHome: skip — app-on-secondary pkg=$secondaryAppPackage",
+            )
+            return
+        }
         val display = secondaryDisplay()
         if (display == null) {
             WajihaLog.d(WajihaTags.DISPLAY, "ensureSecondaryHome: no secondary display")
             return
         }
-        if (store.state.value == DualScreenState.DualBrowsing) {
-            store.setSecondaryMode(SecondaryMode.GameGrid)
-        }
+        // Do not force GameGrid — launching an app from Apps/Settings must not
+        // yank the bottom route back to Home when SecondaryHome later resumes.
         val visibleId = SecondaryHomeActivity.visibleDisplayId
         val onScreen = isSecondaryHealthy(display.displayId)
         if (onScreen) {
@@ -1314,6 +1520,12 @@ class DisplayCoordinator(
 
         /** After memory-guard kills, avoid reclaim thrashing during recovery. */
         private const val MEMORY_GUARD_RECLAIM_DEFER_MS = 10_000L
+
+        /**
+         * Keep sticky bottom-app ownership after launch even if Thor ATM cannot
+         * see the foreign task on display 4 yet.
+         */
+        private const val SECONDARY_APP_OWNER_GRACE_MS = 15_000L
     }
 
     /** Launch an app on a specific display (running-apps "move to display"). */
@@ -1326,11 +1538,10 @@ class DisplayCoordinator(
                 ?: return false
         // Mark AppOnSecondary before startActivity — SecondaryHome onStop races
         // synchronously and used to reclaim over the just-launched app.
+        // Do not change secondaryMode / SecondaryRoute — stay on Apps/Settings/…
+        // if the user launched from there.
         if (displayId != Display.DEFAULT_DISPLAY && !store.forceSingleScreen) {
-            secondaryAppPackage = packageName
-            store.onAppSentToSecondary()
-            cancelSecondaryRecovery("app-on-secondary")
-            secondaryDisplayHost.showActivity("app-on-secondary:$packageName")
+            armSecondaryAppOwner(packageName)
         }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
         val options =
@@ -1346,8 +1557,7 @@ class DisplayCoordinator(
             true
         } catch (error: Exception) {
             if (displayId != Display.DEFAULT_DISPLAY && secondaryAppPackage == packageName) {
-                secondaryAppPackage = null
-                store.onSecondaryAppDismissed()
+                clearSecondaryAppOwner("launch-failed")
             }
             WajihaLog.w(
                 WajihaTags.DISPLAY,

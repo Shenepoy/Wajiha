@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -58,6 +59,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -72,11 +74,11 @@ import com.wajiha.data.scraper.MediaCandidate
 import com.wajiha.data.scraper.MediaType
 import com.wajiha.data.scraper.ScrapeCandidate
 import com.wajiha.data.scraper.previewThumb
-import com.wajiha.input.GamepadHint
 import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadKeys
 import com.wajiha.input.GamepadOverlayLayer
-import com.wajiha.input.MirroredOrLocalGamepadActionBar
+import com.wajiha.input.LocalGamepadOwner
+import com.wajiha.input.RememberDialogGamepadKeyRouting
 import com.wajiha.input.RememberGamepadOwnerFocus
 import com.wajiha.input.dismissKeyboardOnOutsideTap
 import com.wajiha.input.dismissTextEdit
@@ -86,12 +88,12 @@ import com.wajiha.state.DualScreenStore
 import com.wajiha.state.GamepadOwner
 import com.wajiha.ui.components.CriticalChangeActions
 import com.wajiha.ui.components.WajihaContextMenuMetrics
+import com.wajiha.ui.components.WajihaContextMenuRow
 import com.wajiha.ui.components.WajihaLoadingState
 import com.wajiha.ui.components.gamepad.GamepadButton
-import com.wajiha.ui.components.gamepad.GamepadFocusable
 import com.wajiha.ui.components.gamepad.GamepadSafeTextField
+import com.wajiha.ui.components.gamepad.WajihaGlyphAction
 import com.wajiha.ui.components.gamepad.wajihaFocusIndicator
-import com.wajiha.ui.components.gamepad.withoutDualScreenChrome
 import com.wajiha.ui.components.softOutlineBorder
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaElevation
@@ -102,10 +104,18 @@ import org.koin.compose.koinInject
 import kotlin.math.roundToInt
 
 /**
- * Dual-display Manual review:
- * - Bottom: overview mosaic (Back | Game | Search | 1/8 · Options | Confirm)
- * - Top (when [dualDisplay]): slot candidate grid (title · grid · n / total)
- * Single-display falls back to sequential overview ↔ picker on one screen.
+ * Dual-display Manual review.
+ *
+ * Menu glass corners are the same on both sizes: Back (B) top-start, Search
+ * (Select) top-end, Clear (X) and Options bottom-start, Confirm (Y) bottom-end.
+ * The wide glass centers the title between those corners. The narrow glass
+ * keeps the title in the row so it truncates instead of overlapping them.
+ *
+ * Hero glass: slot name top-start, candidate count top-end. The wide hero also
+ * pins A Pick at the bottom-end while a slot is open. The narrow hero leaves
+ * that corner empty.
+ *
+ * Single-display falls back to sequential overview, then the slot grid.
  */
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -232,6 +242,9 @@ fun ScrapeReviewPicker(
                 dismissOnClickOutside = false,
             ),
     ) {
+        LocalGamepadOwner.current?.let { hostOwner ->
+            RememberDialogGamepadKeyRouting(hostOwner)
+        }
         GamepadOverlayLayer(
             layerId = layerId,
             onDismiss = {
@@ -305,7 +318,10 @@ fun ScrapeReviewPicker(
                 shape = RoundedCornerShape(0.dp),
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // Bottom chrome: always game overview header (even while top shows picker)
+                    val canClearFocused =
+                        focusedSlot.mediaType()?.let { type ->
+                            state.hasExistingMedia(type) || type in state.mediaPicks
+                        } ?: (state.metadataFrom != null)
                     ReviewHeader(
                         title = game?.displayName ?: "Manual",
                         queueLabel =
@@ -314,12 +330,11 @@ fun ScrapeReviewPicker(
                             } else {
                                 null
                             },
+                        countLabel = if (showPickerHere) pickerCountLabel(state) else null,
                         searchOpen = searchOpen,
                         showBack = true,
                         onBack = {
-                            if (inPicker && !dualDisplay) {
-                                viewModel.closeSlot()
-                            } else if (inPicker && dualDisplay) {
+                            if (inPicker) {
                                 viewModel.closeSlot()
                             } else {
                                 dismiss()
@@ -398,62 +413,53 @@ fun ScrapeReviewPicker(
                         }
                     }
 
-                    // Footer: Options | count (single-display picker) | Confirm
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = WajihaSpacing.smPlus, vertical = WajihaSpacing.sm),
-                        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (!showPickerHere) {
-                            Box {
-                                GamepadButton(
-                                    text = "Options",
-                                    onClick = { optionsOpen = true },
-                                    outlined = true,
-                                )
-                                if (optionsOpen) {
-                                    ReviewOptionsPopup(
-                                        showAutoFill = state.lockedSlots == null,
-                                        showSkip = showSkip && state.queueTotal > 1,
-                                        onDismiss = { optionsOpen = false },
-                                        onAutoFill = {
-                                            optionsOpen = false
-                                            viewModel.autoFillFromPriorities()
-                                        },
-                                        onSkip = {
-                                            optionsOpen = false
-                                            skipGame()
-                                        },
-                                        onClose = {
-                                            optionsOpen = false
-                                            dismiss()
-                                        },
+                    if (!showPickerHere) {
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.sm),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (canClearFocused) {
+                                    WajihaGlyphAction(
+                                        button = GamepadHintButton.X,
+                                        label = "Clear",
+                                        onClick = { clearFocused() },
                                     )
                                 }
+                                Box {
+                                    GamepadButton(
+                                        text = "Options",
+                                        onClick = { optionsOpen = true },
+                                        outlined = true,
+                                    )
+                                    if (optionsOpen) {
+                                        ReviewOptionsPopup(
+                                            showAutoFill = state.lockedSlots == null,
+                                            showSkip = showSkip && state.queueTotal > 1,
+                                            onDismiss = { optionsOpen = false },
+                                            onAutoFill = {
+                                                optionsOpen = false
+                                                viewModel.autoFillFromPriorities()
+                                            },
+                                            onSkip = {
+                                                optionsOpen = false
+                                                skipGame()
+                                            },
+                                            onClose = {
+                                                optionsOpen = false
+                                                dismiss()
+                                            },
+                                        )
+                                    }
+                                }
                             }
-                        } else {
-                            Surface(
-                                shape = WajihaShapes.chip,
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                            ) {
-                                Text(
-                                    text = pickerCountLabel(state),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    modifier =
-                                        Modifier.padding(
-                                            horizontal = WajihaShapes.heroInnerCornerRadius,
-                                            vertical = WajihaSpacing.sm,
-                                        ),
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.weight(1f))
-
-                        if (!showPickerHere) {
                             CriticalChangeActions(
                                 hasChanges = state.hasChanges,
                                 onRevert = viewModel::revertStaged,
@@ -478,52 +484,6 @@ fun ScrapeReviewPicker(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-
-                    MirroredOrLocalGamepadActionBar(
-                        publisherId = "scrape_review",
-                        hostOwner = menuOwner,
-                        hints =
-                            when {
-                                showPickerHere -> {
-                                    listOf(
-                                        GamepadHint(GamepadHintButton.A, "Select"),
-                                        GamepadHint(GamepadHintButton.B, "Back"),
-                                        GamepadHint(GamepadHintButton.L2, "Focus screen"),
-                                        GamepadHint(
-                                            GamepadHintButton.Select,
-                                            if (searchOpen) "Go" else "Search",
-                                        ),
-                                    ).withoutDualScreenChrome(dualDisplay)
-                                }
-
-                                dualDisplay && inPicker -> {
-                                    listOf(
-                                        GamepadHint(GamepadHintButton.A, "Pick (top)"),
-                                        GamepadHint(GamepadHintButton.B, "Close slot"),
-                                        GamepadHint(GamepadHintButton.Y, "Confirm"),
-                                        GamepadHint(GamepadHintButton.L2, "Focus screen"),
-                                        GamepadHint(
-                                            GamepadHintButton.Select,
-                                            if (searchOpen) "Go" else "Search",
-                                        ),
-                                    )
-                                }
-
-                                else -> {
-                                    listOf(
-                                        GamepadHint(GamepadHintButton.A, "Open"),
-                                        GamepadHint(GamepadHintButton.B, "Back"),
-                                        GamepadHint(GamepadHintButton.X, "Clear"),
-                                        GamepadHint(GamepadHintButton.Y, "Confirm"),
-                                        GamepadHint(GamepadHintButton.L2, "Focus screen"),
-                                        GamepadHint(
-                                            GamepadHintButton.Select,
-                                            if (searchOpen) "Go" else "Search",
-                                        ),
-                                    ).withoutDualScreenChrome(dualDisplay)
-                                }
-                            },
-                    )
                 }
             }
         }
@@ -531,8 +491,9 @@ fun ScrapeReviewPicker(
 }
 
 /**
- * Top-screen hero for Manual scrape: slot title, candidate grid, count `n / total`.
- * Status bar stays from [TopScreen]; this fills the hero body.
+ * Hero glass for Manual scrape. Slot name sits top-start and the count sits
+ * top-end. The wide glass also pins A Pick at the bottom-end while a slot is
+ * open. Status bar stays from [TopScreen].
  */
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -620,10 +581,9 @@ fun ScrapeReviewSlotHero(
                         ),
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
             if (slot != null) {
                 GamepadButton(
-                    text = if (searchOpen) "✕" else "⌕",
+                    text = if (searchOpen) "Close" else "Search",
                     onClick = {
                         if (searchOpen) {
                             dismissTextEdit(focusManager, keyboard)
@@ -636,6 +596,8 @@ fun ScrapeReviewSlotHero(
                     enabled = !state.applying && !state.loading,
                 )
             }
+            Spacer(modifier = Modifier.weight(1f))
+            ReviewCountChip(if (slot != null) pickerCountLabel(state) else "—")
         }
 
         if (searchOpen && slot != null) {
@@ -704,21 +666,25 @@ fun ScrapeReviewSlotHero(
             }
         }
 
-        // Count: 12 / 80
-        Surface(
-            shape = WajihaShapes.chip,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.padding(top = WajihaSpacing.sm),
+        BoxWithConstraints(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = WajihaSpacing.sm),
         ) {
-            Text(
-                text = if (slot != null) pickerCountLabel(state) else "—",
-                style = MaterialTheme.typography.labelLarge,
-                modifier =
-                    Modifier.padding(
-                        horizontal = WajihaShapes.heroInnerCornerRadius,
-                        vertical = WajihaSpacing.sm,
-                    ),
-            )
+            if (maxWidth >= ReviewWideGlassMin && slot != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    WajihaGlyphAction(
+                        button = GamepadHintButton.A,
+                        label = "Pick",
+                        glyphAtEnd = true,
+                    )
+                }
+            }
         }
     }
 }
@@ -727,66 +693,101 @@ fun ScrapeReviewSlotHero(
 private fun ReviewHeader(
     title: String,
     queueLabel: String?,
+    countLabel: String?,
     searchOpen: Boolean,
     onBack: () -> Unit,
     onToggleSearch: () -> Unit,
     searchEnabled: Boolean,
     showBack: Boolean = true,
 ) {
-    Row(
+    BoxWithConstraints(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = WajihaSpacing.sm, vertical = WajihaSpacing.smHalf),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
     ) {
-        // Left cluster: Back | Game Name 🔍
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.smHalf),
-        ) {
+        val wide = maxWidth >= ReviewWideGlassMin
+        val back: @Composable () -> Unit = {
             if (showBack) {
-                GamepadButton(
-                    text = "Back",
+                WajihaGlyphAction(
+                    button = GamepadHintButton.B,
+                    label = "Back",
                     onClick = onBack,
-                    outlined = true,
                     sound = null,
                 )
             }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            GamepadButton(
-                text = if (searchOpen) "✕" else "⌕",
-                onClick = onToggleSearch,
-                outlined = true,
-                enabled = searchEnabled,
-            )
         }
-        if (queueLabel != null) {
-            Surface(
-                shape = WajihaShapes.chip,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+        val end: @Composable () -> Unit = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
             ) {
-                Text(
-                    text = queueLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier =
-                        Modifier.padding(
-                            horizontal = WajihaSpacing.mdTight,
-                            vertical = WajihaSpacing.sm,
-                        ),
+                queueLabel?.let { ReviewCountChip(it) }
+                countLabel?.let { ReviewCountChip(it) }
+                WajihaGlyphAction(
+                    button = GamepadHintButton.Select,
+                    label = if (searchOpen) "Close" else "Search",
+                    onClick = onToggleSearch,
+                    glyphAtEnd = true,
+                    enabled = searchEnabled,
                 )
+            }
+        }
+        if (wide) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                back()
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                end()
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.sm),
+            ) {
+                back()
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                end()
             }
         }
     }
 }
+
+@Composable
+private fun ReviewCountChip(text: String) {
+    Surface(
+        shape = WajihaShapes.chip,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            modifier =
+                Modifier.padding(
+                    horizontal = WajihaSpacing.mdTight,
+                    vertical = WajihaSpacing.sm,
+                ),
+        )
+    }
+}
+
+private val ReviewWideGlassMin = 640.dp
 
 private fun pickerCountLabel(state: ScrapeReviewState): String {
     val slot = state.activeSlot ?: return "0 / 0"
@@ -1155,7 +1156,7 @@ private fun OverviewTile(
                         }
                     },
                 style = MaterialTheme.typography.labelMedium,
-                color = Color.White,
+                color = WajihaColors.OnDark,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1622,7 +1623,7 @@ private fun MediaThumb(
             Text(
                 text = scraperSourceBadgeLabel(sourceId),
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White,
+                color = WajihaColors.OnDark,
                 modifier =
                     Modifier
                         .clip(RoundedCornerShape(3.dp))
@@ -1752,7 +1753,7 @@ private fun ReviewOptionsPopup(
                 }
             Column {
                 items.forEachIndexed { index, (label, action) ->
-                    ReviewOptionsItem(
+                    WajihaContextMenuRow(
                         label = label,
                         onClick = action,
                         focusRequester = if (index == 0) firstFocus else null,
@@ -1760,37 +1761,5 @@ private fun ReviewOptionsPopup(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ReviewOptionsItem(
-    label: String,
-    onClick: () -> Unit,
-    focusRequester: FocusRequester? = null,
-) {
-    GamepadFocusable(
-        onClick = onClick,
-        focusId = "review_options_$label",
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .then(
-                    if (focusRequester != null) {
-                        Modifier.focusRequester(focusRequester)
-                    } else {
-                        Modifier
-                    },
-                ),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = WajihaContextMenuMetrics.rowHeight)
-                    .padding(horizontal = WajihaSpacing.smPlus, vertical = WajihaSpacing.sm),
-        )
     }
 }

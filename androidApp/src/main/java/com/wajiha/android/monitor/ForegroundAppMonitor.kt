@@ -79,10 +79,11 @@ class ForegroundAppMonitor(
     var memoryGuardEnabled: Boolean = true
 
     /**
-     * Packages the user explicitly closed — block [discoverAdditionalGamingSessions]
-     * while the emulator process survives [killBackgroundProcesses].
+     * Packages the user explicitly closed, keyed by close time. Polls skip them
+     * while the process lingers. A newer ACTIVITY_RESUMED, or [onSessionStarted],
+     * clears the marker. See [RediscoverySuppress].
      */
-    private val suppressRediscoveryUntil = mutableMapOf<String, Long>()
+    private val suppressRediscoveryClosedAt = mutableMapOf<String, Long>()
 
     private val lastMemoryGuardAtMs = AtomicLong(0L)
     private var lastRssProbeAtMs: Long = 0L
@@ -811,6 +812,9 @@ class ForegroundAppMonitor(
         trigger: String,
     ) {
         WajihaLog.i(WajihaTags.NOW_PLAYING, "endSession: $packageName ($trigger)")
+        val sessionStartedAt =
+            store.getSession(packageName)?.sessionStartedAt
+                ?: (System.currentTimeMillis() - EVENT_WINDOW_MS)
         // Match Y-close: block rediscovery while a dismissed process lingers.
         suppressRediscovery(packageName)
         SessionTaskRegistry.clear(packageName)
@@ -823,19 +827,17 @@ class ForegroundAppMonitor(
             lastForeground = null
         }
         if (!store.hasActiveSessions()) {
-            // False session-end (multi-activity usage timeline, Thor task blindness):
-            // never yank the hero over a package that is still foreground / alive.
-            if (queryLatestForegroundPackage() == packageName ||
-                hasRunningProcess(packageName) ||
-                hasRunningTask(packageName)
-            ) {
-                WajihaLog.w(
-                    WajihaTags.NOW_PLAYING,
-                    "endSession: skip hero restore — $packageName still live ($trigger)",
-                )
-            } else {
-                displayCoordinator.restorePrimaryHero()
-            }
+            // Never auto moveTaskToFront after session end. False ends (Turnip
+            // multi-activity / Thor task blindness) and alt-tab to Chrome used to
+            // steal display 0 here. Hero returns via intentional Home / primary resume.
+            val foreignTop = PrimaryHeroRestoreGate.foreignTopOwnerIfAny(context, store)
+            WajihaLog.i(
+                WajihaTags.NOW_PLAYING,
+                "endSession: leave top focus alone pkg=$packageName " +
+                    "foreignTop=$foreignTop live=" +
+                    "${hasRunningProcess(packageName) || hasRunningTask(packageName) ||
+                        isUsageTimelineActive(packageName, sessionStartedAt)} ($trigger)",
+            )
         }
     }
 
@@ -1105,10 +1107,10 @@ class ForegroundAppMonitor(
             }
         }
         val suppress =
-            suppressRediscoveryUntil.entries
-                .map { (pkg, until) ->
-                    val remaining = (until - now).coerceAtLeast(0)
-                    "$pkg(${remaining}ms)"
+            suppressRediscoveryClosedAt.entries
+                .map { (pkg, closedAt) ->
+                    val age = (now - closedAt).coerceAtLeast(0)
+                    "$pkg(closed ${age}ms ago)"
                 }.sorted()
         WajihaLog.i(
             WajihaTags.DEBUG,
@@ -1139,8 +1141,8 @@ class ForegroundAppMonitor(
 
     /** Debug adb: clear all Y-close rediscovery suppression entries. */
     fun debugClearSuppressList() {
-        val cleared = suppressRediscoveryUntil.keys.sorted()
-        suppressRediscoveryUntil.clear()
+        val cleared = suppressRediscoveryClosedAt.keys.sorted()
+        suppressRediscoveryClosedAt.clear()
         WajihaLog.i(
             WajihaTags.DEBUG,
             "debugClearSuppressList: cleared ${if (cleared.isEmpty()) "(none)" else cleared}",
@@ -1415,26 +1417,40 @@ class ForegroundAppMonitor(
         }
     }
 
-    /** User closed a session — suppress rediscovery until process dies or timeout. */
+    /** User closed a session — ignore linger polls until a newer resume. */
     private fun suppressRediscovery(packageName: String) {
-        suppressRediscoveryUntil[packageName] =
-            System.currentTimeMillis() + SUPPRESS_REDISCOVERY_MS
+        val closedAt = System.currentTimeMillis()
+        suppressRediscoveryClosedAt[packageName] = closedAt
         WajihaLog.i(
             WajihaTags.NOW_PLAYING,
-            "suppressRediscovery: $packageName for ${SUPPRESS_REDISCOVERY_MS}ms",
+            "suppressRediscovery: $packageName closedAt=$closedAt",
         )
     }
 
     private fun clearRediscoverySuppression(packageName: String) {
-        if (suppressRediscoveryUntil.remove(packageName) != null) {
+        if (suppressRediscoveryClosedAt.remove(packageName) != null) {
             WajihaLog.d(WajihaTags.NOW_PLAYING, "clearRediscoverySuppression: $packageName")
         }
     }
 
     private fun isRediscoverySuppressed(packageName: String): Boolean {
-        val until = suppressRediscoveryUntil[packageName] ?: return false
-        if (System.currentTimeMillis() < until) return true
-        suppressRediscoveryUntil.remove(packageName)
+        val closedAt = suppressRediscoveryClosedAt[packageName] ?: return false
+        val usageAccessGranted = hasUsageAccess()
+        val latestResumeAt =
+            if (usageAccessGranted) queryLatestResumeTime(packageName) else 0L
+        val stillSuppressed =
+            RediscoverySuppress.stillSuppressed(
+                closedAt = closedAt,
+                now = System.currentTimeMillis(),
+                latestResumeAt = latestResumeAt,
+                usageAccessGranted = usageAccessGranted,
+            )
+        if (stillSuppressed) return true
+        suppressRediscoveryClosedAt.remove(packageName)
+        WajihaLog.d(
+            WajihaTags.NOW_PLAYING,
+            "suppressRediscovery: cleared $packageName resume=$latestResumeAt usage=$usageAccessGranted",
+        )
         return false
     }
 
@@ -1484,9 +1500,6 @@ class ForegroundAppMonitor(
 
         /** Ignore brief resolver flips when alt-tabbing away from the game. */
         const val TOP_GAME_HIDE_DEBOUNCE_MS = 400L
-
-        /** After explicit Y-close, block rediscovery while emulator process lingers. */
-        const val SUPPRESS_REDISCOVERY_MS = 60_000L
 
         /** At most one memory-guard escalation pass this often. */
         const val MEMORY_GUARD_DEBOUNCE_MS = 5_000L

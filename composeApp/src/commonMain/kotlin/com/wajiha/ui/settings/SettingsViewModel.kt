@@ -2,6 +2,7 @@ package com.wajiha.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wajiha.data.db.DatabaseWiper
 import com.wajiha.data.db.PlatformEntity
 import com.wajiha.data.db.RomFolderEntity
 import com.wajiha.data.prefs.AppSettings
@@ -32,6 +33,7 @@ class SettingsViewModel(
     private val libraryActions: LibraryActions,
     private val dualScreenStore: DualScreenStore,
     private val iconPackActions: IconPackActions,
+    private val databaseWiper: DatabaseWiper,
 ) : ViewModel() {
     val settings: StateFlow<AppSettings> =
         settingsRepository.settings
@@ -122,6 +124,10 @@ class SettingsViewModel(
 
     fun setDetectManualLaunches(value: Boolean) {
         viewModelScope.launch { settingsRepository.setDetectManualLaunches(value) }
+    }
+
+    fun resetEverything() {
+        viewModelScope.launch { databaseWiper.wipeAllTables() }
     }
 
     fun setMemoryGuardEnabled(value: Boolean) {

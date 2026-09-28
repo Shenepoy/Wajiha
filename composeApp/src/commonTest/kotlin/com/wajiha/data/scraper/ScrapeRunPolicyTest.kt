@@ -7,13 +7,26 @@ import kotlin.test.assertNull
 class ScrapeRunPolicyTest {
     @Test
     fun sourceOverride_roundTripsThroughWorkerWireValue() {
-        val policy = ScrapeRunPolicy.Force.copy(sourceId = "screenscraper")
+        val policy = ScrapeRunPolicy.Force.copy(sourceIds = listOf("screenscraper"))
 
         val restored = ScrapeRunPolicy.fromName(policy.wireName())
 
         assertEquals(ScrapeRunMode.Force, restored.mode)
         assertEquals("screenscraper", restored.sourceId)
+        assertEquals(listOf("screenscraper"), restored.sourceIds)
         assertEquals("force:screenscraper", policy.wireName())
+    }
+
+    @Test
+    fun multiSourceOverride_roundTripsThroughWorkerWireValue() {
+        val policy =
+            ScrapeRunPolicy.FillGaps.copy(sourceIds = listOf("screenscraper", "steamgriddb"))
+
+        val restored = ScrapeRunPolicy.fromName(policy.wireName())
+
+        assertEquals(listOf("screenscraper", "steamgriddb"), restored.sourceIds)
+        assertEquals("fill_gaps:screenscraper,steamgriddb", policy.wireName())
+        assertNull(restored.sourceId)
     }
 
     @Test

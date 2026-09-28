@@ -52,6 +52,7 @@ import com.wajiha.state.isSettingsHeroInteractive
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadChip
 import com.wajiha.ui.components.gamepad.WajihaSettingDivider
+import com.wajiha.ui.home.LocalStatusChromeCarveReserve
 import com.wajiha.ui.theme.WajihaAlphas
 import com.wajiha.ui.theme.WajihaColors
 import com.wajiha.ui.theme.WajihaElevation
@@ -60,6 +61,12 @@ import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import com.wajiha.ui.theme.focusColorPreview
 import org.koin.compose.koinInject
+
+/** Must match [SettingsHeroStage] vertical inset — used to size the status-pill carve. */
+val SettingsHeroStagePaddingVertical = WajihaSpacing.mdTight
+
+/** Must match [SettingsHeroStage] horizontal inset. */
+val SettingsHeroStagePaddingHorizontal = WajihaSpacing.md
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -145,7 +152,10 @@ private fun SettingsHeroStage(
                                 scheme.background,
                             ),
                     ),
-                ).padding(horizontal = WajihaSpacing.md, vertical = WajihaSpacing.mdTight),
+                ).padding(
+                    horizontal = SettingsHeroStagePaddingHorizontal,
+                    vertical = SettingsHeroStagePaddingVertical,
+                ),
     ) {
         content()
     }
@@ -159,6 +169,13 @@ private fun SettingsHeroCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val statusCarve = LocalStatusChromeCarveReserve.current
+    // Zero carve sizes fall back to a plain rounded hero rect.
+    val shape =
+        WajihaShapes.rememberHeroTopEndCarve(
+            carveWidth = statusCarve.width,
+            carveHeight = statusCarve.height,
+        )
     Surface(
         modifier =
             Modifier
@@ -173,7 +190,7 @@ private fun SettingsHeroCard(
                         Modifier
                     },
                 ),
-        shape = WajihaShapes.hero,
+        shape = shape,
         color = scheme.surfaceContainerLow,
         tonalElevation = WajihaElevation.low,
         shadowElevation = WajihaElevation.overlay,

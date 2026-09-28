@@ -34,7 +34,7 @@ Room KMP (`com.wajiha.data.db`), bundled SQLite driver. Tables:
 | `rom_folders` | SAF tree URIs per platform with scan settings. |
 | `game_media` | One row per (game, media type): source, local path, remote url. |
 | `play_sessions` | Start/end/duration; `origin` distinguishes launcher vs detected sessions. |
-| `collections` + `collection_games` | User collections (**schema + repository exist; UI pending**). |
+| `collections` + `collection_games` | User collections. The library Collections chip and the game menu add, remove, and create them. |
 
 Indices: `games(uri)` unique, `games(platformId, displayName)`, hash columns, `game_media(gameId, type)`, session times.
 
@@ -72,7 +72,7 @@ Settings are two DataStore blobs: `SettingsRepository` (typed keys for app/dual-
 
 ## Gamepad input
 
-Full gamepad navigation lives in `composeApp/src/commonMain/kotlin/com/wajiha/input/` and `ui/components/gamepad/`. Android key routing is in `androidApp/.../input/GamepadKeyRouter.kt`. See [gamepad.md](gamepad.md).
+Full gamepad navigation lives in `composeApp/src/commonMain/kotlin/com/wajiha/input/` and `ui/components/gamepad/`. Android key routing is in `androidApp/.../input/GamepadKeyRouter.kt`. See [gamepad.md](gamepad.md). Color, type, and what new UI may not do: [design.md](design.md).
 
 ## ROM reconciliation (Tier 3)
 
@@ -115,7 +115,7 @@ Sources and their quirks (see also [external-apis.md](external-apis.md)):
 
 ## RetroAchievements
 
-`RaClient` wraps the RA Web API (`API_GetUserProfile`, `API_GetGameList` with hashes, `API_GetGame`, `API_GetGameInfoAndUserProgress`). Auth uses `y` (API key) plus `z` (username) like the official client; progress/`u` prefers a stored ULID after login. Hash libraries are disk-cached aggressively (GetGameList guideline); HTTP is paced. There is no public Web `GetGameInfoByHash` — hash→game uses GetGameList (title fallback when ROM MD5 ≠ RA hash). `RaRepository` persists hash/title-links to `games.raGameId` and caches progress briefly in memory. Scraper source `ra` and game-detail / progress UI consume the same client; the old Achievements secondary tab was removed (legacy enum → Now Playing).
+`RaClient` wraps the RA Web API (`API_GetUserProfile`, `API_GetGameList` with hashes, `API_GetGame`, `API_GetGameInfoAndUserProgress`). Auth uses `y` (API key) plus `z` (username) like the official client; progress/`u` prefers a stored ULID after login. Hash libraries are disk-cached aggressively (GetGameList guideline); HTTP is paced. There is no public Web `GetGameInfoByHash` — hash→game uses GetGameList (title fallback when ROM MD5 ≠ RA hash). `RaRepository` persists hash/title-links to `games.raGameId` and caches progress briefly in memory. Scraper source `ra`, the Achievements secondary tab, and the game-detail Achievements section consume the same client. Game detail pins `RaViewModel` to that game so a running session does not replace the section.
 
 ## Settings UI composition
 

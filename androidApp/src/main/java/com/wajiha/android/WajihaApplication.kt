@@ -15,6 +15,7 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.request.crossfade
+import com.wajiha.android.data.AndroidDatabaseWiper
 import com.wajiha.android.detect.EmulatorDataReader
 import com.wajiha.android.detect.ExternalGameResolver
 import com.wajiha.android.detect.RomPathMatcher
@@ -25,6 +26,7 @@ import com.wajiha.android.display.SecondaryDisplayHost
 import com.wajiha.android.icons.AndroidIconPackActions
 import com.wajiha.android.icons.IconBitmapCache
 import com.wajiha.android.icons.IconResolver
+import com.wajiha.android.input.AndroidDialogGamepadKeyInstaller
 import com.wajiha.android.launch.GameLauncher
 import com.wajiha.android.launch.PlaySessionTracker
 import com.wajiha.android.library.RomFileDeleter
@@ -33,7 +35,9 @@ import com.wajiha.android.monitor.ForegroundAppMonitor
 import com.wajiha.android.platform.AndroidAppActions
 import com.wajiha.android.platform.AndroidLibraryActions
 import com.wajiha.android.system.SystemController
+import com.wajiha.android.work.ScrapeWorker
 import com.wajiha.data.config.ConfigInstaller
+import com.wajiha.data.db.DatabaseWiper
 import com.wajiha.data.db.WajihaDatabase
 import com.wajiha.data.db.createWajihaDatabase
 import com.wajiha.data.prefs.SettingsRepository
@@ -44,6 +48,7 @@ import com.wajiha.data.scraper.MediaStorage
 import com.wajiha.di.ScreenScraperDevCredentials
 import com.wajiha.di.initKoin
 import com.wajiha.domain.repository.PlatformRepository
+import com.wajiha.input.DialogGamepadKeyInstaller
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaLogGate
 import com.wajiha.log.WajihaLogKind
@@ -201,6 +206,13 @@ class WajihaApplication :
                     com.wajiha.android.input
                         .GamepadGate(get())
                 }
+                single {
+                    AndroidDialogGamepadKeyInstaller(
+                        router = get(),
+                        gate = get(),
+                        triggerAxisHandler = get(),
+                    )
+                } binds arrayOf(DialogGamepadKeyInstaller::class)
                 single { EmulatorDataReader(this@WajihaApplication) }
                 single { RomPathMatcher(get()) }
                 single { AetherSx2RomPathProbe(get()) }
@@ -250,6 +262,14 @@ class WajihaApplication :
                 single { SystemController(this@WajihaApplication) } binds
                     arrayOf(SystemControls::class)
                 single {
+                    AndroidDatabaseWiper(
+                        context = this@WajihaApplication,
+                        storedDataCleaner = get(),
+                        dataStore = get(),
+                        dualScreenStore = get(),
+                    )
+                } binds arrayOf(DatabaseWiper::class)
+                single {
                     ScreenScraperDevCredentials(
                         devId = BuildConfig.SCREENSCRAPER_DEV_ID,
                         devPassword = BuildConfig.SCREENSCRAPER_DEV_PASSWORD,
@@ -265,8 +285,19 @@ class WajihaApplication :
         // Block briefly so the first Activity gets the real theme (not default-dark).
         syncBootThemeFromDataStore()
         seedDefaultsIfNeeded()
+        clearStaleScrapeWork()
         mirrorSettings()
         registerComponentCallbacks(memoryTrimCallbacks)
+    }
+
+    /**
+     * Process death can leave WorkManager unique scrape work unfinished while the
+     * in-memory scraper is idle — that blocked Run with "already running".
+     */
+    private fun clearStaleScrapeWork() {
+        appScope.launch {
+            runCatching { ScrapeWorker.clearStaleWorkIfIdle(this@WajihaApplication) }
+        }
     }
 
     private fun syncBootThemeFromDataStore() {

@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -22,7 +21,6 @@ import com.wajiha.state.HeroContext
 import com.wajiha.ui.components.gamepad.FocusScreenHintOverlay
 import com.wajiha.ui.home.HomeUiState
 import com.wajiha.ui.home.TopScreen
-import com.wajiha.ui.theme.WajihaSpacing
 import org.koin.compose.koinInject
 
 /**
@@ -96,9 +94,7 @@ fun LauncherHeroPane(
                 modifier =
                     Modifier
                         .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        // Lift mirrored hints / L2 chrome slightly off the bottom edge.
-                        .padding(bottom = WajihaSpacing.md),
+                        .fillMaxWidth(),
             ) {
                 // Floating L2 sits above the mirrored bar when both are present.
                 if (showFocusHint) {
@@ -108,8 +104,7 @@ fun LauncherHeroPane(
                         )
                     }
                 }
-                // When Settings → Screens → Swap gamepad hints is on, menu hints
-                // publish here so the hero display shows the controller bar over art.
+                // Swap gamepad hints publishes one primary glyph here on the wide hero.
                 MirroredGamepadHintsHost()
             }
         }

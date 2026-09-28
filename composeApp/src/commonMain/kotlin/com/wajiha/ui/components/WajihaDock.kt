@@ -346,7 +346,9 @@ private fun DockSlotTile(
         onLongPress = onLongPress,
         focusRequester = focusRequester,
         focusId = focusId,
-        selectOnFocus = true,
+        // D-pad and tap own selection. Focus-on-detach (Up from Apps/Settings)
+        // must not re-enter the dock via onSelect.
+        selectOnFocus = false,
         // Only join Compose focus search while the dock band owns navigation —
         // otherwise Down from the bottom game row can spatially leap into a slot.
         gamepadFocusable = gamepadFocusable,

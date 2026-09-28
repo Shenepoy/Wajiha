@@ -571,12 +571,13 @@ class DualScreenStore {
         }
         _state.value = DualScreenState.GameRunning
         when (preferredGameMode) {
-            // Keep GameGrid through launch. Auto Now Playing hard-cuts brightness
-            // on Thor (Grid ~160 → Now Playing ~230) and reads as a flash even
-            // with crossfade. Chip + Now Running tab still open the full panel.
-            SecondaryMode.NowPlaying,
-            SecondaryMode.GameGrid,
-            -> {
+            SecondaryMode.NowPlaying -> {
+                // Open Now Running on the bottom when a game lands on the top
+                // panel. Live Overlay + mode crossfade cover the transition.
+                _secondaryMode.value = SecondaryMode.NowPlaying
+            }
+
+            SecondaryMode.GameGrid -> {
                 if (_secondaryMode.value != SecondaryMode.GameGrid) {
                     _secondaryMode.value = SecondaryMode.GameGrid
                 }
@@ -642,12 +643,9 @@ class DualScreenStore {
 
     private fun enterGameRunningStateIfNeeded() {
         if (_state.value == DualScreenState.SingleDisplay) return
-        // NowPlaying preferred keeps GameGrid — auto full-panel Now Playing
-        // hard-cuts brightness on Thor at session start (see applyDeferred).
         val mode =
             when {
                 blackoutOnLaunch -> SecondaryMode.Off
-                preferredGameMode == SecondaryMode.NowPlaying -> SecondaryMode.GameGrid
                 else -> preferredGameMode
             }
         _secondaryMode.value = mode
@@ -696,21 +694,26 @@ class DualScreenStore {
     }
 
     fun onAppSentToSecondary() {
-        if (_state.value == DualScreenState.DualBrowsing) {
+        if (_state.value == DualScreenState.SingleDisplay) return
+        // Foreign app owns the bottom panel — keep this even during GameRunning
+        // so SecondaryHome reclaim cannot cover Chrome/Settings launches.
+        if (_state.value != DualScreenState.AppOnSecondary) {
             _state.value = DualScreenState.AppOnSecondary
         }
     }
 
     fun onSecondaryAppDismissed() {
-        if (_state.value == DualScreenState.AppOnSecondary) {
-            _state.value = DualScreenState.DualBrowsing
-        }
+        if (_state.value != DualScreenState.AppOnSecondary) return
+        _state.value =
+            if (hasActiveSessions()) {
+                DualScreenState.GameRunning
+            } else {
+                DualScreenState.DualBrowsing
+            }
     }
 
     fun setSecondaryMode(mode: SecondaryMode) {
-        // Trophies secondary tab removed; keep enum for legacy prefs / valueOf safety.
-        val resolved =
-            if (mode == SecondaryMode.Achievements) SecondaryMode.NowPlaying else mode
+        val resolved = mode
         _secondaryMode.value = resolved
         _state.update { current ->
             when {
@@ -999,7 +1002,7 @@ class DualScreenStore {
 
     /** L2 — flip gamepad between top (Primary) and bottom (Secondary). */
     fun toggleGamepadOwner() {
-        if (_state.value == DualScreenState.SingleDisplay) return
+        if (!isL2SwitchAvailable()) return
         val now = nowMs()
         // Digital BUTTON_L2 and analog AXIS_LTRIGGER can both fire for one press.
         if (now - lastL2ToggleAtMs < 280L) return

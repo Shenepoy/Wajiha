@@ -37,12 +37,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -58,7 +58,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -104,8 +103,8 @@ import com.wajiha.ui.components.dockPinSlotCount
 import com.wajiha.ui.components.dockPinStartIndex
 import com.wajiha.ui.components.gamepad.GamepadButton
 import com.wajiha.ui.components.gamepad.GamepadChip
-import com.wajiha.ui.components.gamepad.GamepadHintGlyph
 import com.wajiha.ui.components.gamepad.GamepadTile
+import com.wajiha.ui.components.gamepad.WajihaGlyphAction
 import com.wajiha.ui.components.gamepad.hasCenterInViewport
 import com.wajiha.ui.components.gamepad.smoothBringItemIntoView
 import com.wajiha.ui.components.gamepad.visibleFractionOnScrollAxis
@@ -118,7 +117,9 @@ import com.wajiha.ui.theme.WajihaMotion
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flowOf
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
@@ -137,6 +138,13 @@ fun BottomScreen(
     gameGridShowTitles: Boolean = true,
     gameGridShowTileChrome: Boolean = true,
     onSelectPlatform: (String?) -> Unit,
+    onOpenCollections: () -> Unit = {},
+    onSelectCollection: (Long) -> Unit = {},
+    onCreateCollection: (String) -> Unit = {},
+    onCreateCollectionForGame: (name: String, gameId: Long) -> Unit = { _, _ -> },
+    onDeleteCollection: (Long) -> Unit = {},
+    onSetGameInCollection: (collectionId: Long, gameId: Long, member: Boolean) -> Unit = { _, _, _ -> },
+    membershipForGame: (Long) -> Flow<Set<Long>> = { flowOf(emptySet()) },
     onFocusGame: (Long?) -> Unit,
     onLaunchGame: (Long) -> Unit,
     onOpenGameDetail: (Long) -> Unit = {},
@@ -196,11 +204,20 @@ fun BottomScreen(
     var selectedSessionPackage by remember { mutableStateOf<String?>(null) }
     var previousGameIds by remember { mutableStateOf(state.tiles.map { it.game.id }) }
     var contextMenuTarget by remember { mutableStateOf<GameContextTarget?>(null) }
+    val menuGameId = contextMenuTarget?.gameId
+    val membershipFlow =
+        remember(menuGameId) {
+            if (menuGameId == null) flowOf(emptySet()) else membershipForGame(menuGameId)
+        }
+    val collectionMembership by membershipFlow.collectAsState(emptySet())
     var contextMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
     var sessionContextMenuTarget by remember { mutableStateOf<SessionContextTarget?>(null) }
     var sessionContextMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
     var dockFocused by remember { mutableStateOf(false) }
     var selectedDockIndex by remember { mutableStateOf(0) }
+
+    /** Library focus is requested after dock slots leave the focus tree. */
+    var pendingDockExitFocus by remember { mutableStateOf(false) }
     var dockContextMenuTarget by remember { mutableStateOf<AppContextTarget?>(null) }
     var dockContextMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
     val tileBoundsById = remember { mutableStateMapOf<Long, Rect>() }
@@ -493,11 +510,48 @@ fun BottomScreen(
         return enterDock(dockPinStartIndex() + pinLocal)
     }
 
+    /** Highest-index game that is at least half on screen (bottom of the trailing column). */
+    fun lastOnScreenGameId(): Long? {
+        val layoutInfo = libraryGridState.layoutInfo
+        val visible =
+            layoutInfo.visibleItemsInfo.filter { info ->
+                info.key is Long && info.hasCenterInViewport(layoutInfo, horizontalScroll = true)
+            }
+        if (visible.isEmpty()) return null
+        val ids = state.tiles.map { it.game.id }
+        return visible
+            .maxByOrNull { info ->
+                (info.key as? Long)?.let { ids.indexOf(it) } ?: -1
+            }?.key as? Long
+    }
+
     fun exitDockToLibrary(): Boolean {
         if (!dockFocused) return false
+        // Slots are still focusable until the next composition. Requesting the
+        // game here fails, and detaching Apps/Settings then lands on a sibling
+        // slot whose focus callback re-enters the dock.
+        val slot = dockSlots.getOrNull(selectedDockIndex)
+        if (slot is DockSlot.Shell && slot.action == DockShellAction.Settings) {
+            lastOnScreenGameId()?.let { gameId ->
+                selectedSessionPackage = null
+                selectedGameId = gameId
+                onFocusGame(gameId)
+            }
+        }
         dockFocused = false
         dockContextMenuTarget = null
         dockContextMenuAnchorBounds = null
+        pendingDockExitFocus = true
+        return true
+    }
+
+    LaunchedEffect(pendingDockExitFocus) {
+        if (!pendingDockExitFocus) return@LaunchedEffect
+        withFrameNanos { }
+        if (dockFocused) {
+            pendingDockExitFocus = false
+            return@LaunchedEffect
+        }
         val gameId =
             selectedGameId ?: state.tiles
                 .firstOrNull()
@@ -506,23 +560,17 @@ fun BottomScreen(
         if (gameId != null) {
             selectedGameId = gameId
             onFocusGame(gameId)
-            try {
-                tileFocusRequesters[gameId]?.requestFocus()
-            } catch (_: Exception) {
-            }
-            return true
+            runCatching { tileFocusRequesters[gameId]?.requestFocus() }
+            pendingDockExitFocus = false
+            return@LaunchedEffect
         }
         if (gridSessions.isNotEmpty()) {
             val pkg = gridSessions.first().packageName
             selectedSessionPackage = pkg
             onFocusSession(pkg)
-            try {
-                sessionFocusRequesters[pkg]?.requestFocus()
-            } catch (_: Exception) {
-            }
-            return true
+            runCatching { sessionFocusRequesters[pkg]?.requestFocus() }
         }
-        return true
+        pendingDockExitFocus = false
     }
 
     fun moveDockFocus(delta: Int): Boolean {
@@ -749,7 +797,6 @@ fun BottomScreen(
                     }
                 } else if (sessionFocused) {
                     add(GamepadHint(GamepadHintButton.A, "Switch"))
-                    add(GamepadHint(GamepadHintButton.Y, "Close"))
                     add(GamepadHint(GamepadHintButton.X, "Menu"))
                     if (gridSessions.size > 1) {
                         add(GamepadHint(GamepadHintButton.DpadUpDown, "Sessions"))
@@ -858,6 +905,31 @@ fun BottomScreen(
         },
         onPreviewKey = { event ->
             if (menuOpen) return@WajihaScreen false
+            if (state.browsingCollections) {
+                return@WajihaScreen when {
+                    GamepadKeys.isL1(event.type, event.key) -> {
+                        cyclePlatformFilter(
+                            state = state,
+                            delta = -1,
+                            onSelectPlatform = onSelectPlatform,
+                            onOpenCollections = onOpenCollections,
+                        )
+                    }
+
+                    GamepadKeys.isR1(event.type, event.key) -> {
+                        cyclePlatformFilter(
+                            state = state,
+                            delta = 1,
+                            onSelectPlatform = onSelectPlatform,
+                            onOpenCollections = onOpenCollections,
+                        )
+                    }
+
+                    else -> {
+                        false
+                    }
+                }
+            }
             if (dockFocused && showDock) {
                 return@WajihaScreen when {
                     GamepadKeys.isLeft(event.type, event.key) -> {
@@ -895,6 +967,7 @@ fun BottomScreen(
                             state = state,
                             delta = -1,
                             onSelectPlatform = onSelectPlatform,
+                            onOpenCollections = onOpenCollections,
                         )
                     }
 
@@ -903,6 +976,7 @@ fun BottomScreen(
                             state = state,
                             delta = 1,
                             onSelectPlatform = onSelectPlatform,
+                            onOpenCollections = onOpenCollections,
                         )
                     }
 
@@ -937,11 +1011,6 @@ fun BottomScreen(
 
                     GamepadKeys.isX(event.type, event.key) -> {
                         openSessionContextMenu(pkg)
-                        true
-                    }
-
-                    GamepadKeys.isY(event.type, event.key) -> {
-                        onCloseSession(pkg)
                         true
                     }
 
@@ -995,6 +1064,7 @@ fun BottomScreen(
                         state = state,
                         delta = -1,
                         onSelectPlatform = onSelectPlatform,
+                        onOpenCollections = onOpenCollections,
                     )
                 }
 
@@ -1003,6 +1073,7 @@ fun BottomScreen(
                         state = state,
                         delta = 1,
                         onSelectPlatform = onSelectPlatform,
+                        onOpenCollections = onOpenCollections,
                     )
                 }
 
@@ -1021,6 +1092,7 @@ fun BottomScreen(
                     HomeChromeBar(
                         state = state,
                         onSelectPlatform = onSelectPlatform,
+                        onOpenCollections = onOpenCollections,
                         onOpenApps = onOpenApps,
                         onOpenSettings = onOpenSettings,
                         onOpenSystem = onOpenSystem,
@@ -1035,36 +1107,59 @@ fun BottomScreen(
                     )
                 }
 
-                if (state.tiles.isEmpty() && gridSessions.isEmpty()) {
+                if (state.browsingCollections) {
+                    CollectionLibraryPane(
+                        collections = state.collections,
+                        onSelect = onSelectCollection,
+                        onCreate = onCreateCollection,
+                        onDelete = onDeleteCollection,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                } else if (state.tiles.isEmpty() && gridSessions.isEmpty()) {
                     WajihaEmptyState(
-                        title = "No games yet",
-                        subtitle = "Add a platform, then point Wajiha at a ROM folder",
+                        title = if (state.selectedCollectionId != null) "No games in this collection" else "No games yet",
+                        subtitle =
+                            if (state.selectedCollectionId != null) {
+                                "Add games from a tile menu, or pick another collection."
+                            } else {
+                                "Add a platform, then point Wajiha at a ROM folder"
+                            },
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         action = {
-                            LaunchedEffect(onAddGames) {
-                                withFrameNanos { }
-                                try {
-                                    emptyActionFocus.requestFocus()
-                                } catch (_: Exception) {
-                                }
-                            }
-                            if (onAddGames != null) {
+                            if (state.selectedCollectionId != null) {
                                 GamepadButton(
-                                    text = "Add platform",
-                                    onClick = onAddGames,
+                                    text = "Collections",
+                                    onClick = onOpenCollections,
                                     focusRequester = emptyActionFocus,
-                                    focusId = "empty:add_platform",
+                                    focusId = "empty:collections",
                                     modifier = Modifier.padding(top = WajihaSpacing.sm),
                                 )
+                            } else {
+                                LaunchedEffect(onAddGames) {
+                                    withFrameNanos { }
+                                    try {
+                                        emptyActionFocus.requestFocus()
+                                    } catch (_: Exception) {
+                                    }
+                                }
+                                if (onAddGames != null) {
+                                    GamepadButton(
+                                        text = "Add platform",
+                                        onClick = onAddGames,
+                                        focusRequester = emptyActionFocus,
+                                        focusId = "empty:add_platform",
+                                        modifier = Modifier.padding(top = WajihaSpacing.sm),
+                                    )
+                                }
+                                GamepadButton(
+                                    text = "Open Settings",
+                                    onClick = onOpenSettings,
+                                    focusRequester = if (onAddGames == null) emptyActionFocus else null,
+                                    focusId = "empty:settings",
+                                    outlined = true,
+                                    modifier = Modifier.padding(top = WajihaSpacing.xs),
+                                )
                             }
-                            GamepadButton(
-                                text = "Open Settings",
-                                onClick = onOpenSettings,
-                                focusRequester = if (onAddGames == null) emptyActionFocus else null,
-                                focusId = "empty:settings",
-                                outlined = true,
-                                modifier = Modifier.padding(top = WajihaSpacing.xs),
-                            )
                         },
                     )
                 } else {
@@ -1281,7 +1376,6 @@ fun BottomScreen(
                                                 onFocusSession(session.packageName)
                                             },
                                             onOpen = { onOpenSession(session.packageName) },
-                                            onClose = { onCloseSession(session.packageName) },
                                             onLongPress = {
                                                 if (selectionLocked) return@SessionGridTile
                                                 if (gamepadOwner != null) {
@@ -1416,6 +1510,7 @@ fun BottomScreen(
                         dockFocused = dockFocused,
                         iconShape = dockIconShape,
                         onSelectIndex = { index ->
+                            pendingDockExitFocus = false
                             dockFocused = true
                             selectedSessionPackage = null
                             selectedDockIndex = index
@@ -1456,6 +1551,18 @@ fun BottomScreen(
                 anchorBounds = contextMenuAnchorBounds,
                 secondaryDisplayId = secondaryDisplayId,
                 dualDisplay = dualDisplay,
+                collections = state.collections,
+                memberCollectionIds = collectionMembership,
+                onToggleCollection = { collectionId, member ->
+                    contextMenuTarget?.gameId?.let { gameId ->
+                        onSetGameInCollection(collectionId, gameId, member)
+                    }
+                },
+                onCreateCollection = { name ->
+                    contextMenuTarget?.gameId?.let { gameId ->
+                        onCreateCollectionForGame(name, gameId)
+                    }
+                },
                 onDismiss = ::dismissContextMenu,
                 onOpenOnDisplay = onLaunchGameOnDisplay,
                 onOpenInfo = onOpenGameDetail,
@@ -1556,6 +1663,7 @@ private fun GameGridHeroBackdrop(path: String) {
 fun HomeChromeBar(
     state: HomeUiState,
     onSelectPlatform: (String?) -> Unit,
+    onOpenCollections: () -> Unit = {},
     onOpenApps: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSystem: (() -> Unit)? = null,
@@ -1593,6 +1701,7 @@ fun HomeChromeBar(
             HomePlatformFilterRow(
                 state = state,
                 onSelectPlatform = onSelectPlatform,
+                onOpenCollections = onOpenCollections,
                 modifier =
                     Modifier
                         .align(Alignment.BottomCenter)
@@ -1655,6 +1764,7 @@ fun HomeChromeBar(
             HomePlatformFilterRow(
                 state = state,
                 onSelectPlatform = onSelectPlatform,
+                onOpenCollections = onOpenCollections,
                 modifier =
                     Modifier
                         .align(Alignment.Center)
@@ -1708,6 +1818,7 @@ fun HomeChromeBar(
             HomePlatformFilterRow(
                 state = state,
                 onSelectPlatform = onSelectPlatform,
+                onOpenCollections = onOpenCollections,
                 modifier = Modifier.weight(1f),
                 fadeEdges = true,
                 centerContent = false,
@@ -1822,6 +1933,7 @@ private val HomeTitleEdgeFadeWidth = 32.dp
 private fun HomePlatformFilterRow(
     state: HomeUiState,
     onSelectPlatform: (String?) -> Unit,
+    onOpenCollections: () -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     fadeEdges: Boolean = false,
@@ -1913,7 +2025,10 @@ private fun HomePlatformFilterRow(
             item(key = "all") {
                 GamepadChip(
                     label = "All",
-                    selected = state.selectedPlatformId == null,
+                    selected =
+                        state.selectedPlatformId == null &&
+                            state.selectedCollectionId == null &&
+                            !state.browsingCollections,
                     onClick = { onSelectPlatform(null) },
                     gamepadFocusable = false,
                 )
@@ -1923,6 +2038,14 @@ private fun HomePlatformFilterRow(
                     label = platform.shortName.uppercase(),
                     selected = state.selectedPlatformId == platform.id,
                     onClick = { onSelectPlatform(platform.id) },
+                    gamepadFocusable = false,
+                )
+            }
+            item(key = "collections") {
+                GamepadChip(
+                    label = "Collections",
+                    selected = state.browsingCollections || state.selectedCollectionId != null,
+                    onClick = onOpenCollections,
                     gamepadFocusable = false,
                 )
             }
@@ -1966,6 +2089,9 @@ private fun LazyGridState.debugScrollSnapshot(gameId: Long): String {
 }
 
 private fun platformFilterIndex(state: HomeUiState): Int {
+    if (state.browsingCollections || state.selectedCollectionId != null) {
+        return state.platforms.size + 1
+    }
     val id = state.selectedPlatformId ?: return 0
     val platformIndex = state.platforms.indexOfFirst { it.id == id }
     return if (platformIndex >= 0) platformIndex + 1 else 0
@@ -2008,48 +2134,36 @@ private fun HomeChromeActions(
     showSettings: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(WajihaSpacing.xs),
+    ) {
         if (showApps) {
-            Box(modifier = Modifier.focusProperties { canFocus = false }) {
-                TextButton(onClick = onOpenApps) {
-                    Text("Apps")
-                }
-                // Overlay on the Apps button only; does not expand the row.
-                Box(modifier = Modifier.matchParentSize()) {
-                    GamepadHintGlyph(
-                        button = GamepadHintButton.L3,
-                        size = 12.dp,
-                        modifier =
-                            Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 2.dp, end = 2.dp),
-                    )
-                }
-            }
+            WajihaGlyphAction(
+                button = GamepadHintButton.L3,
+                label = "Apps",
+                onClick = onOpenApps,
+                outlined = true,
+                gamepadFocusable = false,
+            )
         }
         if (onOpenSystem != null) {
-            TextButton(
+            GamepadButton(
+                text = "System",
                 onClick = onOpenSystem,
-                modifier = Modifier.focusProperties { canFocus = false },
-            ) { Text("System") }
+                outlined = true,
+                gamepadFocusable = false,
+            )
         }
         if (showSettings) {
-            Box(modifier = Modifier.focusProperties { canFocus = false }) {
-                TextButton(onClick = onOpenSettings) {
-                    Text("Settings")
-                }
-                // Overlay on the Settings button only; does not expand the row.
-                Box(modifier = Modifier.matchParentSize()) {
-                    GamepadHintGlyph(
-                        button = GamepadHintButton.Start,
-                        size = 12.dp,
-                        modifier =
-                            Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 2.dp, end = 2.dp),
-                    )
-                }
-            }
+            WajihaGlyphAction(
+                button = GamepadHintButton.Start,
+                label = "Settings",
+                onClick = onOpenSettings,
+                outlined = true,
+                gamepadFocusable = false,
+            )
         }
     }
 }
@@ -2058,17 +2172,25 @@ private fun cyclePlatformFilter(
     state: HomeUiState,
     delta: Int,
     onSelectPlatform: (String?) -> Unit,
+    onOpenCollections: () -> Unit,
 ): Boolean {
-    if (state.platforms.isEmpty()) return false
+    val collectionsKey = "collections"
     val filters =
         buildList<String?> {
             add(null)
             addAll(state.platforms.map { it.id })
+            add(collectionsKey)
         }
-    val currentIndex = filters.indexOf(state.selectedPlatformId).coerceAtLeast(0)
+    val currentKey =
+        when {
+            state.browsingCollections || state.selectedCollectionId != null -> collectionsKey
+            else -> state.selectedPlatformId
+        }
+    val currentIndex = filters.indexOf(currentKey).coerceAtLeast(0)
     val nextIndex = (currentIndex + delta).coerceIn(0, filters.lastIndex)
     if (nextIndex == currentIndex) return false
-    onSelectPlatform(filters[nextIndex])
+    val next = filters[nextIndex]
+    if (next == collectionsKey) onOpenCollections() else onSelectPlatform(next)
     return true
 }
 

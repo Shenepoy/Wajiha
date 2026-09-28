@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -45,6 +46,7 @@ fun NowPlayingPanel(
             label = label,
             showLogo = showLogo,
             showBoxartThumb = !heroBackground || backdrop == null,
+            onHero = heroBackground && backdrop != null,
         )
     }
 
@@ -87,7 +89,13 @@ fun NowPlayingBackdrop(
         modifier =
             modifier
                 .fillMaxSize()
-                .background(scheme.background),
+                .then(
+                    if (backdrop == null) {
+                        Modifier.background(scheme.background)
+                    } else {
+                        Modifier
+                    },
+                ),
     ) {
         if (backdrop != null) {
             AsyncImage(
@@ -96,6 +104,8 @@ fun NowPlayingBackdrop(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
+            // Light vignette — keep hero art readable without burying it under
+            // an opaque Material fill. Darker only at the bottom for chrome/text.
             Box(
                 modifier =
                     Modifier
@@ -104,9 +114,9 @@ fun NowPlayingBackdrop(
                             Brush.verticalGradient(
                                 colors =
                                     listOf(
-                                        scheme.background.copy(alpha = 0.45f),
-                                        scheme.background.copy(alpha = 0.82f),
-                                        scheme.background.copy(alpha = 0.92f),
+                                        Color.Black.copy(alpha = 0.18f),
+                                        Color.Black.copy(alpha = 0.32f),
+                                        Color.Black.copy(alpha = 0.55f),
                                     ),
                             ),
                         ),
@@ -121,7 +131,12 @@ private fun NowPlayingPanelContent(
     label: String?,
     showLogo: Boolean,
     showBoxartThumb: Boolean,
+    onHero: Boolean,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val titleColor = if (onHero) Color.White else scheme.onBackground
+    val eyebrowColor = if (onHero) Color.White.copy(alpha = 0.92f) else scheme.primary
+    val metaColor = if (onHero) Color.White.copy(alpha = 0.72f) else scheme.onSurfaceVariant
     Column(
         modifier = Modifier.padding(WajihaSpacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -142,7 +157,7 @@ private fun NowPlayingPanelContent(
         Text(
             text = "Now Running",
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            color = eyebrowColor,
         )
         Spacer(modifier = Modifier.height(WajihaSpacing.sm))
         if (showLogo) {
@@ -160,7 +175,7 @@ private fun NowPlayingPanelContent(
                 text = label ?: "—",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = titleColor,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -171,7 +186,7 @@ private fun NowPlayingPanelContent(
             Text(
                 text = state.platformId.uppercase(),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = metaColor,
             )
         }
     }

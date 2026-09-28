@@ -40,8 +40,8 @@ val stateModule: Module =
 val uiModule: Module =
     module {
         single { UiFeedback(get()) }
-        single { HomeViewModel(get(), get(), get(), get(), get()) }
-        single { SettingsViewModel(get(), get(), get(), get(), get(), get()) }
+        single { HomeViewModel(get(), get(), get(), get(), get(), get()) }
+        single { SettingsViewModel(get(), get(), get(), get(), get(), get(), get()) }
         single { PlatformSettingsViewModel(get(), get(), get()) }
         single { ScraperViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
         single { ScrapeReviewViewModel(get(), get(), get()) }

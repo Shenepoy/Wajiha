@@ -319,16 +319,30 @@ interface PlaySessionDao {
     )
 }
 
+data class CollectionCountRow(
+    val collectionId: Long,
+    val gameCount: Long,
+)
+
 @Dao
 interface CollectionDao {
     @Query("SELECT * FROM collections ORDER BY sortIndex, name")
     fun observeAll(): Flow<List<CollectionEntity>>
+
+    @Query("SELECT collectionId, COUNT(gameId) AS gameCount FROM collection_games GROUP BY collectionId")
+    fun observeCounts(): Flow<List<CollectionCountRow>>
+
+    @Query("SELECT collectionId FROM collection_games WHERE gameId = :gameId")
+    fun observeCollectionIds(gameId: Long): Flow<List<Long>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(collection: CollectionEntity): Long
 
     @Query("DELETE FROM collections WHERE id = :id")
     suspend fun delete(id: Long)
+
+    @Query("DELETE FROM collection_games WHERE collectionId = :collectionId")
+    suspend fun removeAllGames(collectionId: Long)
 
     @Query(
         "SELECT games.* FROM games INNER JOIN collection_games ON games.id = collection_games.gameId " +

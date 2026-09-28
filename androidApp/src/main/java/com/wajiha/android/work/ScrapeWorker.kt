@@ -118,6 +118,35 @@ class ScrapeWorker(
             }
         }
 
+        /**
+         * After process death the UI restores idle, but WorkManager may still hold
+         * ENQUEUED/RUNNING unique work (or a resumable checkpoint). Drop orphans so
+         * Run is not blocked with "A scrape is already running".
+         * No-op while [BatchScraper] is mid-run in this process.
+         */
+        suspend fun clearStaleWorkIfIdle(context: Context) {
+            val scraper = getKoin().get<BatchScraper>()
+            if (scraper.progress.value.running) return
+            val wm = WorkManager.getInstance(context)
+            val hadActive =
+                try {
+                    wm
+                        .getWorkInfosForUniqueWorkFlow(UNIQUE_NAME)
+                        .first()
+                        .any { !it.state.isFinished }
+                } catch (_: Exception) {
+                    false
+                }
+            if (hadActive) {
+                WajihaLog.i(
+                    WajihaLogKind.WORK,
+                    "scrapeWorker: clearing stale unique work (process idle)",
+                )
+                wm.cancelUniqueWork(UNIQUE_NAME)
+            }
+            scraper.clearResumableCheckpoint()
+        }
+
         suspend fun enqueue(
             context: Context,
             platformId: String? = null,
@@ -146,7 +175,8 @@ class ScrapeWorker(
                     .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_NAME,
-                ExistingWorkPolicy.KEEP,
+                // Replace any cancelled/orphaned unique work left after a reload.
+                ExistingWorkPolicy.REPLACE,
                 request,
             )
         }

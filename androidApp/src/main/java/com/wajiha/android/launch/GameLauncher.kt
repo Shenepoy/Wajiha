@@ -137,7 +137,8 @@ class GameLauncher(
             foregroundAppMonitor.onSessionStarted(packageName)
             displayCoordinator.focusGameOnPrimary(packageName)
             KeepAliveService.start(context)
-            dualScreenStore.applyDeferredSecondaryModeAfterLaunch()
+            // Mode apply is posted off this frame. Switching the bottom UI in
+            // the same turn as startActivity flashes the panel black.
             displayCoordinator.finishLaunchCoverAfterSecondaryUi()
             WajihaLog.i(WajihaLogKind.LAUNCH, "launchGame: ok pkg=$packageName gameId=${game.id}")
         } else {

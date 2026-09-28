@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
@@ -58,39 +60,43 @@ fun WajihaScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 backgroundContent?.invoke()
-                Column(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .then(
-                                if (backgroundContent == null) {
-                                    Modifier.background(MaterialTheme.colorScheme.background)
-                                } else {
-                                    Modifier
-                                },
-                            ),
+                CompositionLocalProvider(
+                    LocalContentColor provides MaterialTheme.colorScheme.onBackground,
                 ) {
-                    if (title != null) {
-                        androidx.compose.material3.Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(WajihaSpacing.md),
-                        )
-                    }
-                    Box(
+                    Column(
                         modifier =
                             Modifier
-                                .weight(1f)
-                                .fillMaxSize(),
+                                .fillMaxSize()
+                                .then(
+                                    if (backgroundContent == null) {
+                                        Modifier.background(MaterialTheme.colorScheme.background)
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                     ) {
-                        content()
-                    }
-                    if (showActionBar) {
-                        MirroredOrLocalGamepadActionBar(
-                            publisherId = layerId,
-                            hints = gamepadHints ?: defaultGamepadHints(),
-                            hostOwner = gamepadOwner,
-                        )
+                        if (title != null) {
+                            androidx.compose.material3.Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.padding(WajihaSpacing.md),
+                            )
+                        }
+                        Box(
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxSize(),
+                        ) {
+                            content()
+                        }
+                        if (showActionBar) {
+                            MirroredOrLocalGamepadActionBar(
+                                publisherId = layerId,
+                                hints = gamepadHints ?: defaultGamepadHints(),
+                                hostOwner = gamepadOwner,
+                            )
+                        }
                     }
                 }
             }

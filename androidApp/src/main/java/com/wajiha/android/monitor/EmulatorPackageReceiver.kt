@@ -8,6 +8,7 @@ import com.wajiha.android.icons.IconResolver
 import com.wajiha.data.prefs.SettingsRepository
 import com.wajiha.log.WajihaLog
 import com.wajiha.log.WajihaTags
+import com.wajiha.platform.AppActions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,6 +32,7 @@ class EmulatorPackageReceiver :
     private val monitor: ForegroundAppMonitor by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val iconResolver: IconResolver by inject()
+    private val appActions: AppActions by inject()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onReceive(
@@ -46,13 +48,21 @@ class EmulatorPackageReceiver :
         }
         val packageName = intent.data?.schemeSpecificPart ?: return
         WajihaLog.d(WajihaTags.NOW_PLAYING, "packageChange: $action $packageName")
+        val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+        // Skip the transient REMOVED that precedes an update so the drawer
+        // does not drop the app and add it back a moment later.
+        if (action == Intent.ACTION_PACKAGE_ADDED ||
+            action == Intent.ACTION_PACKAGE_REPLACED ||
+            (action == Intent.ACTION_PACKAGE_REMOVED && !replacing)
+        ) {
+            appActions.notifyInstalledAppsChanged()
+        }
         val pending = goAsync()
         scope.launch {
             try {
                 monitor.refreshKnownPackages()
                 if (action == Intent.ACTION_PACKAGE_REMOVED || action == Intent.ACTION_PACKAGE_REPLACED) {
                     val selected = settingsRepository.settings.first().iconPackPackage
-                    val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
                     if (selected == packageName) {
                         if (action == Intent.ACTION_PACKAGE_REMOVED && !replacing) {
                             settingsRepository.setIconPackPackage("")

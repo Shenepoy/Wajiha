@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.update
 
 /** One scraper/RA HTTP exchange kept for the in-app log viewer. */
 data class ScrapeApiLogEntry(
+    val id: Long,
     val atMs: Long,
     val method: String,
     /** Full URL with secret query values replaced by `***`. */
@@ -43,6 +44,7 @@ object ScrapeApiLog {
 
     private val _entries = MutableStateFlow<List<ScrapeApiLogEntry>>(emptyList())
     val entries: StateFlow<List<ScrapeApiLogEntry>> = _entries.asStateFlow()
+    private var nextId = 0L
 
     fun clear() {
         _entries.value = emptyList()
@@ -59,6 +61,7 @@ object ScrapeApiLog {
     ) {
         val entry =
             ScrapeApiLogEntry(
+                id = ++nextId,
                 atMs = logClockMs(),
                 method = method,
                 url = formatApiUrlForLog(url),

@@ -63,7 +63,7 @@ adb shell am broadcast -a com.wajiha.DEBUG_DUMP_GAMEPAD
 
 ## Suppress list
 
-When the user Y-closes a session grid tile, the package is added to `suppressRediscoveryUntil` so a lingering emulator process is not immediately re-detected. Use `DEBUG_CLEAR_SUPPRESS` to reset during testing.
+When the user closes a session, the package is stored with the close time (`suppressRediscoveryClosedAt`). Polls ignore that package while its process lingers. A UsageStats `ACTIVITY_RESUMED` newer than the close, or a Wajiha launch (`onSessionStarted`), clears the marker. If usage access is denied, the marker expires after 15 seconds. `DEBUG_CLEAR_SUPPRESS` still clears it during testing.
 
 ## Agent workflow
 

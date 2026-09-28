@@ -2,6 +2,8 @@ package com.wajiha.ui.apps
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -46,8 +48,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -81,14 +87,13 @@ import com.wajiha.ui.components.gamepad.hasCenterInViewport
 import com.wajiha.ui.components.gamepad.smoothBringItemIntoView
 import com.wajiha.ui.theme.AppIconShapes
 import com.wajiha.ui.theme.GamepadFocusChromeScope
-import com.wajiha.ui.theme.InputMode
 import com.wajiha.ui.theme.LocalGamepadFocusChromeScope
-import com.wajiha.ui.theme.LocalInputMode
 import com.wajiha.ui.theme.LocalInputModeController
 import com.wajiha.ui.theme.WajihaShapes
 import com.wajiha.ui.theme.WajihaSpacing
 import kotlinx.coroutines.flow.drop
 import org.koin.compose.koinInject
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -148,7 +153,6 @@ fun AppDrawerScreen(
     var selectedPackage by remember {
         mutableStateOf(rememberedPackage?.takeIf { pkg -> apps.any { it.packageName == pkg } })
     }
-    var aTileHasFocus by remember { mutableStateOf(false) }
     var optionsOpen by remember { mutableStateOf(false) }
     var contextMenuTarget by remember { mutableStateOf<AppContextTarget?>(null) }
     var contextMenuAnchorBounds by remember { mutableStateOf<Rect?>(null) }
@@ -224,9 +228,13 @@ fun AppDrawerScreen(
             initialPage = (initialSelectedAppIndex / pageSize).coerceIn(0, (pageCount - 1).coerceAtLeast(0)),
             pageCount = { pageCount },
         )
-    val inputMode = LocalInputMode.current
     val inputModeController = LocalInputModeController.current
     var pendingViewportSnap by remember { mutableStateOf(false) }
+    // Snap landed on an item already fully on screen — don't edge-pad scroll it.
+    var viewportSnapKeepsScroll by remember { mutableStateOf(false) }
+    // Finger-down on the grid. D-pad switches input mode before the key handler
+    // runs, so mode cannot be used to tell a touch scroll from a focus scroll.
+    val touchPointerDown = remember { AtomicBoolean(false) }
     // Ignore scroll-offset churn from D-pad bring-into-view so we don't re-arm
     // touch viewport-snap and yank selection back to the top row.
     var selectionScrollActive by remember { mutableStateOf(false) }
@@ -234,6 +242,13 @@ fun AppDrawerScreen(
     LaunchedEffect(apps, rememberedPackage) {
         if (selectedPackage == null && rememberedPackage != null && apps.any { it.packageName == rememberedPackage }) {
             selectedPackage = rememberedPackage
+        }
+    }
+
+    LaunchedEffect(apps) {
+        val current = selectedPackage ?: return@LaunchedEffect
+        if (apps.none { it.packageName == current }) {
+            selectedPackage = null
         }
     }
 
@@ -245,10 +260,20 @@ fun AppDrawerScreen(
     val appScrollEdgePadPx =
         with(LocalDensity.current) { (WajihaSpacing.md + WajihaSpacing.sm).roundToPx() }
 
-    // Selection owns continuous-grid scroll.
-    LaunchedEffect(selectedPackage, menuOpen, optionsOpen, apps, horizontalScroll, continuousScroll) {
+    // Selection owns continuous-grid scroll. Keyed on the selected package only
+    // so a live install/removal reload does not yank the viewport.
+    LaunchedEffect(selectedPackage, menuOpen, optionsOpen, horizontalScroll, continuousScroll) {
         if (!continuousScroll || menuOpen || optionsOpen) return@LaunchedEffect
         val pkg = selectedPackage ?: return@LaunchedEffect
+        if (viewportSnapKeepsScroll) {
+            viewportSnapKeepsScroll = false
+            withFrameNanos { }
+            try {
+                tileFocusRequesters[pkg]?.requestFocus()
+            } catch (_: Exception) {
+            }
+            return@LaunchedEffect
+        }
         val lazyIndex = apps.indexOfFirst { it.packageName == pkg }
         if (lazyIndex < 0) return@LaunchedEffect
         selectionScrollActive = true
@@ -271,8 +296,9 @@ fun AppDrawerScreen(
         }
     }
 
-    // Selection owns pager page.
-    LaunchedEffect(selectedPackage, menuOpen, optionsOpen, apps, pagesScroll, pageSize) {
+    // Selection owns pager page. A finger swipe does not change selection, so
+    // this does not pull the pager back until the user taps an app or uses D-pad.
+    LaunchedEffect(selectedPackage, menuOpen, optionsOpen, pagesScroll, pageSize) {
         if (!pagesScroll || menuOpen || optionsOpen) return@LaunchedEffect
         val pkg = selectedPackage ?: return@LaunchedEffect
         val lazyIndex = apps.indexOfFirst { it.packageName == pkg }
@@ -293,31 +319,12 @@ fun AppDrawerScreen(
         }
     }
 
-    // Touch page swipe moves focus onto that page when selection left with the fling.
-    LaunchedEffect(pagerState, pagesScroll, pageSize, apps) {
-        if (!pagesScroll) return@LaunchedEffect
-        snapshotFlow { pagerState.settledPage }
-            .drop(1)
-            .collect { page ->
-                if (selectionScrollActive || menuOpen || optionsOpen) return@collect
-                val start = page * pageSize
-                if (start !in apps.indices) return@collect
-                val end = min(start + pageSize, apps.size)
-                val onPage =
-                    selectedPackage?.let { pkg ->
-                        apps.subList(start, end).any { it.packageName == pkg }
-                    } == true
-                if (!onPage) {
-                    val app = apps[start]
-                    selectedPackage = app.packageName
-                    aTileHasFocus = true
-                    onFocusChange(app)
-                    try {
-                        tileFocusRequesters[app.packageName]?.requestFocus()
-                    } catch (_: Exception) {
-                    }
-                }
-            }
+    fun selectPackage(pkg: String) {
+        // A tap owns the origin — the next D-pad must not snap to another tile.
+        pendingViewportSnap = false
+        val app = apps.firstOrNull { it.packageName == pkg } ?: return
+        selectedPackage = pkg
+        onFocusChange(app)
     }
 
     fun moveAppGridFocus(
@@ -404,23 +411,92 @@ fun AppDrawerScreen(
         if (nextIndex !in apps.indices) return true
         val next = apps[nextIndex]
         selectedPackage = next.packageName
-        aTileHasFocus = true
         onFocusChange(next)
         return true
     }
 
-    LaunchedEffect(gridState, inputMode) {
+    LaunchedEffect(gridState, continuousScroll) {
+        if (!continuousScroll) return@LaunchedEffect
         snapshotFlow {
             gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset
         }.drop(1)
             .collect {
-                if (inputMode == InputMode.Touch && !selectionScrollActive) {
+                if (touchPointerDown.get() && !selectionScrollActive) {
                     pendingViewportSnap = true
                 }
             }
     }
 
+    LaunchedEffect(pagerState, pagesScroll) {
+        if (!pagesScroll) return@LaunchedEffect
+        snapshotFlow { pagerState.currentPage to pagerState.currentPageOffsetFraction }
+            .drop(1)
+            .collect {
+                if (touchPointerDown.get() && !selectionScrollActive) {
+                    pendingViewportSnap = true
+                }
+            }
+    }
+
+    /** Sees the finger even when the grid consumes the drag. */
+    fun Modifier.armTouchScrollSnap(): Modifier =
+        pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                val startIndex = gridState.firstVisibleItemIndex
+                val startOffset = gridState.firstVisibleItemScrollOffset
+                val startPage = pagerState.currentPage
+                touchPointerDown.set(true)
+                try {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.changes.none { it.pressed }) break
+                    }
+                } finally {
+                    touchPointerDown.set(false)
+                    // A fling can update the offset after the finger is up, so arm
+                    // here too — the scroll collector often misses that window.
+                    val moved =
+                        if (pagesScroll) {
+                            pagerState.currentPage != startPage || pagerState.isScrollInProgress
+                        } else {
+                            gridState.firstVisibleItemIndex != startIndex ||
+                                gridState.firstVisibleItemScrollOffset != startOffset ||
+                                gridState.isScrollInProgress
+                        }
+                    if (moved && !selectionScrollActive) {
+                        pendingViewportSnap = true
+                    }
+                }
+            }
+        }
+
+    fun selectedAppOnScreen(): Boolean {
+        val pkg = selectedPackage ?: return false
+        if (pagesScroll) {
+            val index = apps.indexOfFirst { it.packageName == pkg }
+            if (index < 0) return false
+            return index / pageSize == pagerState.settledPage
+        }
+        return gridState.layoutInfo.visibleItemsInfo.any { info ->
+            info.key == pkg &&
+                info.hasCenterInViewport(gridState.layoutInfo, horizontalScroll = horizontalScroll)
+        }
+    }
+
     fun snapFocusToLeadingVisible(): Boolean {
+        if (pagesScroll) {
+            val start = pagerState.settledPage * pageSize
+            if (start !in apps.indices) return false
+            val app = apps[start]
+            selectedPackage = app.packageName
+            onFocusChange(app)
+            try {
+                tileFocusRequesters[app.packageName]?.requestFocus()
+            } catch (_: Exception) {
+            }
+            return true
+        }
         val layoutInfo = gridState.layoutInfo
         val firstVisible =
             layoutInfo.visibleItemsInfo
@@ -435,6 +511,9 @@ fun AppDrawerScreen(
                 ?: return false
         val pkg = firstVisible.key as? String ?: return false
         val app = apps.firstOrNull { it.packageName == pkg } ?: return false
+        // The tile is already on screen. Edge-pad scrolling would pull the
+        // previous row in and the highlight would no longer be the first item.
+        viewportSnapKeepsScroll = true
         selectedPackage = pkg
         onFocusChange(app)
         try {
@@ -442,17 +521,6 @@ fun AppDrawerScreen(
         } catch (_: Exception) {
         }
         return true
-    }
-
-    LaunchedEffect(gridState, inputMode, apps, continuousScroll) {
-        if (!continuousScroll) return@LaunchedEffect
-        snapshotFlow { gridState.isScrollInProgress }
-            .collect { scrolling ->
-                if (scrolling || selectionScrollActive) return@collect
-                if (inputMode != InputMode.Touch || !pendingViewportSnap) return@collect
-                pendingViewportSnap = false
-                snapFocusToLeadingVisible()
-            }
     }
 
     fun openContextMenu(packageName: String) {
@@ -569,14 +637,27 @@ fun AppDrawerScreen(
                 deltaRow: Int,
                 deltaCol: Int,
             ): Boolean {
-                // After a finger scroll, the first D-pad lands on a visible tile.
-                // Later presses (and any D-pad-driven scroll) must not re-snap to top.
-                if (pendingViewportSnap && inputMode == InputMode.Touch) {
+                // After a finger scroll that left the highlight off screen, the
+                // first D-pad lands on the first visible app. A later press steps
+                // from there. If the highlight is still on screen, step normally.
+                if (pendingViewportSnap) {
                     pendingViewportSnap = false
-                    snapFocusToLeadingVisible()
-                    return true
+                    if (!selectedAppOnScreen() && snapFocusToLeadingVisible()) {
+                        return true
+                    }
                 }
                 return moveAppGridFocus(deltaRow = deltaRow, deltaCol = deltaCol)
+            }
+
+            // Android consumes the first directional DOWN after touch to leave
+            // touch mode. The matching UP still arrives — use it if that DOWN
+            // never ran, so one press focuses the first app still on screen.
+            fun recoverEatenDirection(
+                deltaRow: Int,
+                deltaCol: Int,
+            ): Boolean {
+                if (!pendingViewportSnap) return false
+                return consumeDirection(deltaRow = deltaRow, deltaCol = deltaCol)
             }
             when {
                 GamepadKeys.isUp(event.type, event.key) -> {
@@ -593,6 +674,22 @@ fun AppDrawerScreen(
 
                 GamepadKeys.isRight(event.type, event.key) -> {
                     consumeDirection(deltaRow = 0, deltaCol = 1)
+                }
+
+                event.type == KeyEventType.KeyUp && event.key == Key.DirectionUp -> {
+                    recoverEatenDirection(deltaRow = -1, deltaCol = 0)
+                }
+
+                event.type == KeyEventType.KeyUp && event.key == Key.DirectionDown -> {
+                    recoverEatenDirection(deltaRow = 1, deltaCol = 0)
+                }
+
+                event.type == KeyEventType.KeyUp && event.key == Key.DirectionLeft -> {
+                    recoverEatenDirection(deltaRow = 0, deltaCol = -1)
+                }
+
+                event.type == KeyEventType.KeyUp && event.key == Key.DirectionRight -> {
+                    recoverEatenDirection(deltaRow = 0, deltaCol = 1)
                 }
 
                 GamepadKeys.isX(event.type, event.key) && pkg != null -> {
@@ -750,21 +847,10 @@ fun AppDrawerScreen(
                                     contentPadding = gridContentPadding,
                                     gamepadOwner = gamepadOwner,
                                     onClaimGamepad = onClaimGamepad,
-                                    onSelectPackage = { pkg ->
-                                        selectedPackage = pkg
-                                        onFocusChange(apps.firstOrNull { it.packageName == pkg })
-                                    },
+                                    onSelectPackage = ::selectPackage,
                                     onLaunch = onLaunch,
                                     onOpenContextMenu = ::openContextMenu,
-                                    onTileFocusChanged = { pkg, focused ->
-                                        if (focused) {
-                                            aTileHasFocus = true
-                                            selectedPackage = pkg
-                                            onFocusChange(apps.firstOrNull { it.packageName == pkg })
-                                        } else {
-                                            aTileHasFocus = false
-                                        }
-                                    },
+                                    onTileFocusChanged = { _, _ -> },
                                     onTileBounds = { pkg, bounds ->
                                         tileBoundsByPackage[pkg] = bounds
                                     },
@@ -773,7 +859,7 @@ fun AppDrawerScreen(
                             if (horizontalScroll) {
                                 HorizontalPager(
                                     state = pagerState,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier.fillMaxSize().armTouchScrollSnap(),
                                     beyondViewportPageCount = 1,
                                 ) { page ->
                                     pageContent(page)
@@ -781,7 +867,7 @@ fun AppDrawerScreen(
                             } else {
                                 VerticalPager(
                                     state = pagerState,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier.fillMaxSize().armTouchScrollSnap(),
                                     beyondViewportPageCount = 1,
                                 ) { page ->
                                     pageContent(page)
@@ -798,7 +884,7 @@ fun AppDrawerScreen(
                                     LazyHorizontalGrid(
                                         rows = GridCells.Fixed(layout.rows),
                                         state = gridState,
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier.fillMaxSize().armTouchScrollSnap(),
                                         contentPadding = gridContentPadding,
                                         horizontalArrangement = Arrangement.spacedBy(layout.hSpacing),
                                         verticalArrangement = Arrangement.spacedBy(layout.vSpacing),
@@ -820,21 +906,10 @@ fun AppDrawerScreen(
                                             fixedItemWidth = layout.cellWidth,
                                             gamepadOwner = gamepadOwner,
                                             onClaimGamepad = onClaimGamepad,
-                                            onSelectPackage = { pkg ->
-                                                selectedPackage = pkg
-                                                onFocusChange(apps.firstOrNull { it.packageName == pkg })
-                                            },
+                                            onSelectPackage = ::selectPackage,
                                             onLaunch = onLaunch,
                                             onOpenContextMenu = ::openContextMenu,
-                                            onTileFocusChanged = { pkg, focused ->
-                                                if (focused) {
-                                                    aTileHasFocus = true
-                                                    selectedPackage = pkg
-                                                    onFocusChange(apps.firstOrNull { it.packageName == pkg })
-                                                } else {
-                                                    aTileHasFocus = false
-                                                }
-                                            },
+                                            onTileFocusChanged = { _, _ -> },
                                             onTileBounds = { pkg, bounds ->
                                                 tileBoundsByPackage[pkg] = bounds
                                             },
@@ -844,7 +919,7 @@ fun AppDrawerScreen(
                                     LazyVerticalGrid(
                                         columns = GridCells.Fixed(layout.columns),
                                         state = gridState,
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier.fillMaxSize().armTouchScrollSnap(),
                                         contentPadding = gridContentPadding,
                                         horizontalArrangement = Arrangement.spacedBy(layout.hSpacing),
                                         verticalArrangement = Arrangement.spacedBy(layout.vSpacing),
@@ -863,21 +938,10 @@ fun AppDrawerScreen(
                                             favoritePackages = favoritePackageSet,
                                             gamepadOwner = gamepadOwner,
                                             onClaimGamepad = onClaimGamepad,
-                                            onSelectPackage = { pkg ->
-                                                selectedPackage = pkg
-                                                onFocusChange(apps.firstOrNull { it.packageName == pkg })
-                                            },
+                                            onSelectPackage = ::selectPackage,
                                             onLaunch = onLaunch,
                                             onOpenContextMenu = ::openContextMenu,
-                                            onTileFocusChanged = { pkg, focused ->
-                                                if (focused) {
-                                                    aTileHasFocus = true
-                                                    selectedPackage = pkg
-                                                    onFocusChange(apps.firstOrNull { it.packageName == pkg })
-                                                } else {
-                                                    aTileHasFocus = false
-                                                }
-                                            },
+                                            onTileFocusChanged = { _, _ -> },
                                             onTileBounds = { pkg, bounds ->
                                                 tileBoundsByPackage[pkg] = bounds
                                             },
@@ -1048,8 +1112,12 @@ private fun AppDrawerPagedGrid(
                                 gamepadFocusable =
                                     when {
                                         menuOpen || optionsOpen -> false
+
                                         restoringGridFocus -> isRestoreTile
-                                        else -> true
+
+                                        // Only the selected tile is focusable. Touch-scroll
+                                        // otherwise parks Compose focus on a newly visible app.
+                                        else -> isSelected
                                     },
                                 navHighlighted = isSelected && !optionsOpen,
                                 modifier =
@@ -1129,8 +1197,12 @@ private fun LazyGridScope.appDrawerGridItems(
             gamepadFocusable =
                 when {
                     menuOpen || optionsOpen -> false
+
                     restoringGridFocus -> isRestoreTile
-                    else -> true
+
+                    // Only the selected tile is focusable. Touch-scroll
+                    // otherwise parks Compose focus on a newly visible app.
+                    else -> isSelected
                 },
             navHighlighted = isSelected && !optionsOpen,
             modifier =

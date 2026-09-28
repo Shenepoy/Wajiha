@@ -218,15 +218,11 @@ androidApp/            Android host application
   .../work/            LibraryScanWorker, ScrapeWorker
   .../library/         RomFolderManager, RomFileDeleter
 
-docs/                  architecture, gamepad, sessions, debug, external-apis
+docs/                  architecture, design, gamepad, sessions, debug, external-apis
 Study/                 dissection docs + reference apps (not shipped)
 ```
 
-Full architecture: [docs/architecture.md](docs/architecture.md). Session model: [docs/sessions.md](docs/sessions.md). Thor debug: [docs/debug.md](docs/debug.md).
-
-## Known gaps
-
-- **Collections** — DB schema and `CollectionRepository` exist; UI is not implemented yet.
+Full architecture: [docs/architecture.md](docs/architecture.md). Design guide: [docs/design.md](docs/design.md). Session model: [docs/sessions.md](docs/sessions.md). Thor debug: [docs/debug.md](docs/debug.md).
 
 ## License
 

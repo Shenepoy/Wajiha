@@ -7,10 +7,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
+import com.wajiha.input.GamepadHintButton
 import com.wajiha.input.GamepadOverlayLayer
 import com.wajiha.input.LocalGamepadOwner
 import com.wajiha.input.RememberDialogGamepadKeyRouting
-import com.wajiha.ui.components.gamepad.GamepadButton
+import com.wajiha.ui.components.gamepad.WajihaGlyphAction
 
 @Composable
 fun WajihaDialog(
@@ -52,15 +53,23 @@ fun WajihaDialog(
             },
             text = { Text(message) },
             confirmButton = {
-                GamepadButton(
-                    text = confirmText,
+                WajihaGlyphAction(
+                    button = GamepadHintButton.A,
+                    label = confirmText,
                     onClick = onConfirm,
+                    glyphAtEnd = true,
+                    outlined = false,
                     focusRequester = confirmFocus,
                     focusId = "$layerId:confirm",
                 )
             },
             dismissButton = {
-                GamepadButton(text = dismissText, onClick = onDismiss, outlined = true)
+                WajihaGlyphAction(
+                    button = GamepadHintButton.B,
+                    label = dismissText,
+                    onClick = onDismiss,
+                    outlined = true,
+                )
             },
         )
     }

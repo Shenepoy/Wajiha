@@ -30,6 +30,7 @@ fun WajihaEmptyState(
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
         )
         if (subtitle != null) {

@@ -37,9 +37,12 @@ class AndroidLibraryActions(
         mode: String,
     ): String? {
         val policy = ScrapeRunPolicy.fromName(mode)
+        // Drop WorkManager/checkpoint leftovers from a killed process before preflight.
+        ScrapeWorker.clearStaleWorkIfIdle(context)
         val blocked = batchScraper.preflightMessage(platformId, policy)
         if (blocked != null) return blocked
-        if (ScrapeWorker.isWorkActive(context)) {
+        // After orphan cleanup, only trust in-process running — WM cancel can lag.
+        if (batchScraper.progress.value.running) {
             return "A scrape is already running"
         }
         ScrapeWorker.enqueue(context, platformId, policy)
@@ -47,7 +50,8 @@ class AndroidLibraryActions(
     }
 
     override suspend fun retryFailedScrape(platformId: String?): String? {
-        if (batchScraper.progress.value.running || ScrapeWorker.isWorkActive(context)) {
+        ScrapeWorker.clearStaleWorkIfIdle(context)
+        if (batchScraper.progress.value.running) {
             return "A scrape is already running"
         }
         if (!batchScraper.hasRetryableIssues(platformId)) {
