@@ -41,26 +41,6 @@ keystore.properties
 *.so
 *.hprof
 
-# iOS/macOS
-DerivedData/
-*.pbxuser
-*.mode1v3
-*.mode2v3
-*.perspectivev3
-*.xcworkspace
-*.xcuserdata
-*.moved-aside
-*.xcuserstate
-/iosApp/iosApp.xcodeproj/xcuserdata
-.build/
-.swiftpm/
-Package.resolved
-Pods/
-*.crash
-*.ips
-*.dSYM.zip
-*.dSYM
-
 # System files
 .DS_Store
 .AppleDouble
@@ -97,4 +77,3 @@ tmp/
 *.key
 *.crt
 google-services.json
-GoogleService-Info.plist

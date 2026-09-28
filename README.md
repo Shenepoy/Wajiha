@@ -75,7 +75,7 @@ Wajiha combines the best patterns from four studied apps (NeoStation, Daijishō,
 
 - Android 11+ (minSdk 30, the Thor's shipping OS)
 - JDK 17+, Android SDK (set `sdk.dir` in `local.properties`)
-- Kotlin Multiplatform project — Android is the only finished target; the iOS source sets are scaffolding
+- Kotlin Multiplatform project — Android is the only target
 
 ## Build
 
@@ -226,7 +226,6 @@ Full architecture: [docs/architecture.md](docs/architecture.md). Session model: 
 
 ## Known gaps
 
-- iOS target compiles as scaffolding only; all host services are Android.
 - **Collections** — DB schema and `CollectionRepository` exist; UI is not implemented yet.
 
 ## License

@@ -89,7 +89,7 @@
 
 - أندرويد 11 فما فوق (<span dir="ltr">minSdk 30</span>، نظام Thor)
 - <span dir="ltr">JDK 17+</span> و<span dir="ltr">Android SDK</span> (اضبط <span dir="ltr"><code>sdk.dir</code></span> في <span dir="ltr"><code>local.properties</code></span>)
-- مشروع <span dir="ltr">Kotlin Multiplatform</span> — أندرويد هو الهدف المكتمل؛ مجموعات مصادر iOS هيكل فقط
+- مشروع <span dir="ltr">Kotlin Multiplatform</span> — أندرويد هو الهدف الوحيد
 
 ## البناء
 
@@ -266,7 +266,6 @@ Study/                 dissection docs + reference apps (not shipped)
 
 ## الفجوات المعروفة
 
-- هدف iOS يُترجم كهيكل فقط؛ كل خدمات المضيف على أندرويد.
 - **المجموعات** — مخطط قاعدة البيانات و<span dir="ltr"><code>CollectionRepository</code></span> موجودان؛ الواجهة غير منفَّذة بعد.
 
 ## الرخصة

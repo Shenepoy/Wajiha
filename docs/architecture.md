@@ -4,7 +4,7 @@ This document explains how the pieces fit together and where to make changes. Fo
 
 ## Module split
 
-Two Gradle modules matter (the iOS targets are scaffolding):
+Two Gradle modules matter:
 
 - **`composeApp`** — Kotlin Multiplatform. All UI (Compose Multiplatform), domain logic, database, scrapers, and state live here in `commonMain`. Platform-specific pieces are expressed as plain interfaces in `com.wajiha.platform` (not `expect/actual`, so hosts can bind them with DI): `AppActions`, `LibraryActions`, `SystemControls`, `RomScanner`, `RomHasher`, plus scraper-side `MediaStorage` and `LocalMediaFiles`.
 - **`androidApp`** — the Android host. Activities, services, workers, and the Android implementations of every interface above. It wires everything together with Koin in `WajihaApplication`.

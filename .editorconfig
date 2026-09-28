@@ -20,6 +20,3 @@ ktlint = disabled
 
 [composeApp/build/**/*]
 ktlint = disabled
-
-[iosApp/build/**/*]
-ktlint = disabled

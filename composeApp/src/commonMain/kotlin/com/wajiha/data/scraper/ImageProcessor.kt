@@ -24,7 +24,7 @@ interface ImageProcessor {
     ): ProcessedImage?
 }
 
-/** Used when the host provides no implementation (tests, iOS scaffold). */
+/** Used when the host provides no implementation (tests). */
 object NoopImageProcessor : ImageProcessor {
     override fun process(
         bytes: ByteArray,

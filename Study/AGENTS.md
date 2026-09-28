@@ -2,7 +2,7 @@
 
 ## Project context
 
-**Wajiha** (`/home/zyzto/Documents/Code/Wajiha`) is a **Kotlin Multiplatform + Compose** dual-screen Android launcher (`composeApp` + `androidApp`). It is **feature-complete on Android** for Thor-style handhelds; iOS targets are scaffolding only. Target product:
+**Wajiha** (`/home/zyzto/Documents/Code/Wajiha`) is a **Kotlin Multiplatform + Compose** dual-screen Android launcher (`composeApp` + `androidApp`). It is **feature-complete on Android** for Thor-style handhelds. Target product:
 
 - Android **HOME launcher** and device shell
 - **Emulation frontend** optimized for **AYN Thor** (top + bottom displays)
@@ -10,7 +10,7 @@
 
 Authoritative implementation docs: root `README.md`, `docs/architecture.md`, `docs/sessions.md`, `docs/gamepad.md`.
 
-Do **not** assume iOS/desktop parity for launcher features; Android is the primary platform.
+Android is the only platform. Do **not** assume desktop parity for launcher features.
 
 ## Study folder rules
 
