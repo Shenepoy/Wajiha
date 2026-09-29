@@ -1,0 +1,12 @@
+---
+description: Keep temporary agent artifacts under tmp/
+alwaysApply: true
+---
+
+# Temporary files go in `tmp/`
+
+- Put all scratch artifacts under the repo-root `tmp/` directory: screenshots, UI dumps (XML/PPM), crops, focus traces, adb captures, and other one-off agent files.
+- Do **not** create `.tmp_*`, `.tmp-screens`, or similar temp files/dirs in the repo root (or elsewhere in source trees).
+- Prefer names like `tmp/<purpose>.png` or `tmp/<session>/<name>`; reuse `tmp/` instead of inventing parallel scratch folders.
+- `tmp/` is gitignored — never commit its contents. Do not format, lint, or treat it as project source.
+- Clean up obsolete files in `tmp/` when they are clearly no longer needed for the current task.

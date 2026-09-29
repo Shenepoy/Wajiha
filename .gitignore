@@ -1,9 +1,17 @@
-# Study reference corpus — track docs; keep heavy assets local (see Study/README.md)
-Study/_extracted/
-Study/neostation-frontend/
-Study/Daijishou/
-Study/lawnchair/
-Study/**/*.apk
+# Study reference corpus — track docs only (see Study/README.md).
+# Local clones, APKs, extracts, and image packs stay untracked.
+Study/*
+!Study/AGENTS.md
+!Study/INDEX.json
+!Study/README.md
+!Study/docs/
+
+# Local backups, design scratch, and root captures
+.backup-*/
+Plans_Ui/
+*_bak.*
+/*.png
+/*.tsx
 
 # Kotlin/Gradle
 .gradle/

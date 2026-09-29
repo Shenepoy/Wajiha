@@ -7,6 +7,7 @@ alwaysApply: true
 
 - Do **not** format, lint, refactor, or edit anything under `Study/` (reference corpus only).
 - Do **not** format, lint, refactor, or edit generated/build outputs: `**/build/**`, `**/.gradle/**`, `**/generated/**`, `**/.cxx/**`, `**/out/**`, `**/bin/**`.
+- Do **not** format, lint, refactor, or commit anything under `tmp/` (agent scratch; see `tmp-artifacts` rule). Put new scratch files there, never in the repo root.
 - Format/check via `./scripts/ktlint.sh format` or `./scripts/ktlint.sh check` (excludes `Study/` and `**/build/**`). Do not invoke raw ktlint over the whole tree.
 - `check` runs format then fails if any `.kt`/`.kts` diff remains vs HEAD (real CI gate). `--ignore-autocorrect-failures` is only used so naming noise does not flip ktlint’s exit code; the git diff is the gate.
 - Exclusions also live in `.editorconfig` (`ktlint = disabled` for `Study/**/*` and `*/build/**/*`).
