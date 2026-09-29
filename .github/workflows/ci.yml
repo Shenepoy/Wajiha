@@ -125,13 +125,7 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
-          script: |
-            set +e
-            ./gradlew :androidApp:connectedDebugAndroidTest -Dorg.gradle.jvmargs="-Xmx2g -Dfile.encoding=UTF-8"
-            status=$?
-            mkdir -p tmp
-            adb logcat -d > tmp/instrumented-logcat.txt || true
-            exit "$status"
+          script: ./scripts/ci-instrumented.sh
       - name: Retry instrumented tests
         if: steps.instrumented.outcome == 'failure'
         uses: reactivecircus/android-emulator-runner@v2
@@ -144,13 +138,7 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
-          script: |
-            set +e
-            ./gradlew :androidApp:connectedDebugAndroidTest -Dorg.gradle.jvmargs="-Xmx2g -Dfile.encoding=UTF-8"
-            status=$?
-            mkdir -p tmp
-            adb logcat -d > tmp/instrumented-logcat.txt || true
-            exit "$status"
+          script: ./scripts/ci-instrumented.sh
       - name: Upload instrumented failure logs
         if: failure()
         uses: actions/upload-artifact@v4
